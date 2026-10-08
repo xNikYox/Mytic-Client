@@ -8,7 +8,7 @@ let logLevel = "all";
 const logLines = [];
 
 const avatar = (uuid) => `https://mc-heads.net/avatar/${uuid}/64`;
-const PAGE_TITLES = { home: "Start", mods: "Mods", settings: "Einstellungen", console: "Konsole" };
+const PAGE_TITLES = { home: "Start", mods: "Mods", browser: "Mod-Browser", settings: "Einstellungen", console: "Konsole" };
 
 // Einfache Linien-Icons pro Kategorie
 const ICONS = {
@@ -131,6 +131,7 @@ function showPage(name) {
   document.querySelectorAll(".page").forEach((p) => p.classList.toggle("active", p.id === `page-${name}`));
   $("page-title").textContent = PAGE_TITLES[name];
   if (name === "console") renderLog(true);
+  if (name === "browser" && !browserLoaded) loadBrowser(true);
 }
 document.querySelectorAll(".rail-item").forEach((b) => b.addEventListener("click", () => showPage(b.dataset.page)));
 document.querySelectorAll("[data-goto]").forEach((b) => b.addEventListener("click", () => showPage(b.dataset.goto)));
@@ -444,6 +445,186 @@ api.onGame(({ running: isRunning, code }) => {
   if (!isRunning && code !== 0) toast("Minecraft wurde unerwartet beendet. Sieh dir die Konsole an.", true);
 });
 
+// ---------------------------------------------------------------------------------------------- Mod-Browser
+
+const CATEGORIES = [["", "Alle"], ["optimization", "Optimierung"], ["utility", "Utility"], ["adventure", "Abenteuer"],
+  ["technology", "Technik"], ["magic", "Magie"], ["decoration", "Dekoration"], ["storage", "Lager"], ["library", "Bibliothek"]];
+let browserLoaded = false;
+let browserTab = "discover";
+let browserCategory = "";
+let browserOffset = 0;
+let browserTotal = 0;
+let installedMods = [];
+const busyMods = new Set();
+
+const formatCount = (n) => n >= 1e6 ? `${n >= 1e7 ? Math.round(n / 1e6) : (n / 1e6).toFixed(1).replace(".", ",")} Mio` : n >= 1e3 ? `${Math.round(n / 1e3)} Tsd` : String(n);
+const ICON_DL = '<svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>';
+const ICON_HEART = '<svg viewBox="0 0 24 24"><path d="M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.5-7 10-7 10z"/></svg>';
+
+function renderCategories() {
+  $("browser-categories").replaceChildren(...CATEGORIES.map(([id, label]) => {
+    const b = el("button", `filter${id === browserCategory ? " active" : ""}`, label);
+    b.addEventListener("click", () => {
+      browserCategory = id;
+      renderCategories();
+      loadBrowser(true);
+    });
+    return b;
+  }));
+  $("browser-categories").hidden = browserTab !== "discover";
+}
+
+function modIcon(src, title) {
+  if (src) {
+    const img = el("img", "mr-icon");
+    img.src = src;
+    img.alt = "";
+    img.loading = "lazy";
+    img.addEventListener("error", () => img.replaceWith(modIcon("", title)));
+    return img;
+  }
+  return el("div", "mr-icon empty", (title || "?")[0].toUpperCase());
+}
+
+function browserCard(mod, { installedEntry } = {}) {
+  const card = el("article", "mr");
+  const installed = installedEntry || installedMods.find((m) => m.id === mod.id);
+  if (installed) card.classList.add("installed");
+  if (installed && !installed.enabled) card.classList.add("disabled");
+  const body = el("div", "mr-body");
+  const title = el("div", "mr-title");
+  title.append(el("b", null, mod.title));
+  if (mod.author) title.append(el("small", null, `von ${mod.author}`));
+  if (installed && installed.versionNumber) title.append(el("small", null, installed.versionNumber));
+  body.append(title);
+  if (mod.description != null) body.append(el("p", "mr-desc", mod.description));
+  if (installed && installed.dependency) body.append(el("span", "mr-req", `Benötigt von: ${installed.requiredBy.join(", ")}`));
+
+  const foot = el("div", "mr-foot");
+  const stats = el("div", "mr-stats");
+  if (mod.downloads != null) {
+    const d = el("span");
+    d.innerHTML = ICON_DL;
+    d.append(formatCount(mod.downloads));
+    d.title = `${(mod.downloads || 0).toLocaleString("de-DE")} Downloads · ${(mod.follows || 0).toLocaleString("de-DE")} Follower`;
+    stats.append(d);
+  }
+  foot.append(stats);
+
+  if (mod.managed) {
+    foot.append(el("button", "mr-btn done", "Enthalten"));
+  } else if (installed) {
+    if (!installed.dependency) {
+      foot.append(switchControl(installed.enabled, false, `${mod.title} aktiv`, async (on) => {
+        installedMods = await api.toggleMod(mod.id, on);
+        card.classList.toggle("disabled", !on);
+        if (running) toast("Gilt ab dem nächsten Start.");
+      }));
+    }
+    const remove = el("button", "mr-btn remove", "Entfernen");
+    remove.addEventListener("click", async () => {
+      remove.disabled = true;
+      try {
+        installedMods = await api.removeMod(mod.id);
+        toast(`${mod.title} entfernt`);
+        updateInstalledCount();
+        browserTab === "installed" ? renderInstalled() : card.replaceWith(browserCard(mod));
+      } catch (error) {
+        toast(errorText(error), true);
+        remove.disabled = false;
+      }
+    });
+    if (!installed.dependency) foot.append(remove);
+  } else {
+    const install = el("button", "mr-btn install", busyMods.has(mod.id) ? "Wird installiert …" : "Installieren");
+    install.disabled = busyMods.has(mod.id);
+    install.addEventListener("click", async () => {
+      busyMods.add(mod.id);
+      install.disabled = true;
+      install.textContent = "Wird installiert …";
+      try {
+        const result = await api.installMod(mod.id);
+        installedMods = result.list;
+        const extra = result.installed.filter((t) => t !== mod.title);
+        toast(extra.length ? `${mod.title} installiert (+ ${extra.join(", ")})` : `${mod.title} installiert`);
+        updateInstalledCount();
+        card.replaceWith(browserCard(mod));
+      } catch (error) {
+        toast(errorText(error), true);
+        install.disabled = false;
+        install.textContent = "Installieren";
+      } finally {
+        busyMods.delete(mod.id);
+      }
+    });
+    foot.append(install);
+  }
+  body.append(foot);
+  card.append(modIcon(mod.icon, mod.title), body);
+  return card;
+}
+
+function updateInstalledCount() {
+  $("installed-count").textContent = String(installedMods.filter((m) => !m.dependency).length);
+}
+
+async function loadBrowser(reset) {
+  browserLoaded = true;
+  if (browserTab === "installed") return renderInstalled();
+  const results = $("browser-results");
+  if (reset) {
+    browserOffset = 0;
+    results.replaceChildren(...Array.from({ length: 6 }, () => el("div", "skeleton")));
+  }
+  const query = $("browser-search").value.trim();
+  const token = (loadBrowser.token = Symbol());
+  try {
+    const page = await api.searchMods({ query, sort: $("browser-sort").value, category: browserCategory, offset: browserOffset });
+    if (token !== loadBrowser.token) return;
+    if (reset) results.replaceChildren();
+    browserTotal = page.total;
+    browserOffset += page.hits.length;
+    results.append(...page.hits.map((m) => browserCard(m)));
+    if (reset && page.hits.length === 0) results.append(el("p", "sub", "Keine passenden Mods für 1.21.11 gefunden."));
+    $("browser-more").hidden = browserOffset >= browserTotal;
+    $("browser-info").textContent = `${formatCount(browserTotal)} Mods für Minecraft 1.21.11 mit Fabric · benötigte Mods werden automatisch mitinstalliert`;
+  } catch (error) {
+    if (reset) results.replaceChildren(el("p", "sub", `Modrinth ist gerade nicht erreichbar: ${errorText(error)}`));
+  }
+}
+
+function renderInstalled() {
+  const results = $("browser-results");
+  $("browser-more").hidden = true;
+  results.replaceChildren();
+  if (installedMods.length === 0) {
+    results.append(el("p", "sub", "Noch keine eigenen Mods installiert. Unter „Entdecken“ findest du Tausende Mods."));
+    return;
+  }
+  $("browser-info").textContent = "Eigene Mods werden bei jedem Spielstart automatisch aktualisiert.";
+  results.append(...installedMods.map((m) => browserCard({ id: m.id, title: m.title, icon: m.icon }, { installedEntry: m })));
+}
+
+let searchTimer = null;
+$("browser-search").addEventListener("input", () => {
+  clearTimeout(searchTimer);
+  if (browserTab !== "discover") selectBrowserTab("discover");
+  searchTimer = setTimeout(() => loadBrowser(true), 300);
+});
+$("browser-sort").addEventListener("change", () => loadBrowser(true));
+$("browser-more").addEventListener("click", () => loadBrowser(false));
+
+function selectBrowserTab(tab) {
+  browserTab = tab;
+  document.querySelectorAll("#browser-tabs .filter").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
+  $("browser-sort").hidden = tab !== "discover";
+  renderCategories();
+}
+document.querySelectorAll("#browser-tabs .filter").forEach((b) => b.addEventListener("click", () => {
+  selectBrowserTab(b.dataset.tab);
+  loadBrowser(true);
+}));
+
 // ---------------------------------------------------------------------------------------------- Updates
 
 let updateInfo = null;
@@ -490,5 +671,8 @@ $("update-install").addEventListener("click", async () => {
   renderMods();
   renderSummary();
   renderSettings();
+  renderCategories();
+  installedMods = await api.listMods();
+  updateInstalledCount();
   setRunning(state.running);
 })();

@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: https://mc-heads.net; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: https://mc-heads.net https://cdn.modrinth.com; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'self'">
   <title>Mytic Client</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -22,6 +22,7 @@
     <div class="rail-logo" title="Mytic Client"><span>M</span></div>
     <button class="rail-item active" data-page="home" aria-label="Start"><svg viewBox="0 0 24 24"><path d="M4 10.5L12 4l8 6.5V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z"/></svg><span class="tip">Start</span></button>
     <button class="rail-item" data-page="mods" aria-label="Mods"><svg viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg><span class="tip">Mods</span></button>
+    <button class="rail-item" data-page="browser" aria-label="Mod-Browser"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M16.5 16.5L21 21M11 8v6M8 11h6"/></svg><span class="tip">Mod-Browser</span></button>
     <button class="rail-item" data-page="settings" aria-label="Einstellungen"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.2"/><circle cx="10" cy="17" r="2.2"/></svg><span class="tip">Einstellungen</span></button>
     <button class="rail-item" data-page="console" aria-label="Konsole"><svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="3"/><path d="M7.5 10l2.5 2-2.5 2M12.5 14.5h4"/></svg><span class="tip">Konsole</span></button>
     <div class="rail-spacer"></div>
@@ -103,10 +104,10 @@
 
       <div class="cards">
         <article class="glass card">
-          <header><h3>Neu in 2.1</h3><span class="badge">Update</span></header>
+          <header><h3>Neu in 2.2</h3><span class="badge">Update</span></header>
           <ul class="news">
-            <li><b>Automatische Updates:</b> neue Versionen mit einem Klick, alles bleibt erhalten</li>
-            <li><b>Mod-Menü im Lunar-Stil</b> mit Suche, Kategorien und Einstellungen pro Mod</li>
+            <li><b>Mod-Browser:</b> Tausende Mods von Modrinth mit einem Klick installieren</li>
+            <li><b>Automatische Updates</b> für Launcher und eigene Mods</li>
             <li><b>32 In-Game-Mods</b>, Mytic-Hauptmenü und HUD-Editor mit Hilfslinien</li>
           </ul>
         </article>
@@ -134,6 +135,30 @@
       </div>
       <p class="sub">Änderungen gelten ab dem nächsten Start. Im Spiel geht alles auch über <kbd>Rechts-Shift</kbd>.</p>
       <div class="mod-grid" id="mod-grid"></div>
+    </section>
+
+    <!-- Mod-Browser -->
+    <section class="page" id="page-browser">
+      <div class="toolbar">
+        <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg><input id="browser-search" placeholder="Modrinth durchsuchen – z. B. AppleSkin, Mod Menu, Xaero" spellcheck="false"></div>
+        <div class="inline">
+          <div class="filters" id="browser-tabs">
+            <button class="filter active" data-tab="discover">Entdecken</button>
+            <button class="filter" data-tab="installed">Installiert <small id="installed-count">0</small></button>
+          </div>
+          <select id="browser-sort" aria-label="Sortierung">
+            <option value="relevance">Relevanz</option>
+            <option value="downloads">Downloads</option>
+            <option value="follows">Beliebt</option>
+            <option value="newest">Neueste</option>
+            <option value="updated">Zuletzt aktualisiert</option>
+          </select>
+        </div>
+      </div>
+      <div class="filters categories" id="browser-categories"></div>
+      <p class="sub" id="browser-info">Alle Mods passen zu Minecraft 1.21.11 mit Fabric. Benötigte Mods werden automatisch mitinstalliert.</p>
+      <div class="browser-grid" id="browser-results"></div>
+      <div class="more"><button class="ghost" id="browser-more" hidden>Mehr laden</button></div>
     </section>
 
     <!-- Einstellungen -->

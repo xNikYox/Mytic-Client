@@ -9,6 +9,7 @@ const { dirs: makeDirs } = require("./core/paths");
 const { Installer, buildCommand, launch, MANAGED_MODS, MC_VERSION, defaultMemoryMb } = require("./core/minecraft");
 const auth = require("./core/auth");
 const updater = require("./core/updater");
+const { ModBrowser } = require("./core/modrinth");
 const { spawn } = require("node:child_process");
 
 const DIRS = makeDirs();
@@ -60,6 +61,7 @@ let win;
 let game = null;
 let busy = false;
 let pendingUpdate = null;
+const browser = new ModBrowser(path.join(DIRS.game, "mods"), MC_VERSION, MANAGED_MODS.map((m) => m.slug));
 let updating = false;
 
 /** Pfad der portablen EXE (vom Portable-Starter gesetzt). Bei der ZIP-Version leer. */
@@ -236,6 +238,23 @@ function microsoftCode(clientId) {
   });
 }
 
+// ---------------------------------------------------------------------------------------------- Mod-Browser
+
+ipcMain.handle("browser:search", (e, options) => browser.search(options || {}));
+ipcMain.handle("browser:list", () => browser.list());
+ipcMain.handle("browser:install", async (e, projectId) => {
+  const installed = await browser.install(String(projectId), (title) => emit("browser-step", title));
+  return { installed, list: await browser.list() };
+});
+ipcMain.handle("browser:remove", async (e, projectId) => {
+  await browser.remove(String(projectId));
+  return browser.list();
+});
+ipcMain.handle("browser:toggle", async (e, projectId, enabled) => {
+  await browser.setEnabled(String(projectId), Boolean(enabled));
+  return browser.list();
+});
+
 // ---------------------------------------------------------------------------------------------- Updates
 
 async function checkUpdate() {
@@ -349,6 +368,8 @@ ipcMain.handle("game:launch", async () => {
       log: (line) => emit("log", line),
       progress: (p) => emit("progress", p),
     });
+    emit("status", "Eigene Mods prüfen …");
+    await browser.updateAll((line) => emit("log", line));
     const install = await installer.install({ enabledMods: current.mods, bundledModsDir: BUNDLED_MODS, verify: current.verifyNext });
     if (current.verifyNext) {
       const { clientId, ...stored } = current;

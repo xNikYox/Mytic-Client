@@ -22,6 +22,7 @@ Minecraft 1.21.11 · Fabric · Windows
 - **Microsoft-Login:** Anmeldung mit dem echten Minecraft-Konto. Der Launcher prüft, ob das Konto Minecraft: Java Edition besitzt.
 - **Mehrere Konten:** schnell zwischen Konten wechseln. Die Anmeldedaten werden mit der Verschlüsselung des Betriebssystems gespeichert.
 - **Schnellverbindung:** direkt beim Start auf einen Server verbinden, zuletzt genutzte Server mit einem Klick.
+- **Mod-Browser:** Mods von Modrinth suchen und mit einem Klick installieren. Benötigte Mods kommen automatisch mit, eigene Mods lassen sich an- und ausschalten und werden bei jedem Start aktualisiert.
 - **Mods verwalten:** alle In-Game- und Performance-Mods per Schalter an- und ausschalten, mit Suche und Kategorien.
 - **Einstellungen:** RAM, Fenstergröße, Vollbild, Java-Argumente und eine Reparatur-Funktion.
 - **Konsole:** lesbares Spiel-Log mit Filter für Warnungen und Fehler.
@@ -50,9 +51,9 @@ Diese Mods kommen automatisch von [Modrinth](https://modrinth.com): **Sodium**, 
 
 ## Screenshots
 
-| Mods | Einstellungen |
+| Mod-Browser | Mods |
 |---|---|
-| ![Mods](docs/images/launcher-mods.png) | ![Einstellungen](docs/images/launcher-settings.png) |
+| ![Mod-Browser](docs/images/launcher-browser.png) | ![Mods](docs/images/launcher-mods.png) |
 
 ## Download und Start
 
