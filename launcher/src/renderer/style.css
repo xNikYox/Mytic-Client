@@ -395,3 +395,4 @@ select option { background: #15101f; }
 #profile-form input { flex: 1; min-width: 0; }
 .profile-banner { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 99px; background: rgba(255, 255, 255, .05); border: 1px solid var(--glass-line); font-size: 12.5px; color: var(--muted); margin-bottom: 12px; }
 .profile-banner b { color: var(--text); }
+.rail-version.dev { color: #ffcf5a; background: rgba(255, 207, 90, .12); border: 1px solid rgba(255, 207, 90, .35); padding: 2px 6px; border-radius: 6px; text-align: center; line-height: 1.3; }

@@ -326,7 +326,8 @@ function renderSettings() {
   $("server").value = s.server;
   $("game-dir").textContent = state.gameDir;
   $("mc-version").textContent = state.minecraft;
-  $("rail-version").textContent = `v${state.version}`;
+  $("rail-version").textContent = state.devBuild ? `v${state.version} DEV` : `v${state.version}`;
+  if (state.devBuild) $("rail-version").classList.add("dev");
   renderRecentServers();
 }
 

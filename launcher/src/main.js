@@ -15,7 +15,16 @@ const { spawn } = require("node:child_process");
 
 const DIRS = makeDirs();
 /** Offline-Konten nur für Entwickler-Tests: im Quellcode-Start (npm start) oder mit MYTIC_DEV=1, nie in der veröffentlichten EXE. */
-const OFFLINE_ALLOWED = process.env.MYTIC_DEV === "1" || (!app.isPackaged && process.env.MYTIC_RELEASE !== "1");
+const DEV_BUILD = Boolean(readJsonSync(path.join(app.isPackaged ? path.join(process.resourcesPath, "resources") : path.join(__dirname, "..", "resources"), "config.json")).devBuild);
+const OFFLINE_ALLOWED = DEV_BUILD || process.env.MYTIC_DEV === "1" || (!app.isPackaged && process.env.MYTIC_RELEASE !== "1");
+
+function readJsonSync(file) {
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    return {};
+  }
+}
 const SETTINGS_FILE = path.join(DIRS.base, "settings.json");
 const ACCOUNTS_FILE = path.join(DIRS.base, "accounts.json");
 const GAME_CONFIG = path.join(DIRS.game, "config", "myticclient.json");
@@ -328,6 +337,8 @@ ipcMain.handle("profiles:perf", async (e, slug, on) => {
 // ---------------------------------------------------------------------------------------------- Updates
 
 async function checkUpdate() {
+  // Entwicklerversion: kein Auto-Update (sonst würde sie zur normalen Version)
+  if (DEV_BUILD) return;
   if (!app.isPackaged && process.env.MYTIC_UPDATE_TEST !== "1") return;
   try {
     const update = await updater.checkForUpdate(process.env.MYTIC_UPDATE_TEST === "1" ? process.env.MYTIC_FAKE_VERSION || "0.0.0" : PACKAGE_VERSION);
@@ -381,6 +392,7 @@ ipcMain.handle("state", () => ({
   totalMemoryMb: Math.floor(os.totalmem() / 1024 / 1024),
   running: Boolean(game),
   offlineAllowed: OFFLINE_ALLOWED,
+  devBuild: DEV_BUILD,
   gameDir: DIRS.game,
 }));
 

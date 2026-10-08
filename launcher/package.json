@@ -10,7 +10,8 @@
     "start": "electron .",
     "test": "node --test test/core.test.js",
     "dist:win": "electron-builder --win portable zip --x64",
-    "dist:linux": "electron-builder --linux AppImage --x64"
+    "dist:linux": "electron-builder --linux AppImage --x64",
+    "dist:win-dev": "node scripts/build-dev.js"
   },
   "dependencies": {
     "adm-zip": "^0.5.16"
