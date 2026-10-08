@@ -25,6 +25,12 @@ public class MyticTitleScreen extends MyticScreen {
     }
 
     @Override
+    protected int pixelScale() {
+        // Inhalt (Logo + Knöpfe) etwa ein Drittel der Breite, höchstens zwei Drittel der Höhe
+        return fit(210, 170, large() ? 0.44 : 0.36, 0.7);
+    }
+
+    @Override
     protected void layout() {
         int block = 44 + 14 + 4 * (BH + GAP);
         top = Math.max(8, (vh - block) / 2 - 6);

@@ -19,11 +19,29 @@ public abstract class MyticScreen extends Screen {
         super(title);
     }
 
+    /**
+     * Wählt die Darstellungsgröße anhand der Fensterauflösung: die größte ganzzahlige Stufe (scharfe Pixel-Schrift),
+     * bei der der Inhalt mit Mindestgröße minW × minH in shareW × shareH des Fensters passt.
+     */
+    protected int fit(int minW, int minH, double shareW, double shareH) {
+        var window = minecraft.getWindow();
+        for (int k = 10; k > 1; k--) {
+            if (minW * k <= window.getWidth() * shareW && minH * k <= window.getHeight() * shareH) return k;
+        }
+        return 1;
+    }
+
+    /** "Kompakt" (Standard) oder "Groß" aus den Design-Einstellungen. */
+    protected boolean large() {
+        return MyticClient.theme != null && MyticClient.theme.menuSize.is("Groß");
+    }
+
+    /** Pixel pro virtuellem Pixel. Unterklassen legen fest, wie viel Platz sie einnehmen. */
+    protected abstract int pixelScale();
+
     private void computeScale() {
         int gui = minecraft.getWindow().getGuiScale();
-        int target = gui;
-        if (MyticClient.theme == null || MyticClient.theme.menuSize.is("Kompakt")) target = gui >= 3 ? gui - 1 : gui;
-        scale = (float) target / gui;
+        scale = (float) pixelScale() / gui;
         vw = Math.round(width / scale);
         vh = Math.round(height / scale);
     }

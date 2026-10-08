@@ -47,8 +47,15 @@ public class HudEditScreen extends Screen {
 
     /** Werkzeugleiste und Hinweis werden kompakt gezeichnet (eine GUI-Stufe kleiner, scharf). */
     private float ui() {
-        int gui = minecraft.getWindow().getGuiScale();
-        return gui >= 3 ? (gui - 1f) / gui : 1f;
+        var window = minecraft.getWindow();
+        int k = 1;
+        for (int t = 10; t > 1; t--) {
+            if (210 * t <= window.getWidth() * 0.35) {
+                k = t;
+                break;
+            }
+        }
+        return (float) k / window.getGuiScale();
     }
 
     /** Werkzeugleiste in kompakten Koordinaten. */

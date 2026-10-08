@@ -56,10 +56,26 @@ public class ModMenuScreen extends MyticScreen {
         this.selected = open;
     }
 
+    /** Anteil des Bildschirms, den das Menü einnimmt (Breite, Höhe). */
+    private double shareW() {
+        return large() ? 0.78 : 0.6;
+    }
+
+    private double shareH() {
+        return large() ? 0.86 : 0.78;
+    }
+
+    @Override
+    protected int pixelScale() {
+        return fit(380, 240, shareW(), shareH());
+    }
+
     @Override
     protected void layout() {
-        pw = Math.min(452, vw - 24);
-        ph = Math.min(300, vh - 24);
+        pw = Math.min(560, Math.max(300, (int) (vw * shareW())));
+        ph = Math.min(340, Math.max(200, (int) (vh * shareH())));
+        pw = Math.min(pw, vw - 8);
+        ph = Math.min(ph, vh - 8);
         px = (vw - pw) / 2;
         py = (vh - ph) / 2;
         clampScroll();
