@@ -17,7 +17,7 @@ public class PotionModule extends HudModule {
     private final BoolSetting blink;
 
     public PotionModule() {
-        super("potions", "Tränke", "Aktive Effekte mit Restzeit", () -> Items.POTION, true, 4, 262);
+        super("potions", "Tränke", "Aktive Effekte mit Restzeit", () -> Items.POTION, true, 10000, 44);
         blink = new BoolSetting(this, "blink", "Blinken kurz vor Ablauf", true);
     }
 

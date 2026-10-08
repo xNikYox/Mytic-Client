@@ -20,7 +20,7 @@ public class ArmorModule extends HudModule {
     private final ModeSetting durability;
 
     public ArmorModule() {
-        super("armor", "Rüstung", "Rüstung und Haltbarkeit", () -> Items.DIAMOND_CHESTPLATE, true, 4, 168);
+        super("armor", "Rüstung", "Rüstung und Haltbarkeit", () -> Items.DIAMOND_CHESTPLATE, true, 4, 146);
         layout = new ModeSetting(this, "layout", "Anordnung", "Senkrecht", "Senkrecht", "Waagerecht");
         showHand = new BoolSetting(this, "hand", "Item in der Hand", true);
         durability = new ModeSetting(this, "durability", "Haltbarkeit", "Zahl", "Zahl", "Prozent", "Aus");

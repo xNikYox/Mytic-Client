@@ -34,7 +34,7 @@ public abstract class HudModule extends Module {
         this.defaultY = defaultY;
         scale = new SliderSetting(this, "scale", "Größe", 0.5, 2.5, 0.05, 1.0, "×");
         background = new BoolSetting(this, "background", "Hintergrund", defaultBackground());
-        backgroundOpacity = new SliderSetting(this, "bgOpacity", "Hintergrund-Deckkraft", 0, 100, 5, 45, " %");
+        backgroundOpacity = new SliderSetting(this, "bgOpacity", "Hintergrund-Deckkraft", 0, 100, 5, 55, " %");
         rounded = new BoolSetting(this, "rounded", "Abgerundete Ecken", true);
         textColor = new ColorSetting(this, "textColor", "Textfarbe", 0xFFFFFFFF);
         shadow = new BoolSetting(this, "shadow", "Textschatten", true);

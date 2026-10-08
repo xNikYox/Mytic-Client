@@ -24,7 +24,7 @@ public class TextModule extends HudModule {
         this.value = value;
         showLabel = new BoolSetting(this, "showLabel", "Bezeichnung zeigen", !label.isEmpty());
         brackets = new BoolSetting(this, "brackets", "Klammern [ ]", false);
-        labelColor = new ColorSetting(this, "labelColor", "Farbe der Bezeichnung", 0xFFB98BFF);
+        labelColor = new ColorSetting(this, "labelColor", "Farbe der Bezeichnung", 0xFFC9B0FF);
     }
 
     private String value(boolean preview) {

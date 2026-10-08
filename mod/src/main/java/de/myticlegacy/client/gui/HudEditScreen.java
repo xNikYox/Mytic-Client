@@ -45,9 +45,19 @@ public class HudEditScreen extends Screen {
         return null;
     }
 
+    /** Werkzeugleiste und Hinweis werden kompakt gezeichnet (eine GUI-Stufe kleiner, scharf). */
+    private float ui() {
+        int gui = minecraft.getWindow().getGuiScale();
+        return gui >= 3 ? (gui - 1f) / gui : 1f;
+    }
+
+    /** Werkzeugleiste in kompakten Koordinaten. */
     private int[] toolbar() {
-        int w = 260;
-        return new int[]{(width - w) / 2, height - 30, w, 20};
+        float s = ui();
+        int w = 210;
+        int vw = Math.round(width / s);
+        int vh = Math.round(height / s);
+        return new int[]{(vw - w) / 2, vh - 24, w, 18};
     }
 
     @Override
@@ -81,19 +91,27 @@ public class HudEditScreen extends Screen {
             Ui.text(g, label, lx + 5, ly + 2, 0xFFFFFFFF, false);
         }
 
-        Ui.centered(g, "Ziehen zum Verschieben  ·  Mausrad: Größe  ·  Rechtsklick: Einstellungen", width / 2, 8, 0xFFE8E2F5, true);
-
+        float s = ui();
+        int mx = Math.round(mouseX / s);
+        int my = Math.round(mouseY / s);
+        g.pose().pushMatrix();
+        g.pose().scale(s, s);
         int[] bar = toolbar();
-        Ui.rect(g, bar[0], bar[1], bar[2], bar[3], 10, Ui.PANEL);
+        String hint = "Ziehen · Mausrad: Größe · Rechtsklick: Einstellungen";
+        int hw = font.width(hint) + 16;
+        Ui.rect(g, bar[0] + bar[2] / 2 - hw / 2, bar[1] - 17, hw, 13, 6, 0xB0000000);
+        Ui.centered(g, hint, bar[0] + bar[2] / 2, bar[1] - 14, 0xFFD9D2EA, false);
+        Ui.outline(g, bar[0], bar[1], bar[2], bar[3], 9, Ui.LINE, Ui.PANEL);
         String[] labels = {"Mods", "Zurücksetzen", "Fertig"};
         int bw = (bar[2] - 8 - 8) / 3;
         for (int i = 0; i < labels.length; i++) {
             int bx = bar[0] + 4 + i * (bw + 4);
-            boolean h = Ui.inside(mouseX, mouseY, bx, bar[1] + 3, bw, 14);
+            boolean h = Ui.inside(mx, my, bx, bar[1] + 2, bw, 14);
             int bg = i == 2 ? Ui.accent() : Ui.SURFACE;
-            Ui.rect(g, bx, bar[1] + 3, bw, 14, 7, h ? Ui.mix(bg, 0xFFFFFFFF, 0.15f) : bg);
-            Ui.centered(g, labels[i], bx + bw / 2, bar[1] + 6, 0xFFFFFFFF, false);
+            Ui.rect(g, bx, bar[1] + 2, bw, 14, 7, h ? Ui.mix(bg, 0xFFFFFFFF, 0.15f) : bg);
+            Ui.centered(g, labels[i], bx + bw / 2, bar[1] + 5, 0xFFFFFFFF, false);
         }
+        g.pose().popMatrix();
         super.render(g, mouseX, mouseY, delta);
     }
 
@@ -102,9 +120,11 @@ public class HudEditScreen extends Screen {
         double mx = event.x();
         double my = event.y();
         int[] bar = toolbar();
-        if (Ui.inside(mx, my, bar[0], bar[1], bar[2], bar[3])) {
+        double tx = mx / ui();
+        double ty = my / ui();
+        if (Ui.inside(tx, ty, bar[0], bar[1], bar[2], bar[3])) {
             int bw = (bar[2] - 16) / 3;
-            int index = (int) ((mx - bar[0] - 4) / (bw + 4));
+            int index = (int) ((tx - bar[0] - 4) / (bw + 4));
             switch (index) {
                 case 0 -> minecraft.setScreen(new ModMenuScreen(this));
                 case 1 -> {

@@ -19,7 +19,7 @@ public class KeystrokesModule extends HudModule {
     private final ColorSetting pressedColor;
 
     public KeystrokesModule() {
-        super("keystrokes", "Keystrokes", "Zeigt WASD, Maustasten und Leertaste", () -> Items.STONE_BUTTON, true, 4, 62);
+        super("keystrokes", "Keystrokes", "Zeigt WASD, Maustasten und Leertaste", () -> Items.NOTE_BLOCK, true, 4, 62);
         showMouse = new BoolSetting(this, "mouse", "Maustasten zeigen", true);
         showSpace = new BoolSetting(this, "space", "Leertaste zeigen", true);
         showCps = new BoolSetting(this, "cps", "CPS auf den Maustasten", true);
@@ -62,7 +62,9 @@ public class KeystrokesModule extends HudModule {
     private void box(GuiGraphics g, int x, int y, int w, int h, float pressed) {
         int base = Ui.withAlpha(0x0B0812, background.get() ? (int) Math.round(backgroundOpacity.get() * 2.55) : 0);
         int fill = Ui.mix(base, Ui.withAlpha(pressedColor.get(), 210), pressed);
-        Ui.rect(g, x, y, w, h, rounded.get() ? 3 : 0, fill);
+        int r = rounded.get() ? 3 : 0;
+        if (background.get()) Ui.outline(g, x, y, w, h, r, Ui.mix(0x30FFFFFF, fill, pressed), fill);
+        else Ui.rect(g, x, y, w, h, r, fill);
     }
 
     private void key(GuiGraphics g, int x, int y, int w, int h, String label, KeyMapping mapping) {

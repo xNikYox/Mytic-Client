@@ -52,6 +52,16 @@ Diese Mods kommen automatisch von [Modrinth](https://modrinth.com): **Sodium**, 
 
 ## Screenshots
 
+**Im Spiel**
+
+| Hauptmenü | Mod-Menü (Rechts-Shift) |
+|---|---|
+| ![Hauptmenü](docs/images/ingame-menu2.png) | ![Mod-Menü](docs/images/ingame-modmenu3.png) |
+| **HUD** | **Einstellungen pro Mod** |
+| ![HUD](docs/images/ingame-hud2.png) | ![Einstellungen](docs/images/ingame-settings.png) |
+
+**Launcher**
+
 | Mod-Browser | Mods |
 |---|---|
 | ![Mod-Browser](docs/images/launcher-browser.png) | ![Mods](docs/images/launcher-mods.png) |

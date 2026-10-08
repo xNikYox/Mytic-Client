@@ -44,7 +44,7 @@ import java.util.List;
 public final class MyticClient implements ClientModInitializer {
     public static final String ID = "myticclient";
     public static final String NAME = "Mytic Client";
-    public static final String VERSION = "2.0";
+    public static final String VERSION = "2.1";
     public static final Logger LOG = LoggerFactory.getLogger(NAME);
 
     public static final List<Module> MODULES = new ArrayList<>();
@@ -88,8 +88,8 @@ public final class MyticClient implements ClientModInitializer {
         DateTimeFormatter clock = DateTimeFormatter.ofPattern("HH:mm");
 
         // ------------------------------------------------------------------------------ HUD
-        hud(new TextModule("fps", "FPS", "Bilder pro Sekunde", () -> Items.CLOCK, true, 4, 4, "FPS", p -> String.valueOf(mc.getFps())));
-        hud(new TextModule("cps", "CPS", "Klicks pro Sekunde (links | rechts)", () -> Items.STONE_BUTTON, true, 4, 23, "CPS",
+        hud(new TextModule("fps", "FPS", "Bilder pro Sekunde", () -> Items.EXPERIENCE_BOTTLE, true, 4, 4, "FPS", p -> String.valueOf(mc.getFps())));
+        hud(new TextModule("cps", "CPS", "Klicks pro Sekunde (links | rechts)", () -> Items.REPEATER, true, 4, 23, "CPS",
                 p -> ClickCounter.left() + " | " + ClickCounter.right()));
         hud(new TextModule("ping", "Ping", "Verbindung zum Server", () -> Items.ENDER_PEARL, true, 4, 42, "Ping", p -> {
             if (mc.player == null || mc.getConnection() == null) return p ? "42 ms" : "";
