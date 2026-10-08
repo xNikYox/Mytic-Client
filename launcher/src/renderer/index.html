@@ -31,12 +31,19 @@
 
   <div class="topbar">
     <div class="crumbs"><b>MYTIC</b><span>CLIENT</span><i id="page-title">Start</i></div>
+    <div class="top-actions">
+    <button class="profile-pill" id="profile-button" title="Profil wechseln">
+      <span class="profile-dot" id="profile-dot"></span>
+      <span class="account-text"><small>Profil</small><b id="profile-name">Standard</b></span>
+      <svg class="chev" viewBox="0 0 12 12"><path d="M3 4.5l3 3 3-3"/></svg>
+    </button>
     <button class="account" id="account-button">
       <img id="account-avatar" alt="" hidden>
       <span class="account-fallback" id="account-fallback">?</span>
       <span class="account-text"><b id="account-name">Anmelden</b><small id="account-type">Kein Konto</small></span>
       <svg class="chev" viewBox="0 0 12 12"><path d="M3 4.5l3 3 3-3"/></svg>
     </button>
+    </div>
   </div>
 
   <div class="update-banner" id="update-banner" hidden>
@@ -96,6 +103,7 @@
             <div class="launch-meta">
               <span class="label">Spielen als</span>
               <b id="launch-name">kein Konto</b>
+              <span class="launch-profile" id="launch-profile"></span>
               <span class="status" id="status">Bereit</span>
             </div>
           </div>
@@ -104,11 +112,11 @@
 
       <div class="cards">
         <article class="glass card">
-          <header><h3>Neu in 2.2</h3><span class="badge">Update</span></header>
+          <header><h3>Neu in 2.3</h3><span class="badge">Update</span></header>
           <ul class="news">
+            <li><b>Profile:</b> eigene Mods pro Profil, z. B. „PvP“ und „Survival“</li>
             <li><b>Mod-Browser:</b> Tausende Mods von Modrinth mit einem Klick installieren</li>
             <li><b>Automatische Updates</b> für Launcher und eigene Mods</li>
-            <li><b>32 In-Game-Mods</b>, Mytic-Hauptmenü und HUD-Editor mit Hilfslinien</li>
           </ul>
         </article>
         <article class="glass card">
@@ -133,7 +141,7 @@
         <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg><input id="mod-search" placeholder="Mods durchsuchen" spellcheck="false"></div>
         <div class="filters" id="filters"></div>
       </div>
-      <p class="sub">Änderungen gelten ab dem nächsten Start. Im Spiel geht alles auch über <kbd>Rechts-Shift</kbd>.</p>
+      <p class="sub">In-Game-Mods gelten für alle Profile, Performance-Mods für das Profil <b id="mods-profile">Standard</b>. Im Spiel geht alles auch über <kbd>Rechts-Shift</kbd>.</p>
       <div class="mod-grid" id="mod-grid"></div>
     </section>
 
@@ -212,6 +220,19 @@
       <div class="glass log" id="log"></div>
     </section>
   </main>
+
+  <!-- Profile -->
+  <div class="popover" id="profiles" hidden>
+    <div class="popover-card glass profiles-card" role="dialog" aria-label="Profile">
+      <div class="pop-head"><b>Profile</b><small>Jedes Profil hat eigene Mods. Welten und Einstellungen teilen sich alle.</small></div>
+      <div class="profile-list" id="profile-list"></div>
+      <form id="profile-form" class="inline">
+        <input id="profile-new" placeholder="Neues Profil, z. B. PvP" maxlength="24" spellcheck="false">
+        <button class="ghost" type="submit">Erstellen</button>
+      </form>
+      <p class="error" id="profile-error" hidden></p>
+    </div>
+  </div>
 
   <!-- Konten -->
   <div class="popover" id="accounts" hidden>

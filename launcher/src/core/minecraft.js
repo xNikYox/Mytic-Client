@@ -12,7 +12,7 @@ const VERSION_MANIFEST = "https://piston-meta.mojang.com/mc/game/version_manifes
 const FABRIC_META = "https://meta.fabricmc.net/v2";
 const MODRINTH = "https://api.modrinth.com/v2";
 const LAUNCHER_NAME = "MyticClient";
-const LAUNCHER_VERSION = "2.2.0";
+const LAUNCHER_VERSION = "2.3.0";
 
 /** Mods, die der Launcher verwaltet. required = immer installiert, sonst über die Einstellungen schaltbar. */
 const MANAGED_MODS = [
@@ -190,8 +190,7 @@ class Installer {
   }
 
   /** Verwaltete Mods aktualisieren; selbst hinzugefügte Mods im mods-Ordner bleiben unangetastet. */
-  async mods(enabled, bundledModsDir) {
-    const modsDir = path.join(this.dirs.game, "mods");
+  async mods(enabled, bundledModsDir, modsDir = path.join(this.dirs.game, "mods")) {
     await fsp.mkdir(modsDir, { recursive: true });
     const stateFile = path.join(modsDir, ".mytic-managed.json");
     let previous = [];
@@ -240,7 +239,7 @@ class Installer {
   }
 
   /** Alles herunterladen, was zum Start nötig ist. Gibt die Startdaten zurück. */
-  async install({ enabledMods = {}, bundledModsDir, verify = false, skipAssets = false } = {}) {
+  async install({ enabledMods = {}, bundledModsDir, modsDir, verify = false, skipAssets = false } = {}) {
     this.step("Minecraft-Version laden");
     const version = await this.versionJson();
     this.step("Fabric laden");
@@ -273,7 +272,7 @@ class Installer {
     this.step("Native Dateien entpacken");
     await this.extractNatives(natives, nativesDir);
 
-    const mods = bundledModsDir ? await this.mods(enabledMods, bundledModsDir) : [];
+    const mods = bundledModsDir ? await this.mods(enabledMods, bundledModsDir, modsDir) : [];
     this.step("Fertig", 1, 1);
     return { version, fabric, java, clientJar, libraries, nativesDir, logConfig, mods };
   }
@@ -322,6 +321,8 @@ function buildCommand(install, dirs, account, settings = {}, { platform = proces
     "-XX:G1ReservePercent=20",
     ...collectArguments(version.arguments.jvm, vars, ruleOptions),
     ...collectArguments(fabric.arguments && fabric.arguments.jvm, vars, ruleOptions),
+    // Mods des gewählten Profils (Fabric lädt alle JARs aus diesem Ordner zusätzlich)
+    ...(settings.modsDir ? [`-Dfabric.addMods=${settings.modsDir}`] : []),
     ...(settings.jvmArgs ? settings.jvmArgs.split(/\s+/).filter(Boolean) : []),
   ];
   if (logConfig) jvm.push(substitute(logConfig.argument, { path: logConfig.file }));

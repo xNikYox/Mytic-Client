@@ -73,3 +73,28 @@ test("Alte EXE wird nur sicher gelöscht", async () => {
   await fsp.access(current);
   await fsp.rm(dir, { recursive: true });
 });
+
+const profiles = require("../src/core/profiles");
+
+test("Profile: Umzug, Anlegen, Duplizieren, Löschen", async () => {
+  const base = await fsp.mkdtemp(path.join(os.tmpdir(), "mytic-prof-"));
+  const game = path.join(base, "game");
+  await fsp.mkdir(path.join(game, "mods"), { recursive: true });
+  await fsp.writeFile(path.join(game, "mods", "sodium.jar"), "x");
+  let s = await profiles.migrate({ mods: { iris: true } }, base, game);
+  assert.equal(s.profiles.length, 1);
+  assert.deepEqual(s.profiles[0].perf, { iris: true });
+  await fsp.access(path.join(profiles.modsDir(base, "standard"), "sodium.jar"));
+  assert.deepEqual(await fsp.readdir(path.join(game, "mods")), []);
+  s = await profiles.create(s, base, "  PvP  ", "standard");
+  const pvp = profiles.active(s);
+  assert.equal(pvp.name, "PvP");
+  await fsp.access(path.join(profiles.modsDir(base, pvp.id), "sodium.jar"));
+  s = profiles.rename(s, pvp.id, "Bedwars");
+  assert.equal(profiles.active(s).name, "Bedwars");
+  s = await profiles.remove(s, base, pvp.id);
+  assert.equal(s.activeProfile, "standard");
+  await assert.rejects(profiles.remove(s, base, "standard"));
+  await assert.rejects(profiles.create(s, base, "   "));
+  await fsp.rm(base, { recursive: true });
+});

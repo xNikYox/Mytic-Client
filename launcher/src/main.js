@@ -10,6 +10,7 @@ const { Installer, buildCommand, launch, MANAGED_MODS, MC_VERSION, defaultMemory
 const auth = require("./core/auth");
 const updater = require("./core/updater");
 const { ModBrowser } = require("./core/modrinth");
+const profiles = require("./core/profiles");
 const { spawn } = require("node:child_process");
 
 const DIRS = makeDirs();
@@ -61,7 +62,43 @@ let win;
 let game = null;
 let busy = false;
 let pendingUpdate = null;
-const browser = new ModBrowser(path.join(DIRS.game, "mods"), MC_VERSION, MANAGED_MODS.map((m) => m.slug));
+let profilesReady = null;
+
+/** Einstellungen mit garantiert vorhandenen Profilen (beim ersten Start: Umzug der alten Mods). */
+async function ensureProfiles() {
+  if (!profilesReady) {
+    profilesReady = (async () => {
+      const { clientId, ...current } = settings();
+      if (!Array.isArray(current.profiles) || !current.profiles.length) {
+        await writeJson(SETTINGS_FILE, await profiles.migrate(current, DIRS.base, DIRS.game));
+      }
+    })();
+  }
+  await profilesReady;
+  return settings();
+}
+
+async function saveSettings(next) {
+  const { clientId, ...stored } = next;
+  await writeJson(SETTINGS_FILE, stored);
+  return settings();
+}
+
+function browserFor(profile) {
+  return new ModBrowser(profiles.modsDir(DIRS.base, profile.id), MC_VERSION, MANAGED_MODS.map((m) => m.slug));
+}
+
+async function activeBrowser() {
+  return browserFor(profiles.active(await ensureProfiles()));
+}
+
+async function profileList() {
+  const current = await ensureProfiles();
+  return {
+    active: profiles.active(current).id,
+    list: await Promise.all(current.profiles.map(async (p) => ({ ...p, modCount: await profiles.countMods(DIRS.base, p.id) }))),
+  };
+}
 let updating = false;
 
 /** Pfad der portablen EXE (vom Portable-Starter gesetzt). Bei der ZIP-Version leer. */
@@ -240,19 +277,52 @@ function microsoftCode(clientId) {
 
 // ---------------------------------------------------------------------------------------------- Mod-Browser
 
-ipcMain.handle("browser:search", (e, options) => browser.search(options || {}));
-ipcMain.handle("browser:list", () => browser.list());
+ipcMain.handle("browser:search", async (e, options) => (await activeBrowser()).search(options || {}));
+ipcMain.handle("browser:list", async () => (await activeBrowser()).list());
 ipcMain.handle("browser:install", async (e, projectId) => {
+  const browser = await activeBrowser();
   const installed = await browser.install(String(projectId), (title) => emit("browser-step", title));
   return { installed, list: await browser.list() };
 });
 ipcMain.handle("browser:remove", async (e, projectId) => {
+  const browser = await activeBrowser();
   await browser.remove(String(projectId));
   return browser.list();
 });
 ipcMain.handle("browser:toggle", async (e, projectId, enabled) => {
+  const browser = await activeBrowser();
   await browser.setEnabled(String(projectId), Boolean(enabled));
   return browser.list();
+});
+
+// ---------------------------------------------------------------------------------------------- Profile
+
+ipcMain.handle("profiles:list", () => profileList());
+ipcMain.handle("profiles:select", async (e, id) => {
+  const current = await ensureProfiles();
+  if (current.profiles.some((p) => p.id === id)) await saveSettings({ ...current, activeProfile: id });
+  return profileList();
+});
+ipcMain.handle("profiles:create", async (e, name, copyFrom) => {
+  if (game) throw new Error("Bitte zuerst Minecraft beenden.");
+  await saveSettings(await profiles.create(await ensureProfiles(), DIRS.base, name, copyFrom || null));
+  return profileList();
+});
+ipcMain.handle("profiles:rename", async (e, id, name) => {
+  await saveSettings(profiles.rename(await ensureProfiles(), id, name));
+  return profileList();
+});
+ipcMain.handle("profiles:delete", async (e, id) => {
+  if (game) throw new Error("Bitte zuerst Minecraft beenden.");
+  await saveSettings(await profiles.remove(await ensureProfiles(), DIRS.base, id));
+  return profileList();
+});
+ipcMain.handle("profiles:perf", async (e, slug, on) => {
+  const current = await ensureProfiles();
+  const active = profiles.active(current);
+  const next = { ...current, profiles: current.profiles.map((p) => (p.id === active.id ? { ...p, perf: { ...(p.perf || {}), [slug]: Boolean(on) } } : p)) };
+  await saveSettings(next);
+  return profileList();
 });
 
 // ---------------------------------------------------------------------------------------------- Updates
@@ -362,22 +432,24 @@ ipcMain.handle("game:launch", async () => {
   if (busy || game) throw new Error("Das Spiel läuft bereits.");
   busy = true;
   try {
-    const current = settings();
+    const current = await ensureProfiles();
+    const profile = profiles.active(current);
+    const profileMods = profiles.modsDir(DIRS.base, profile.id);
     const account = await activeAccount();
     const installer = new Installer(DIRS, {
       log: (line) => emit("log", line),
       progress: (p) => emit("progress", p),
     });
     emit("status", "Eigene Mods prüfen …");
-    await browser.updateAll((line) => emit("log", line));
-    const install = await installer.install({ enabledMods: current.mods, bundledModsDir: BUNDLED_MODS, verify: current.verifyNext });
+    await browserFor(profile).updateAll((line) => emit("log", line));
+    const install = await installer.install({ enabledMods: profile.perf || {}, bundledModsDir: BUNDLED_MODS, modsDir: profileMods, verify: current.verifyNext });
     if (current.verifyNext) {
       const { clientId, ...stored } = current;
       await writeJson(SETTINGS_FILE, { ...stored, verifyNext: false });
     }
-    const command = buildCommand(install, DIRS, account, current);
+    const command = buildCommand(install, DIRS, account, { ...current, modsDir: profileMods });
     emit("status", "Minecraft startet …");
-    emit("log", `[Launcher] Starte Minecraft ${MC_VERSION} (Fabric) als ${account.name}`);
+    emit("log", `[Launcher] Starte Minecraft ${MC_VERSION} (Fabric) als ${account.name} – Profil „${profile.name}“`);
     game = launch(command, DIRS, {
       onLog: (line) => emit("log", line),
       onExit: (code) => {

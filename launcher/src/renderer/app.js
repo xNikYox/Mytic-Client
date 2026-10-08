@@ -188,6 +188,7 @@ function accountError(message) {
 
 function openAccounts() {
   accountError("");
+  $("profiles").hidden = true;
   $("accounts").hidden = false;
 }
 
@@ -241,8 +242,11 @@ function switchControl(checked, disabled, label, onChange) {
   return wrap;
 }
 
+let profileState = { active: null, list: [] };
+const activeProfile = () => profileState.list.find((p) => p.id === profileState.active) || { perf: {}, name: "Standard", color: "#9b5cff" };
+
 function perfEnabled(mod) {
-  return mod.required || (state.settings.mods[mod.slug] ?? mod.default);
+  return mod.required || ((activeProfile().perf || {})[mod.slug] ?? mod.default);
 }
 
 function allMods() {
@@ -274,6 +278,7 @@ function renderMods() {
   const mods = allMods().filter((m) => (modFilter === "Alle" || m.category === modFilter) && (!q || `${m.name} ${m.description}`.toLowerCase().includes(q)));
   const grid = $("mod-grid");
   grid.replaceChildren();
+  $("mods-profile").textContent = activeProfile().name;
   if (mods.length === 0) grid.append(el("p", "sub", "Keine Mods gefunden."));
   let lastCategory = null;
   for (const m of mods) {
@@ -289,7 +294,7 @@ function renderMods() {
     card.append(icon, text, switchControl(m.on, m.locked, m.name, async (on) => {
       card.classList.toggle("on", on);
       if (m.game) state.modules = await api.setModule(m.game.id, on);
-      else state.settings = await api.setSettings({ mods: { ...state.settings.mods, [m.perf.slug]: on } });
+      else profileState = await api.setProfilePerf(m.perf.slug, on);
       renderSummary();
       renderFilters();
     }));
@@ -587,7 +592,7 @@ async function loadBrowser(reset) {
     results.append(...page.hits.map((m) => browserCard(m)));
     if (reset && page.hits.length === 0) results.append(el("p", "sub", "Keine passenden Mods für 1.21.11 gefunden."));
     $("browser-more").hidden = browserOffset >= browserTotal;
-    $("browser-info").textContent = `${formatCount(browserTotal)} Mods für Minecraft 1.21.11 mit Fabric · benötigte Mods werden automatisch mitinstalliert`;
+    $("browser-info").textContent = `${formatCount(browserTotal)} Mods für Minecraft 1.21.11 mit Fabric · Installiert ins Profil „${activeProfile().name}“`;
   } catch (error) {
     if (reset) results.replaceChildren(el("p", "sub", `Modrinth ist gerade nicht erreichbar: ${errorText(error)}`));
   }
@@ -598,10 +603,11 @@ function renderInstalled() {
   $("browser-more").hidden = true;
   results.replaceChildren();
   if (installedMods.length === 0) {
-    results.append(el("p", "sub", "Noch keine eigenen Mods installiert. Unter „Entdecken“ findest du Tausende Mods."));
+    $("browser-info").textContent = `Profil „${activeProfile().name}“`;
+    results.append(el("p", "sub", "In diesem Profil sind noch keine eigenen Mods. Unter „Entdecken“ findest du Tausende Mods."));
     return;
   }
-  $("browser-info").textContent = "Eigene Mods werden bei jedem Spielstart automatisch aktualisiert.";
+  $("browser-info").textContent = `Eigene Mods im Profil „${activeProfile().name}“ – werden bei jedem Spielstart automatisch aktualisiert.`;
   results.append(...installedMods.map((m) => browserCard({ id: m.id, title: m.title, icon: m.icon }, { installedEntry: m })));
 }
 
@@ -624,6 +630,142 @@ document.querySelectorAll("#browser-tabs .filter").forEach((b) => b.addEventList
   selectBrowserTab(b.dataset.tab);
   loadBrowser(true);
 }));
+
+// ---------------------------------------------------------------------------------------------- Profile
+
+const ICON_EDIT = '<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>';
+const ICON_COPY = '<svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>';
+const ICON_TRASH = '<svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>';
+
+function profileError(message) {
+  $("profile-error").textContent = message || "";
+  $("profile-error").hidden = !message;
+}
+
+function iconButton(svg, title, className) {
+  const b = el("button", className || null);
+  b.type = "button";
+  b.title = title;
+  b.setAttribute("aria-label", title);
+  b.innerHTML = svg;
+  return b;
+}
+
+async function applyProfiles(next, switched) {
+  profileState = next;
+  const p = activeProfile();
+  $("profile-name").textContent = p.name;
+  $("profile-dot").style.background = p.color;
+  $("profile-dot").style.color = p.color;
+  $("launch-profile").textContent = `Profil: ${p.name}`;
+  renderProfileList();
+  if (switched) {
+    installedMods = await api.listMods();
+    updateInstalledCount();
+    renderMods();
+    renderFilters();
+    renderSummary();
+    if (browserLoaded) loadBrowser(true);
+  }
+}
+
+function renderProfileList() {
+  const list = $("profile-list");
+  list.replaceChildren(...profileState.list.map((p) => {
+    const row = el("div", `prof${p.id === profileState.active ? " active" : ""}`);
+    const dot = el("span", "profile-dot");
+    dot.style.background = p.color;
+    dot.style.color = p.color;
+    const who = el("div", "who");
+    who.append(el("b", null, p.name), el("small", null, p.modCount === 1 ? "1 eigener Mod" : `${p.modCount} eigene Mods`));
+    const actions = el("div", "prof-actions");
+    const edit = iconButton(ICON_EDIT, "Umbenennen");
+    const copy = iconButton(ICON_COPY, "Duplizieren");
+    const del = iconButton(ICON_TRASH, "Löschen", "danger");
+    actions.append(edit, copy);
+    if (profileState.list.length > 1) actions.append(del);
+    row.append(dot, who, actions);
+
+    row.addEventListener("click", async (e) => {
+      if (e.target.closest(".prof-actions") || row.classList.contains("editing")) return;
+      if (p.id === profileState.active) return;
+      await applyProfiles(await api.selectProfile(p.id), true);
+      toast(`Profil „${p.name}“ aktiv`);
+    });
+    edit.addEventListener("click", () => {
+      row.classList.add("editing");
+      const input = el("input");
+      input.value = p.name;
+      input.maxLength = 24;
+      who.replaceChildren(input);
+      input.focus();
+      input.select();
+      const finish = async (saveIt) => {
+        if (!row.classList.contains("editing")) return;
+        row.classList.remove("editing");
+        try {
+          if (saveIt && input.value.trim() && input.value.trim() !== p.name) await applyProfiles(await api.renameProfile(p.id, input.value), false);
+          else renderProfileList();
+        } catch (error) {
+          profileError(errorText(error));
+          renderProfileList();
+        }
+      };
+      input.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter") finish(true);
+        if (ev.key === "Escape") { ev.stopPropagation(); finish(false); }
+      });
+      input.addEventListener("blur", () => finish(true));
+    });
+    copy.addEventListener("click", async () => {
+      try {
+        await applyProfiles(await api.createProfile(`${p.name} (Kopie)`.slice(0, 24), p.id), true);
+        toast(`Profil „${p.name}“ dupliziert`);
+      } catch (error) {
+        profileError(errorText(error));
+      }
+    });
+    del.addEventListener("click", async () => {
+      if (!del.classList.contains("confirm")) {
+        del.classList.add("confirm");
+        del.textContent = "Sicher?";
+        setTimeout(() => { if (del.isConnected) { del.classList.remove("confirm"); del.innerHTML = ICON_TRASH; } }, 3000);
+        return;
+      }
+      try {
+        await applyProfiles(await api.deleteProfile(p.id), true);
+        toast(`Profil „${p.name}“ gelöscht`);
+      } catch (error) {
+        profileError(errorText(error));
+      }
+    });
+    return row;
+  }));
+}
+
+$("profile-button").addEventListener("click", () => {
+  profileError("");
+  $("accounts").hidden = true;
+  $("profiles").hidden = !$("profiles").hidden;
+});
+$("profiles").addEventListener("click", (e) => {
+  if (e.target === $("profiles")) $("profiles").hidden = true;
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") $("profiles").hidden = true;
+});
+$("profile-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  profileError("");
+  try {
+    const name = $("profile-new").value;
+    await applyProfiles(await api.createProfile(name, null), true);
+    $("profile-new").value = "";
+    toast(`Profil „${activeProfile().name}“ erstellt`);
+  } catch (error) {
+    profileError(errorText(error));
+  }
+});
 
 // ---------------------------------------------------------------------------------------------- Updates
 
@@ -666,6 +808,7 @@ $("update-install").addEventListener("click", async () => {
 (async () => {
   state = await api.state();
   $("offline-area").hidden = !state.offlineAllowed;
+  profileState = await api.listProfiles();
   renderAccounts();
   renderFilters();
   renderMods();
@@ -674,5 +817,6 @@ $("update-install").addEventListener("click", async () => {
   renderCategories();
   installedMods = await api.listMods();
   updateInstalledCount();
+  applyProfiles(profileState, false);
   setRunning(state.running);
 })();
