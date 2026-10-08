@@ -12,7 +12,7 @@ const VERSION_MANIFEST = "https://piston-meta.mojang.com/mc/game/version_manifes
 const FABRIC_META = "https://meta.fabricmc.net/v2";
 const MODRINTH = "https://api.modrinth.com/v2";
 const LAUNCHER_NAME = "MyticClient";
-const LAUNCHER_VERSION = "2.0.0";
+const LAUNCHER_VERSION = "2.1.0";
 
 /** Mods, die der Launcher verwaltet. required = immer installiert, sonst über die Einstellungen schaltbar. */
 const MANAGED_MODS = [

@@ -8,6 +8,8 @@ const crypto = require("node:crypto");
 const { dirs: makeDirs } = require("./core/paths");
 const { Installer, buildCommand, launch, MANAGED_MODS, MC_VERSION, defaultMemoryMb } = require("./core/minecraft");
 const auth = require("./core/auth");
+const updater = require("./core/updater");
+const { spawn } = require("node:child_process");
 
 const DIRS = makeDirs();
 /** Offline-Konten nur für Entwickler-Tests: im Quellcode-Start (npm start) oder mit MYTIC_DEV=1, nie in der veröffentlichten EXE. */
@@ -57,6 +59,12 @@ const GAME_MODULES = [
 let win;
 let game = null;
 let busy = false;
+let pendingUpdate = null;
+let updating = false;
+
+/** Pfad der portablen EXE (vom Portable-Starter gesetzt). Bei der ZIP-Version leer. */
+const PORTABLE_FILE = process.env.PORTABLE_EXECUTABLE_FILE || "";
+const UPDATED_FROM = (process.argv.find((a) => a.startsWith("--updated-from=")) || "").slice("--updated-from=".length);
 
 // ---------------------------------------------------------------------------------------------- Speicher
 
@@ -176,6 +184,15 @@ function createWindow() {
   win.removeMenu();
   win.loadFile(path.join(__dirname, "renderer", "index.html"));
   win.once("ready-to-show", () => win.show());
+  win.webContents.once("did-finish-load", () => {
+    checkUpdate();
+    if (UPDATED_FROM && PORTABLE_FILE) {
+      emit("updated", { version: PACKAGE_VERSION });
+      updater.removeOldVersion(UPDATED_FROM, PORTABLE_FILE).then((ok) => {
+        if (!ok) emit("log", `[Launcher] Alte Version konnte nicht gelöscht werden: ${UPDATED_FROM}`);
+      });
+    }
+  });
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https:\/\//.test(url)) shell.openExternal(url);
     return { action: "deny" };
@@ -218,6 +235,48 @@ function microsoftCode(clientId) {
     popup.loadURL(auth.authorizeUrl(clientId, challenge, state));
   });
 }
+
+// ---------------------------------------------------------------------------------------------- Updates
+
+async function checkUpdate() {
+  if (!app.isPackaged && process.env.MYTIC_UPDATE_TEST !== "1") return;
+  try {
+    const update = await updater.checkForUpdate(process.env.MYTIC_UPDATE_TEST === "1" ? process.env.MYTIC_FAKE_VERSION || "0.0.0" : PACKAGE_VERSION);
+    if (update) {
+      pendingUpdate = update;
+      emit("update", { version: update.version, size: update.size, notes: update.notes, canInstall: Boolean(PORTABLE_FILE) });
+    }
+  } catch (error) {
+    emit("log", `[Launcher] ${error.message}`);
+  }
+}
+setInterval(checkUpdate, 6 * 60 * 60 * 1000);
+
+ipcMain.handle("update:install", async () => {
+  if (!pendingUpdate) throw new Error("Kein Update verfügbar.");
+  if (game) throw new Error("Bitte zuerst Minecraft beenden.");
+  if (!PORTABLE_FILE) {
+    // ZIP-Version: Release-Seite öffnen, dort die neue Version herunterladen
+    shell.openExternal(pendingUpdate.page);
+    return { opened: true };
+  }
+  if (updating) return { busy: true };
+  updating = true;
+  try {
+    const file = await updater.downloadUpdate(pendingUpdate, path.dirname(PORTABLE_FILE), (done, total) => emit("update-progress", { done, total }));
+    const child = spawn(file, [`--updated-from=${PORTABLE_FILE}`], { detached: true, stdio: "ignore" });
+    // erst beenden, wenn die neue Version wirklich gestartet ist
+    await new Promise((resolve, reject) => {
+      child.once("spawn", resolve);
+      child.once("error", (error) => reject(new Error(`Neue Version konnte nicht gestartet werden: ${error.message}. Sie liegt hier: ${file}`)));
+    });
+    child.unref();
+    setTimeout(() => app.quit(), 400);
+    return { restarting: true };
+  } finally {
+    updating = false;
+  }
+});
 
 // ---------------------------------------------------------------------------------------------- IPC
 

@@ -25,6 +25,7 @@ Minecraft 1.21.11 · Fabric · Windows
 - **Mods verwalten:** alle In-Game- und Performance-Mods per Schalter an- und ausschalten, mit Suche und Kategorien.
 - **Einstellungen:** RAM, Fenstergröße, Vollbild, Java-Argumente und eine Reparatur-Funktion.
 - **Konsole:** lesbares Spiel-Log mit Filter für Warnungen und Fehler.
+- **Automatische Updates:** Neue Versionen erkennt der Launcher selbst und installiert sie mit einem Klick. Konten und Einstellungen bleiben erhalten.
 - **Eigener Ordner:** Alles liegt in `%APPDATA%\.myticclient` und bleibt getrennt von `.minecraft`.
 
 ### Im Spiel
@@ -60,6 +61,8 @@ Diese Mods kommen automatisch von [Modrinth](https://modrinth.com): **Sodium**, 
    - Windows SmartScreen warnt bei unsignierten Dateien. Klicke dann auf **„Weitere Informationen“** → **„Trotzdem ausführen“**.
 3. Klicke oben rechts auf **Anmelden** und melde dich mit Microsoft an.
 4. Klicke auf **SPIELEN**. Der erste Start lädt etwa 1 GB herunter, danach geht es in Sekunden.
+
+Neue Versionen musst du nicht selbst herunterladen. Der Launcher meldet sie und aktualisiert sich mit einem Klick.
 
 **Systemvoraussetzungen:** Windows 10 oder 11 (64 Bit), Minecraft: Java Edition und etwa 1,5 GB freier Speicher.
 

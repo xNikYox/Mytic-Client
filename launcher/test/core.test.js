@@ -45,3 +45,31 @@ test("log4j-XML wird lesbar", () => {
   assert.match(out[0], /^\[\d\d:\d\d:\d\d INFO\] \[Mytic Client\] Mytic Client geladen: 13 Module$/);
   assert.equal(out[1], "plain line");
 });
+
+const fsp = require("node:fs/promises");
+const os = require("node:os");
+const path = require("node:path");
+const { compareVersions, removeOldVersion } = require("../src/core/updater");
+
+test("Versionen vergleichen", () => {
+  assert.ok(compareVersions("2.1.0", "2.0.9") > 0);
+  assert.ok(compareVersions("2.0.10", "2.0.9") > 0);
+  assert.equal(compareVersions("v2.0.1", "2.0.1"), 0);
+  assert.ok(compareVersions("1.9.9", "2.0.0") < 0);
+});
+
+test("Alte EXE wird nur sicher gelöscht", async () => {
+  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "mytic-upd-"));
+  const old = path.join(dir, "MyticClient-2.0.1.exe");
+  const current = path.join(dir, "MyticClient-2.1.0.exe");
+  const other = path.join(dir, "wichtig.exe");
+  for (const f of [old, current, other]) await fsp.writeFile(f, "x");
+  assert.equal(await removeOldVersion(other, current, { tries: 1 }), false);
+  assert.equal(await removeOldVersion(current, current, { tries: 1 }), false);
+  assert.equal(await removeOldVersion(path.join(os.tmpdir(), "MyticClient-1.0.0.exe"), current, { tries: 1 }), false);
+  assert.equal(await removeOldVersion(old, current, { tries: 1 }), true);
+  await assert.rejects(fsp.access(old));
+  await fsp.access(other);
+  await fsp.access(current);
+  await fsp.rm(dir, { recursive: true });
+});

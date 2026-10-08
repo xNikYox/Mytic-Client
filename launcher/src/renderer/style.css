@@ -308,3 +308,25 @@ select option { background: #15101f; }
   .cards .card:last-child { grid-column: 1 / -1; }
   h1 { font-size: 52px; }
 }
+
+/* Update-Hinweis */
+.update-banner {
+  position: fixed; left: calc(var(--rail) + 32px); right: 32px; bottom: 22px; z-index: 45;
+  display: flex; align-items: center; gap: 14px; padding: 12px 14px 12px 12px; border-radius: 16px;
+  background: linear-gradient(120deg, rgba(155, 92, 255, .32), rgba(18, 14, 30, .92) 55%); border: 1px solid rgba(194, 155, 255, .4);
+  backdrop-filter: blur(18px); box-shadow: 0 20px 50px -18px rgba(155, 92, 255, .7); animation: rise .35s cubic-bezier(.2, .8, .2, 1);
+}
+.update-banner[hidden] { display: none; }
+@keyframes rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+.update-icon { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: linear-gradient(135deg, var(--accent-2), var(--accent)); flex: none; }
+.update-icon svg { width: 20px; height: 20px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.update-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.update-text small { color: #cfc6e6; font-size: 12.5px; }
+.update-progress { margin-top: 6px; height: 5px; border-radius: 99px; background: rgba(255, 255, 255, .1); overflow: hidden; }
+.update-progress[hidden] { display: none; }
+.update-progress div { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent-2), var(--teal)); transition: width .2s; }
+.update-button { height: 38px; padding: 0 18px; border: 0; border-radius: 12px; font-weight: 700; color: #1a0f2e; background: #fff; transition: transform .15s; white-space: nowrap; }
+.update-button:hover:not(:disabled) { transform: translateY(-1px); }
+.update-button:disabled { opacity: .6; cursor: default; }
+.update-close { width: 30px; height: 30px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); }
+.update-close:hover { background: rgba(255, 255, 255, .08); color: var(--text); }

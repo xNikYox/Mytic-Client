@@ -444,6 +444,44 @@ api.onGame(({ running: isRunning, code }) => {
   if (!isRunning && code !== 0) toast("Minecraft wurde unerwartet beendet. Sieh dir die Konsole an.", true);
 });
 
+// ---------------------------------------------------------------------------------------------- Updates
+
+let updateInfo = null;
+api.onUpdate((info) => {
+  updateInfo = info;
+  $("update-title").textContent = `Update auf v${info.version} verfügbar`;
+  const mb = info.size ? ` · ${(info.size / 1048576).toFixed(0)} MB` : "";
+  $("update-sub").textContent = info.canInstall ? `Ein Klick – deine Konten und Einstellungen bleiben erhalten${mb}` : `Neue Version auf GitHub herunterladen${mb}`;
+  $("update-install").textContent = info.canInstall ? "Jetzt aktualisieren" : "Herunterladen";
+  $("update-banner").hidden = false;
+});
+api.onUpdateProgress(({ done, total }) => {
+  $("update-progress").hidden = false;
+  $("update-bar").style.width = `${Math.round((done / total) * 100)}%`;
+  $("update-sub").textContent = `Wird geladen … ${(done / 1048576).toFixed(0)} / ${(total / 1048576).toFixed(0)} MB`;
+});
+api.onUpdated(({ version }) => toast(`Mytic Client wurde auf v${version} aktualisiert.`));
+$("update-close").addEventListener("click", () => ($("update-banner").hidden = true));
+$("update-install").addEventListener("click", async () => {
+  if (running) {
+    toast("Bitte zuerst Minecraft beenden.", true);
+    return;
+  }
+  $("update-install").disabled = true;
+  try {
+    const result = await api.installUpdate();
+    if (result && result.restarting) {
+      $("update-sub").textContent = "Neue Version startet …";
+    } else {
+      $("update-install").disabled = false;
+    }
+  } catch (error) {
+    $("update-install").disabled = false;
+    $("update-progress").hidden = true;
+    toast(errorText(error), true);
+  }
+});
+
 (async () => {
   state = await api.state();
   $("offline-area").hidden = !state.offlineAllowed;
