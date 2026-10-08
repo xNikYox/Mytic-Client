@@ -6,6 +6,8 @@
 
 Minecraft 1.21.11 · Fabric · Windows
 
+**[⬇ Neueste Version herunterladen](https://github.com/xNikYox/Mytic-Client/releases/latest)**
+
 ![Mytic Client Launcher](docs/images/launcher-start.png)
 
 </div>
@@ -53,7 +55,7 @@ Diese Mods kommen automatisch von [Modrinth](https://modrinth.com): **Sodium**, 
 
 ## Download und Start
 
-1. Lade die neueste `MyticClient-<version>.exe` herunter.
+1. Lade unter [Releases](https://github.com/xNikYox/Mytic-Client/releases/latest) die neueste `MyticClient-<version>.exe` herunter.
 2. Starte sie mit einem Doppelklick. Eine Installation ist nicht nötig.
    - Windows SmartScreen warnt bei unsignierten Dateien. Klicke dann auf **„Weitere Informationen“** → **„Trotzdem ausführen“**.
 3. Klicke oben rechts auf **Anmelden** und melde dich mit Microsoft an.
