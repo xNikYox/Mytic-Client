@@ -1,0 +1,62 @@
+{
+  "name": "mytic-client",
+  "productName": "Mytic Client",
+  "version": "2.0.0",
+  "description": "Mytic Client Launcher - Minecraft 1.21.11 mit Fabric und In-Game-Mods",
+  "author": "MyticLegacy",
+  "license": "UNLICENSED",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/core.test.js",
+    "dist:win": "electron-builder --win portable zip --x64",
+    "dist:linux": "electron-builder --linux AppImage --x64"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.16"
+  },
+  "devDependencies": {
+    "electron": "^39.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "de.myticlegacy.client",
+    "productName": "Mytic Client",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": "resources"
+      }
+    ],
+    "win": {
+      "target": [
+        "portable",
+        "zip"
+      ],
+      "icon": "build/icon.png",
+      "signAndEditExecutable": false,
+      "artifactName": "MyticClient-${version}-win.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Mytic Client",
+      "artifactName": "MyticClient-Setup-${version}.exe"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "build/icon.png",
+      "category": "Game"
+    },
+    "portable": {
+      "artifactName": "MyticClient-${version}.exe"
+    }
+  }
+}

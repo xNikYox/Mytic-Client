@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: https://mc-heads.net; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'self'">
+  <title>Mytic Client</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="stars" aria-hidden="true"></canvas>
+  <div class="aurora" aria-hidden="true"><span></span><span></span><span></span></div>
+
+  <header class="titlebar">
+    <div class="window-buttons">
+      <button data-window="minimize" title="Minimieren"><svg viewBox="0 0 12 12"><path d="M2 6h8"/></svg></button>
+      <button data-window="maximize" title="Maximieren"><svg viewBox="0 0 12 12"><rect x="2.5" y="2.5" width="7" height="7" rx="1"/></svg></button>
+      <button data-window="close" class="close" title="Schließen"><svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6"/></svg></button>
+    </div>
+  </header>
+
+  <nav class="rail">
+    <div class="rail-logo" title="Mytic Client"><span>M</span></div>
+    <button class="rail-item active" data-page="home" aria-label="Start"><svg viewBox="0 0 24 24"><path d="M4 10.5L12 4l8 6.5V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z"/></svg><span class="tip">Start</span></button>
+    <button class="rail-item" data-page="mods" aria-label="Mods"><svg viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg><span class="tip">Mods</span></button>
+    <button class="rail-item" data-page="settings" aria-label="Einstellungen"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.2"/><circle cx="10" cy="17" r="2.2"/></svg><span class="tip">Einstellungen</span></button>
+    <button class="rail-item" data-page="console" aria-label="Konsole"><svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="3"/><path d="M7.5 10l2.5 2-2.5 2M12.5 14.5h4"/></svg><span class="tip">Konsole</span></button>
+    <div class="rail-spacer"></div>
+    <div class="rail-version" id="rail-version">v2.0</div>
+  </nav>
+
+  <div class="topbar">
+    <div class="crumbs"><b>MYTIC</b><span>CLIENT</span><i id="page-title">Start</i></div>
+    <button class="account" id="account-button">
+      <img id="account-avatar" alt="" hidden>
+      <span class="account-fallback" id="account-fallback">?</span>
+      <span class="account-text"><b id="account-name">Anmelden</b><small id="account-type">Kein Konto</small></span>
+      <svg class="chev" viewBox="0 0 12 12"><path d="M3 4.5l3 3 3-3"/></svg>
+    </button>
+  </div>
+
+  <main>
+    <!-- Start -->
+    <section class="page active" id="page-home">
+      <div class="hero">
+        <div class="hero-scene" id="hero-scene" aria-hidden="true">
+          <svg viewBox="0 0 900 420" preserveAspectRatio="xMaxYMid slice">
+            <defs>
+              <linearGradient id="grass" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3ee6d0"/><stop offset="1" stop-color="#1b9c8f"/></linearGradient>
+              <linearGradient id="rock" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#43325f"/><stop offset="1" stop-color="#140f22" stop-opacity="0"/></linearGradient>
+              <linearGradient id="crystal" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e3ccff"/><stop offset=".5" stop-color="#9b5cff"/><stop offset="1" stop-color="#5b2bd1"/></linearGradient>
+              <radialGradient id="glow"><stop offset="0" stop-color="#b98bff" stop-opacity=".7"/><stop offset="1" stop-color="#b98bff" stop-opacity="0"/></radialGradient>
+            </defs>
+            <g class="layer far" data-depth="8">
+              <path fill="#2a1f42" d="M770 330 q50-12 100 0 q-14 28-50 54 q-36-24-50-54z"/>
+              <path fill="#2a1f42" d="M780 110 q40-10 80 0 q-12 24-40 42 q-28-18-40-42z"/>
+              <path fill="#2a1f42" d="M470 70 q30-8 60 0 q-10 18-30 32 q-20-14-30-32z"/>
+            </g>
+            <g class="layer mid" data-depth="18">
+              <circle cx="610" cy="170" r="150" fill="url(#glow)"/>
+              <path fill="url(#rock)" d="M420 262 q190-48 380 0 l-14 10 q-60 110-176 140 q-116-30-176-140z"/>
+              <path fill="url(#grass)" d="M420 262 q190-48 380 0 q-4 10-16 14 q-174-40-348 0 q-12-4-16-14z"/>
+              <rect x="590" y="150" width="40" height="110" fill="#2b2042"/>
+              <path d="M578 154 l32-50 l32 50z" fill="#9b5cff"/>
+              <rect x="530" y="190" width="26" height="70" fill="#2b2042"/><path d="M522 193 l21-30 l21 30z" fill="#c9a4ff"/>
+              <rect x="664" y="190" width="26" height="70" fill="#2b2042"/><path d="M656 193 l21-30 l21 30z" fill="#c9a4ff"/>
+              <rect x="604" y="196" width="12" height="18" rx="6" fill="#f4c04e"/>
+              <circle cx="490" cy="244" r="20" fill="#f29ac3"/><circle cx="472" cy="252" r="13" fill="#e978b0"/>
+              <circle cx="742" cy="242" r="17" fill="#f29ac3"/><circle cx="756" cy="250" r="11" fill="#e978b0"/>
+            </g>
+            <g class="layer near" data-depth="30">
+              <path class="float" d="M610 40 l16 34 l-16 34 l-16-34z" fill="url(#crystal)"/>
+              <path class="float slow" d="M820 300 l10 22 l-10 22 l-10-22z" fill="url(#crystal)"/>
+              <path class="float" d="M455 120 l8 16 l-8 16 l-8-16z" fill="url(#crystal)"/>
+            </g>
+          </svg>
+        </div>
+        <div class="hero-content">
+          <span class="chip"><i></i>Minecraft <b id="mc-version">1.21.11</b> · Fabric</span>
+          <h1><span class="mytic">MYTIC</span> <span class="client">CLIENT</span></h1>
+          <p class="lead">32 In-Game-Mods, FPS-Boost und ein Menü wie bei Lunar – alles über <kbd>Rechts-Shift</kbd>.</p>
+          <div class="launch-pod">
+            <button id="launch" class="launch">
+              <span class="launch-fill" id="launch-fill"></span>
+              <span class="launch-label" id="launch-label">SPIELEN</span>
+              <svg class="launch-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+            </button>
+            <div class="launch-meta">
+              <span class="label">Spielen als</span>
+              <b id="launch-name">kein Konto</b>
+              <span class="status" id="status">Bereit</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="cards">
+        <article class="glass card">
+          <header><h3>Neu in 2.0</h3><span class="badge">Update</span></header>
+          <ul class="news">
+            <li><b>Neues Mod-Menü</b> mit Suche, Kategorien und Einstellungen pro Mod</li>
+            <li><b>16 neue Mods:</b> Crosshair, Target-HUD, Freelook, Combo, Reach, Time Changer …</li>
+            <li><b>Mytic-Hauptmenü</b> und HUD-Editor mit Hilfslinien</li>
+          </ul>
+        </article>
+        <article class="glass card">
+          <header><h3>Schnellverbindung</h3></header>
+          <label class="field">
+            <input id="server" placeholder="Server-Adresse (optional)" spellcheck="false">
+          </label>
+          <div class="chips" id="recent-servers"></div>
+          <p class="hint">Startet Minecraft und verbindet direkt mit dem Server.</p>
+        </article>
+        <article class="glass card">
+          <header><h3>Leistung</h3><button class="link" data-goto="mods">Verwalten</button></header>
+          <div class="chips" id="perf-chips"></div>
+          <div class="ram"><span>Arbeitsspeicher</span><b id="ram-summary">–</b></div>
+        </article>
+      </div>
+    </section>
+
+    <!-- Mods -->
+    <section class="page" id="page-mods">
+      <div class="toolbar">
+        <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg><input id="mod-search" placeholder="Mods durchsuchen" spellcheck="false"></div>
+        <div class="filters" id="filters"></div>
+      </div>
+      <p class="sub">Änderungen gelten ab dem nächsten Start. Im Spiel geht alles auch über <kbd>Rechts-Shift</kbd>.</p>
+      <div class="mod-grid" id="mod-grid"></div>
+    </section>
+
+    <!-- Einstellungen -->
+    <section class="page" id="page-settings">
+      <div class="settings-grid">
+        <section class="glass group">
+          <h3>Spiel</h3>
+          <div class="row"><div><b>Arbeitsspeicher</b><small>Wie viel RAM Minecraft nutzen darf</small></div>
+            <div class="range"><input type="range" id="memory" min="1024" step="512"><output id="memory-out"></output></div></div>
+          <div class="row"><div><b>Fenstergröße</b><small>Startgröße des Spielfensters</small></div>
+            <div class="inline"><input type="number" id="width" min="640" max="7680"><span>×</span><input type="number" id="height" min="480" max="4320"></div></div>
+          <div class="row"><div><b>Vollbild</b><small>Spiel direkt im Vollbild starten</small></div>
+            <label class="switch"><input type="checkbox" id="fullscreen"><span></span></label></div>
+          <div class="row"><div><b>Java-Argumente</b><small>Nur für Fortgeschrittene</small></div>
+            <input id="jvm-args" placeholder="z. B. -XX:+UseZGC" spellcheck="false"></div>
+        </section>
+        <section class="glass group">
+          <h3>Launcher</h3>
+          <div class="row"><div><b>Nach dem Start</b><small>Was der Launcher macht, wenn das Spiel läuft</small></div>
+            <select id="after-launch">
+              <option value="minimize">Minimieren</option>
+              <option value="keep">Offen lassen</option>
+              <option value="hide">Ausblenden</option>
+            </select></div>
+          <div class="row"><div><b>Microsoft Client-ID</b><small>Leer lassen = eingebaute ID des Mytic Client</small></div>
+            <input id="client-id" placeholder="eingebaute ID" spellcheck="false"></div>
+        </section>
+        <section class="glass group">
+          <h3>Dateien</h3>
+          <div class="row"><div><b>Spielordner</b><small id="game-dir"></small></div>
+            <button class="ghost" id="open-dir">Öffnen</button></div>
+          <div class="row"><div><b>Reparieren</b><small>Alle Dateien beim nächsten Start prüfen</small></div>
+            <button class="ghost" id="verify">Prüfen</button></div>
+        </section>
+      </div>
+    </section>
+
+    <!-- Konsole -->
+    <section class="page" id="page-console">
+      <div class="toolbar">
+        <div class="filters" id="log-filters">
+          <button class="filter active" data-level="all">Alles</button>
+          <button class="filter" data-level="warn">Warnungen</button>
+          <button class="filter" data-level="error">Fehler</button>
+        </div>
+        <div class="inline">
+          <button class="ghost" id="copy-log">Kopieren</button>
+          <button class="ghost danger" id="stop-game" disabled>Spiel beenden</button>
+        </div>
+      </div>
+      <div class="glass log" id="log"></div>
+    </section>
+  </main>
+
+  <!-- Konten -->
+  <div class="popover" id="accounts" hidden>
+    <div class="popover-card glass" role="dialog" aria-label="Konten">
+      <div class="account-list" id="account-list"></div>
+      <button class="microsoft" id="login-microsoft">
+        <svg viewBox="0 0 23 23"><path fill="#f35325" d="M1 1h10v10H1z"/><path fill="#81bc06" d="M12 1h10v10H12z"/><path fill="#05a6f0" d="M1 12h10v10H1z"/><path fill="#ffba08" d="M12 12h10v10H12z"/></svg>
+        Mit Microsoft anmelden
+      </button>
+      <div class="divider"><span>oder offline testen</span></div>
+      <form id="offline-form" class="inline">
+        <input id="offline-name" placeholder="Name" maxlength="16" spellcheck="false">
+        <button class="ghost" type="submit">Hinzufügen</button>
+      </form>
+      <p class="hint">Offline-Konten funktionieren nur auf Offline- und Testservern.</p>
+      <p class="error" id="account-error" hidden></p>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>

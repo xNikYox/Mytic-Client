@@ -1,0 +1,6 @@
+launcher/node_modules/
+launcher/dist/
+mod/.gradle/
+mod/build/
+mod/run/
+launcher/test-results/
