@@ -10,6 +10,8 @@ const { Installer, buildCommand, launch, MANAGED_MODS, MC_VERSION, defaultMemory
 const auth = require("./core/auth");
 
 const DIRS = makeDirs();
+/** Offline-Konten nur für Entwickler-Tests: im Quellcode-Start (npm start) oder mit MYTIC_DEV=1, nie in der veröffentlichten EXE. */
+const OFFLINE_ALLOWED = process.env.MYTIC_DEV === "1" || (!app.isPackaged && process.env.MYTIC_RELEASE !== "1");
 const SETTINGS_FILE = path.join(DIRS.base, "settings.json");
 const ACCOUNTS_FILE = path.join(DIRS.base, "accounts.json");
 const GAME_CONFIG = path.join(DIRS.game, "config", "myticclient.json");
@@ -122,7 +124,9 @@ async function saveAccount(account, refreshToken) {
 
 function publicAccounts() {
   const store = accounts();
-  return { selected: store.selected, list: store.list.map(({ type, name, uuid }) => ({ type, name, uuid })) };
+  const list = store.list.filter((a) => OFFLINE_ALLOWED || a.type === "microsoft");
+  const selected = list.some((a) => a.uuid === store.selected) ? store.selected : (list[0] ? list[0].uuid : null);
+  return { selected, list: list.map(({ type, name, uuid }) => ({ type, name, uuid })) };
 }
 
 /** Holt das gewählte Konto mit gültigem Token (erneuert Microsoft-Tokens bei Bedarf). */
@@ -130,7 +134,10 @@ async function activeAccount() {
   const store = accounts();
   const entry = store.list.find((a) => a.uuid === store.selected);
   if (!entry) throw new Error("Bitte zuerst ein Konto hinzufügen.");
-  if (entry.type !== "microsoft") return entry;
+  if (entry.type !== "microsoft") {
+    if (!OFFLINE_ALLOWED) throw new Error("Bitte melde dich mit deinem Microsoft-Konto an.");
+    return entry;
+  }
   if (entry.expiresAt && entry.expiresAt > Date.now() + 5 * 60 * 1000) return { ...entry, accessToken: unprotect(entry.accessToken) };
   const clientId = settings().clientId;
   if (!clientId) throw new Error("Für Microsoft-Konten fehlt die Client-ID (Einstellungen).");
@@ -225,6 +232,7 @@ ipcMain.handle("state", () => ({
   managedMods: MANAGED_MODS.map(({ slug, name, description, required, default: on, requires }) => ({ slug, name, description, required: Boolean(required), default: Boolean(on), requires: requires || [] })),
   totalMemoryMb: Math.floor(os.totalmem() / 1024 / 1024),
   running: Boolean(game),
+  offlineAllowed: OFFLINE_ALLOWED,
   gameDir: DIRS.game,
 }));
 
@@ -252,6 +260,7 @@ ipcMain.handle("account:microsoft", async () => {
 });
 
 ipcMain.handle("account:offline", async (e, name) => {
+  if (!OFFLINE_ALLOWED) throw new Error("Offline-Konten sind nur in der Entwicklerversion verfügbar.");
   await saveAccount(auth.offlineAccount(String(name || "").trim()), "");
   return publicAccounts();
 });

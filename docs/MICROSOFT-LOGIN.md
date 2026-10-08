@@ -43,7 +43,12 @@ Dafür gibt es zwei Wege:
 
   Danach baust du den Installer neu (`npm run dist:win`). Jeder Spieler hat die ID dann automatisch.
 
-Bis die Freigabe da ist, kannst du mit einem **Offline-Konto** testen. Das funktioniert nur auf Offline- und eigenen Testservern.
+Bis die Freigabe da ist, kannst du den Launcher aus dem Quellcode starten (`cd launcher && npm start`). Dort gibt es zum Testen Offline-Konten, die nur auf Offline- und eigenen Testservern funktionieren. In der veröffentlichten EXE sind Offline-Konten abgeschaltet.
+
+Für die Angaben in Azure (Branding) und im Mojang-Formular kannst du diese Adressen nehmen:
+
+- **Startseite:** <https://github.com/xNikYox/Mytic-Client>
+- **Datenschutzerklärung:** <https://github.com/xNikYox/Mytic-Client/blob/main/docs/PRIVACY.md>
 
 ## Häufige Fehler
 

@@ -446,6 +446,7 @@ api.onGame(({ running: isRunning, code }) => {
 
 (async () => {
   state = await api.state();
+  $("offline-area").hidden = !state.offlineAllowed;
   renderAccounts();
   renderFilters();
   renderMods();

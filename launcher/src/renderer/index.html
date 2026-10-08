@@ -98,7 +98,7 @@
           <header><h3>Neu in 2.0</h3><span class="badge">Update</span></header>
           <ul class="news">
             <li><b>Neues Mod-Menü</b> mit Suche, Kategorien und Einstellungen pro Mod</li>
-            <li><b>16 neue Mods:</b> Crosshair, Target-HUD, Freelook, Combo, Reach, Time Changer …</li>
+            <li><b>20 neue Mods:</b> Crosshair, Target-HUD, Freelook, Combo, Reach, Time Changer …</li>
             <li><b>Mytic-Hauptmenü</b> und HUD-Editor mit Hilfslinien</li>
           </ul>
         </article>
@@ -188,12 +188,14 @@
         <svg viewBox="0 0 23 23"><path fill="#f35325" d="M1 1h10v10H1z"/><path fill="#81bc06" d="M12 1h10v10H12z"/><path fill="#05a6f0" d="M1 12h10v10H1z"/><path fill="#ffba08" d="M12 12h10v10H12z"/></svg>
         Mit Microsoft anmelden
       </button>
-      <div class="divider"><span>oder offline testen</span></div>
-      <form id="offline-form" class="inline">
-        <input id="offline-name" placeholder="Name" maxlength="16" spellcheck="false">
-        <button class="ghost" type="submit">Hinzufügen</button>
-      </form>
-      <p class="hint">Offline-Konten funktionieren nur auf Offline- und Testservern.</p>
+      <div id="offline-area" hidden>
+        <div class="divider"><span>Entwicklermodus: offline testen</span></div>
+        <form id="offline-form" class="inline">
+          <input id="offline-name" placeholder="Name" maxlength="16" spellcheck="false">
+          <button class="ghost" type="submit">Hinzufügen</button>
+        </form>
+      </div>
+      <p class="hint">Du brauchst ein Microsoft-Konto, das Minecraft: Java Edition besitzt.</p>
       <p class="error" id="account-error" hidden></p>
     </div>
   </div>

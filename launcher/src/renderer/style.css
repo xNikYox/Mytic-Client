@@ -286,6 +286,8 @@ select option { background: #15101f; }
 .microsoft:disabled { opacity: .5; cursor: default; transform: none; }
 .divider { display: flex; align-items: center; gap: 10px; color: var(--faint); font-size: 12px; }
 .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--glass-line-strong); }
+#offline-area { display: grid; gap: 12px; }
+#offline-area[hidden] { display: none; }
 #offline-form input { flex: 1; min-width: 0; }
 .error { margin: 0; color: var(--danger); font-size: 13px; }
 

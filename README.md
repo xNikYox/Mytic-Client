@@ -19,7 +19,7 @@ Minecraft 1.21.11 · Fabric · Windows
 ### Launcher
 
 - **Ein Klick zum Spielen:** Java, Minecraft 1.21.11, Fabric und alle Mods werden automatisch heruntergeladen und aktuell gehalten. Spieler müssen nichts extra installieren.
-- **Microsoft-Login:** Anmeldung mit dem echten Minecraft-Konto. Zum Testen gibt es zusätzlich Offline-Konten.
+- **Microsoft-Login:** Anmeldung mit dem echten Minecraft-Konto. Der Launcher prüft, ob das Konto Minecraft: Java Edition besitzt.
 - **Mehrere Konten:** schnell zwischen Konten wechseln. Die Anmeldedaten werden mit der Verschlüsselung des Betriebssystems gespeichert.
 - **Schnellverbindung:** direkt beim Start auf einen Server verbinden, zuletzt genutzte Server mit einem Klick.
 - **Mods verwalten:** alle In-Game- und Performance-Mods per Schalter an- und ausschalten, mit Suche und Kategorien.
@@ -99,6 +99,12 @@ Ein Setup-Installer mit Deinstallation (NSIS) lässt sich unter Windows mit `npx
 ## Microsoft-Login
 
 Der Launcher nutzt eine eigene Azure-App, deren Client-ID in `launcher/resources/config.json` steht. Mojang muss diese ID für den Minecraft-Login freischalten. Wie das geht, steht in [docs/MICROSOFT-LOGIN.md](docs/MICROSOFT-LOGIN.md).
+
+Zum Entwickeln gibt es Offline-Konten. Sie sind nur aktiv, wenn der Launcher aus dem Quellcode gestartet wird (`npm start`) oder `MYTIC_DEV=1` gesetzt ist, und in der veröffentlichten EXE abgeschaltet.
+
+## Datenschutz
+
+Es gibt keine eigenen Server, kein Tracking und keine Werbung. Anmeldedaten bleiben verschlüsselt auf deinem PC und gehen nur an Microsoft und Mojang. Details stehen in [docs/PRIVACY.md](docs/PRIVACY.md).
 
 ## Fair Play
 
