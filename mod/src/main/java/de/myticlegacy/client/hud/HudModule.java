@@ -1,5 +1,6 @@
 package de.myticlegacy.client.hud;
 
+import de.myticlegacy.client.compat.Gfx;
 import de.myticlegacy.client.MyticClient;
 import de.myticlegacy.client.gui.Ui;
 import de.myticlegacy.client.module.Category;
@@ -71,11 +72,11 @@ public abstract class HudModule extends Module {
 
     public void draw(GuiGraphics g, boolean preview) {
         if (!preview && !hasContent()) return;
-        g.pose().pushMatrix();
-        g.pose().translate(x(), y());
-        g.pose().scale(scaleFactor(), scaleFactor());
+        Gfx.push(g);
+        Gfx.translate(g, x(), y());
+        Gfx.scale(g, scaleFactor(), scaleFactor());
         render(g, preview);
-        g.pose().popMatrix();
+        Gfx.pop(g);
     }
 
     public int x() {

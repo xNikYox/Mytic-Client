@@ -27,7 +27,7 @@ public class ZoomModule extends Module {
     }
 
     public boolean active() {
-        return enabled() && MyticClient.zoomKey.isDown() && Compat.screen(Minecraft.getInstance()) == null;
+        return enabled() && Compat.held(MyticClient.zoomKey) && Compat.screen(Minecraft.getInstance()) == null;
     }
 
     /** Wird für jedes Bild aus GameRenderer#getFov aufgerufen. */

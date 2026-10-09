@@ -1,5 +1,7 @@
 package de.myticlegacy.client.gui;
 
+import de.myticlegacy.client.compat.Compat;
+import de.myticlegacy.client.compat.Gfx;
 import de.myticlegacy.client.MyticClient;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -38,7 +40,7 @@ public abstract class MyticScreen extends InputScreen {
     protected abstract int pixelScale();
 
     private void computeScale() {
-        int gui = minecraft.getWindow().getGuiScale();
+        int gui = Compat.guiScale();
         scale = (float) pixelScale() / gui;
         vw = Math.round(width / scale);
         vh = Math.round(height / scale);
@@ -59,10 +61,11 @@ public abstract class MyticScreen extends InputScreen {
     @Override
     public final void render(GuiGraphics g, int mouseX, int mouseY, float delta) {
         Ui.frame();
-        g.pose().pushMatrix();
-        g.pose().scale(scale, scale);
+        if (Compat.SCREEN_RENDERS_BACKGROUND) renderBackground(g, mouseX, mouseY, delta);
+        Gfx.push(g);
+        Gfx.scale(g, scale, scale);
         draw(g, Math.round(mouseX / scale), Math.round(mouseY / scale), delta);
-        g.pose().popMatrix();
+        Gfx.pop(g);
     }
 
     protected double vx(double x) {

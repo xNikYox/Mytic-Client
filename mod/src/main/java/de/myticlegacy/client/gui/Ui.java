@@ -1,5 +1,6 @@
 package de.myticlegacy.client.gui;
 
+import de.myticlegacy.client.compat.Gfx;
 import de.myticlegacy.client.MyticClient;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -104,23 +105,23 @@ public final class Ui {
     }
 
     public static void scaled(GuiGraphics g, String text, float x, float y, float scale, int color, boolean shadow) {
-        g.pose().pushMatrix();
-        g.pose().translate(x, y);
-        g.pose().scale(scale, scale);
+        Gfx.push(g);
+        Gfx.translate(g, x, y);
+        Gfx.scale(g, scale, scale);
         g.drawString(font(), text, 0, 0, color, shadow);
-        g.pose().popMatrix();
+        Gfx.pop(g);
     }
 
     /** Mytic-Logo als Text: "MYTIC" in der Akzentfarbe, "CLIENT" weiß, kursiv wirkend durch Versatz-Schatten. */
     public static void logo(GuiGraphics g, float x, float y, float scale) {
-        g.pose().pushMatrix();
-        g.pose().translate(x, y);
-        g.pose().scale(scale, scale);
+        Gfx.push(g);
+        Gfx.translate(g, x, y);
+        Gfx.scale(g, scale, scale);
         int w = font().width("MYTIC ");
         g.drawString(font(), "MYTIC", 1, 1, withAlpha(accent(), 90), false);
         g.drawString(font(), "MYTIC", 0, 0, accent(), false);
         g.drawString(font(), "CLIENT", w, 0, TEXT, false);
-        g.pose().popMatrix();
+        Gfx.pop(g);
     }
 
     public static boolean inside(double mx, double my, int x, int y, int w, int h) {

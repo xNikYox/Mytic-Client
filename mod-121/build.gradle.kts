@@ -14,6 +14,12 @@ val fabricApi = mapOf(
 /** Versionsgruppen mit gleicher API, von speziell nach allgemein. */
 val groups = mapOf(
     "1.21.10" to listOf("1.21.10", "1.21.9"), "1.21.9" to listOf("1.21.9"),
+    "1.21.5" to listOf("1.21.5", "1.21.8", "1.21.9"),
+    "1.21.4" to listOf("1.21.4", "1.21.5", "1.21.8", "1.21.9"),
+    "1.21.3" to listOf("1.21.3", "1.21.1", "1.21.4", "1.21.5", "1.21.8", "1.21.9"),
+    "1.21.2" to listOf("1.21.2", "1.21.1", "1.21.4", "1.21.5", "1.21.8", "1.21.9"),
+    "1.21.1" to listOf("1.21.1", "legacyfov", "1.21.4", "1.21.5", "1.21.8", "1.21.9"),
+    "1.21" to listOf("1.21", "legacyfov", "1.21.1", "1.21.4", "1.21.5", "1.21.8", "1.21.9"),
     "1.21.8" to listOf("1.21.8", "1.21.9"), "1.21.7" to listOf("1.21.7", "1.21.8", "1.21.9"), "1.21.6" to listOf("1.21.6", "1.21.8", "1.21.9"),
 )
 val patch = mc.split(".").getOrNull(2)?.toInt() ?: 0
@@ -31,18 +37,20 @@ val renames = buildList {
     add(Regex("""\.identifier\(\)""") to ".location()")
     if (patch >= 9) add(Regex("""\.renderOutline\(""") to ".submitOutline(")
 }
+// Erst die Versionsordner (speziellster zuerst), dann der gemeinsame Code; bei gleichen Dateien gewinnt die erste
 val copyShared by tasks.registering(Sync::class) {
     inputs.property("mc", mc)
     inputs.property("renames", renames.map { it.first.pattern + "=>" + it.second })
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    versionDirs.forEach { from(it) }
     from(shared) {
-        exclude { f -> !f.isDirectory && versionDirs.any { it.resolve(f.relativePath.pathString).exists() } }
         filter { line -> renames.fold(line) { acc, (regex, replacement) -> regex.replace(acc, replacement) } }
     }
     into(sharedFiltered)
 }
 sourceSets.main {
-    java.setSrcDirs(versionDirs + listOf(sharedFiltered))
-    resources.setSrcDirs(listOf("src/main/resources", "../mod/src/main/resources"))
+    java.setSrcDirs(listOf(sharedFiltered))
+    resources.setSrcDirs(versionDirs.map { it.resolveSibling("resources") }.filter { it.isDirectory } + listOf(file("src/main/resources"), file("../mod/src/main/resources")))
 }
 tasks.compileJava { dependsOn(copyShared) }
 tasks.processResources {

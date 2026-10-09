@@ -27,9 +27,8 @@ val renames = listOf(
     Regex("""\.renderOutline\(""") to ".outline(",
     Regex("""\brenderPanorama\(""") to "extractPanorama(",
     Regex("""void render\(GuiGraphicsExtractor (\w+), int mouseX, int mouseY, float delta\)""") to "void extractRenderState(GuiGraphicsExtractor $1, int mouseX, int mouseY, float delta)",
-    Regex("""void renderBackground\(GuiGraphicsExtractor""") to "void extractBackground(GuiGraphicsExtractor",
     Regex("""super\.render\(""") to "super.extractRenderState(",
-    Regex("""super\.renderBackground\(""") to "super.extractBackground(",
+    Regex("""\brenderBackground\(""") to "extractBackground(",
     Regex("""original\.render\(""") to "original.extractRenderState(",
     Regex("""setTooltipForNextFrame\(font, """) to "setTooltipForNextFrame(",
 )

@@ -1,8 +1,8 @@
 package de.myticlegacy.client.gui;
 
+import de.myticlegacy.client.compat.Gfx;
 import de.myticlegacy.client.compat.Compat;
 import de.myticlegacy.client.MyticClient;
-import net.minecraft.SharedConstants;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen;
 import net.minecraft.client.gui.screens.worldselection.SelectWorldScreen;
@@ -64,18 +64,18 @@ public class MyticTitleScreen extends MyticScreen {
         int logoW = Math.round(font.width("MYTIC CLIENT") * logoScale);
         float lx = vw / 2f - logoW / 2f;
         float ly = top + (1 - ease) * 8;
-        g.pose().pushMatrix();
-        g.pose().translate(lx, ly);
-        g.pose().scale(logoScale, logoScale);
+        Gfx.push(g);
+        Gfx.translate(g, lx, ly);
+        Gfx.scale(g, logoScale, logoScale);
         int mytic = font.width("MYTIC ");
         g.drawString(font, "MYTIC", 1, 1, Ui.alpha(0xFF1A0B33, ease), false);
         g.drawString(font, "CLIENT", mytic + 1, 1, Ui.alpha(0xFF15121E, ease), false);
         g.drawString(font, "MYTIC", 0, 0, Ui.alpha(Ui.accent(), ease), false);
         g.drawString(font, "CLIENT", mytic, 0, Ui.alpha(0xFFFFFFFF, ease), false);
-        g.pose().popMatrix();
+        Gfx.pop(g);
         int lineW = Math.round(logoW * ease * 0.5f);
         Ui.rect(g, vw / 2 - lineW / 2, Math.round(ly + 30), lineW, 2, 1, Ui.alpha(Ui.accent(), ease));
-        Ui.centered(g, "Minecraft " + SharedConstants.getCurrentVersion().name() + "  ·  Fabric", vw / 2, Math.round(ly + 37), Ui.alpha(Ui.MUTED, ease), false);
+        Ui.centered(g, "Minecraft " + Compat.versionName() + "  ·  Fabric", vw / 2, Math.round(ly + 37), Ui.alpha(Ui.MUTED, ease), false);
 
         for (Button b : buttons()) {
             boolean hover = Ui.inside(mouseX, mouseY, b.x, b.y, b.w, BH);

@@ -1,5 +1,10 @@
 package de.myticlegacy.client.compat;
 
+import de.myticlegacy.client.MyticClient;
+import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
+import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
+import net.minecraft.SharedConstants;
+import net.minecraft.network.chat.Component;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -17,6 +22,9 @@ import net.minecraft.world.level.Level;
 public final class Compat {
     public static final InputConstants.Type KEY_TYPE = InputConstants.Type.KEYSYM;
 
+    /** Bis 1.21.5 muss ein Bildschirm seinen Hintergrund selbst zeichnen, danach macht das Minecraft. */
+    public static final boolean SCREEN_RENDERS_BACKGROUND = false;
+
     private Compat() {
     }
 
@@ -27,6 +35,11 @@ public final class Compat {
     /** 26.x (SDL): Zeichen kommen nur an, wenn ein Bildschirm die Texteingabe anfordert. */
     public static void textInput(GuiEventListener owner, boolean enabled) {
         Minecraft.getInstance().onTextInputFocusChange(owner, enabled);
+    }
+
+    /** Ob die Taste einer Belegung gerade gedrückt ist. */
+    public static boolean held(KeyMapping mapping) {
+        return mapping.isDown();
     }
 
     public static Screen screen(Minecraft mc) {
@@ -54,5 +67,29 @@ public final class Compat {
     }
     public static void drawFace(GuiGraphicsExtractor g, PlayerInfo info, int x, int y, int size) {
         PlayerFaceExtractor.extractRenderState(g, info.getSkin(), x, y, size);
+    }
+
+    public static int guiScale() {
+        return Minecraft.getInstance().getWindow().getGuiScale();
+    }
+
+    public static String versionName() {
+        return SharedConstants.getCurrentVersion().name();
+    }
+
+    public static void tooltip(GuiGraphicsExtractor g, Component text, int x, int y) {
+        g.setTooltipForNextFrame(text, x, y);
+    }
+
+    /** HUD anmelden: eigene Anzeigen, Fadenkreuz, Scoreboard und Bossbar ersetzen. */
+    public static void registerHud() {
+        HudElementRegistry.addLast(id("hud"), (g, delta) -> MyticClient.renderHud(g));
+        HudElementRegistry.replaceElement(VanillaHudElements.CROSSHAIR, o -> (g, delta) -> MyticClient.hudCrosshair(g, () -> o.extractRenderState(g, delta)));
+        HudElementRegistry.replaceElement(VanillaHudElements.SCOREBOARD, o -> (g, delta) -> MyticClient.hudScoreboard(g, () -> o.extractRenderState(g, delta)));
+        HudElementRegistry.replaceElement(VanillaHudElements.BOSS_BAR, o -> (g, delta) -> MyticClient.hudBossbar(() -> o.extractRenderState(g, delta)));
+    }
+
+    private static Identifier id(String path) {
+        return Identifier.fromNamespaceAndPath("myticclient", path);
     }
 }

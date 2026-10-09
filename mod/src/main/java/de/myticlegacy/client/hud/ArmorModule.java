@@ -1,5 +1,6 @@
 package de.myticlegacy.client.hud;
 
+import de.myticlegacy.client.compat.Gfx;
 import de.myticlegacy.client.setting.BoolSetting;
 import de.myticlegacy.client.setting.ModeSetting;
 import de.myticlegacy.client.module.Module;
@@ -87,11 +88,11 @@ public class ArmorModule extends HudModule {
             }
             if (text.isEmpty()) continue;
             if (horizontal()) {
-                g.pose().pushMatrix();
-                g.pose().translate(x + 8, y + 18);
-                g.pose().scale(0.75f, 0.75f);
+                Gfx.push(g);
+                Gfx.translate(g, x + 8, y + 18);
+                Gfx.scale(g, 0.75f, 0.75f);
                 g.drawString(font, text, -font.width(text) / 2, 0, color, textShadow());
-                g.pose().popMatrix();
+                Gfx.pop(g);
             } else {
                 g.drawString(font, text, x + 20, y + 4, color, textShadow());
             }

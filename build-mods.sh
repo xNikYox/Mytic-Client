@@ -13,7 +13,7 @@ echo "1.21.11"
 (cd mod && JAVA_HOME=$J21 retry ./gradlew --no-daemon -q build)
 put 1.21.11 "mod/build/libs/mytic-client-$VERSION.jar"
 
-for v in ${MODS_121:-1.21.10 1.21.9 1.21.8 1.21.7 1.21.6}; do
+for v in ${MODS_121:-1.21.10 1.21.9 1.21.8 1.21.7 1.21.6 1.21.5 1.21.4 1.21.3 1.21.2 1.21.1 1.21}; do
   echo "$v"
   (cd mod-121 && JAVA_HOME=$J21 retry ./gradlew --no-daemon -q build -Pmc=$v)
   put $v "mod-121/build/libs/mytic-client-$VERSION+$v.jar"

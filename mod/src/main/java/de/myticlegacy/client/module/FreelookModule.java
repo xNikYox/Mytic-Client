@@ -34,7 +34,7 @@ public class FreelookModule extends Module {
     }
 
     public void tick(Minecraft mc) {
-        boolean want = enabled() && MyticClient.freelookKey.isDown() && Compat.screen(mc) == null && mc.player != null;
+        boolean want = enabled() && Compat.held(MyticClient.freelookKey) && Compat.screen(mc) == null && mc.player != null;
         if (want && !active) {
             yaw = mc.player.getYRot();
             pitch = mc.player.getXRot();

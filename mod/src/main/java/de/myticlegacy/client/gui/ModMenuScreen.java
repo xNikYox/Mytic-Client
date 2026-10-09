@@ -1,5 +1,6 @@
 package de.myticlegacy.client.gui;
 
+import de.myticlegacy.client.compat.Gfx;
 import de.myticlegacy.client.compat.Compat;
 import com.mojang.blaze3d.platform.InputConstants;
 import de.myticlegacy.client.MyticClient;
@@ -164,8 +165,8 @@ public class ModMenuScreen extends MyticScreen {
         scrollPos += (scrollTarget - scrollPos) * 0.35;
         float open = Math.min(1f, (System.currentTimeMillis() - openedAt) / 180f);
         float ease = 1f - (1f - open) * (1f - open) * (1f - open);
-        g.pose().pushMatrix();
-        g.pose().translate(0, (1 - ease) * 10);
+        Gfx.push(g);
+        Gfx.translate(g, 0, (1 - ease) * 10);
 
         // Panel: Schatten, Fläche, Kopf mit Akzent-Verlauf
         Ui.rect(g, px - 3, py + 3, pw + 6, ph + 3, 10, 0x50000000);
@@ -199,9 +200,9 @@ public class ModMenuScreen extends MyticScreen {
         }
         Ui.rect(g, px + 10, py + HEADER, pw - 20, 1, 0, Ui.LINE);
 
-        g.enableScissor(cx(), cy() - 3, cx() + cw(), cy() + ch());
+        Gfx.scissor(g, cx(), cy() - 3, cx() + cw(), cy() + ch());
         Object hover = selected == null ? drawGrid(g, mouseX, mouseY) : drawSettings(g, mouseX, mouseY);
-        g.disableScissor();
+        Gfx.noScissor(g);
         drawScrollbar(g);
 
         // Fußzeile
@@ -214,7 +215,7 @@ public class ModMenuScreen extends MyticScreen {
         String info = MyticClient.MODULES.stream().filter(Module::enabled).count() + " von " + MyticClient.MODULES.size() + " aktiv";
         Ui.text(g, info, px + pw - 12 - font.width(info), fy + 4, Ui.MUTED, false);
 
-        g.pose().popMatrix();
+        Gfx.pop(g);
 
         // Tooltip erst nach kurzem Verweilen
         if (hover != hovered) {
@@ -222,7 +223,7 @@ public class ModMenuScreen extends MyticScreen {
             hoverSince = System.currentTimeMillis();
         }
         if (hover instanceof Module m && System.currentTimeMillis() - hoverSince > 450) {
-            g.setTooltipForNextFrame(font, Component.literal(m.description), mouseX, mouseY);
+            Compat.tooltip(g, Component.literal(m.description), mouseX, mouseY);
         }
     }
 
@@ -254,11 +255,11 @@ public class ModMenuScreen extends MyticScreen {
             Ui.outline(g, c[0], c[1], w, CARD_H, 6, Ui.mix(Ui.LINE, Ui.withAlpha(Ui.accent(), 200), Math.max(onT * 0.55f, hv * 0.9f)),
                     Ui.mix(Ui.SURFACE, Ui.SURFACE_HOVER, hv));
 
-            g.pose().pushMatrix();
-            g.pose().translate(c[0] + w / 2f - 16, c[1] + 8 - Math.round(hv * 2));
-            g.pose().scale(2f, 2f);
+            Gfx.push(g);
+            Gfx.translate(g, c[0] + w / 2f - 16, c[1] + 8 - Math.round(hv * 2));
+            Gfx.scale(g, 2f, 2f);
             g.renderItem(m.icon(), 0, 0);
-            g.pose().popMatrix();
+            Gfx.pop(g);
 
             String name = font.plainSubstrByWidth(m.name, w - 10);
             Ui.centered(g, name, c[0] + w / 2, c[1] + 45, Ui.TEXT, false);

@@ -1,5 +1,6 @@
 package de.myticlegacy.client.gui;
 
+import de.myticlegacy.client.compat.Gfx;
 import de.myticlegacy.client.compat.Compat;
 import com.mojang.blaze3d.platform.InputConstants;
 import de.myticlegacy.client.MyticClient;
@@ -54,7 +55,7 @@ public class HudEditScreen extends InputScreen {
                 break;
             }
         }
-        return (float) k / window.getGuiScale();
+        return (float) k / Compat.guiScale();
     }
 
     /** Werkzeugleiste in kompakten Koordinaten. */
@@ -74,6 +75,7 @@ public class HudEditScreen extends InputScreen {
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float delta) {
         Ui.frame();
+        if (Compat.SCREEN_RENDERS_BACKGROUND) renderBackground(g, mouseX, mouseY, delta);
         for (int x = 0; x < width; x += 20) g.fill(x, 0, x + 1, height, 0x0CFFFFFF);
         for (int y = 0; y < height; y += 20) g.fill(0, y, width, y + 1, 0x0CFFFFFF);
 
@@ -100,8 +102,8 @@ public class HudEditScreen extends InputScreen {
         float s = ui();
         int mx = Math.round(mouseX / s);
         int my = Math.round(mouseY / s);
-        g.pose().pushMatrix();
-        g.pose().scale(s, s);
+        Gfx.push(g);
+        Gfx.scale(g, s, s);
         int[] bar = toolbar();
         String hint = "Ziehen · Mausrad: Größe · Rechtsklick: Einstellungen";
         int hw = font.width(hint) + 16;
@@ -117,8 +119,7 @@ public class HudEditScreen extends InputScreen {
             Ui.rect(g, bx, bar[1] + 2, bw, 14, 7, h ? Ui.mix(bg, 0xFFFFFFFF, 0.15f) : bg);
             Ui.centered(g, labels[i], bx + bw / 2, bar[1] + 5, 0xFFFFFFFF, false);
         }
-        g.pose().popMatrix();
-        super.render(g, mouseX, mouseY, delta);
+        Gfx.pop(g);
     }
 
     @Override

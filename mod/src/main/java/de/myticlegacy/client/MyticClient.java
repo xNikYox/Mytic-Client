@@ -1,5 +1,6 @@
 package de.myticlegacy.client;
 
+import de.myticlegacy.client.compat.Gfx;
 import de.myticlegacy.client.compat.Compat;
 import com.mojang.blaze3d.platform.InputConstants;
 import de.myticlegacy.client.gui.HudEditScreen;
@@ -23,8 +24,6 @@ import de.myticlegacy.client.module.SimpleModules;
 import de.myticlegacy.client.module.ZoomModule;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
-import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -174,26 +173,7 @@ public final class MyticClient implements ClientModInitializer {
         zoomKey = Compat.registerKey("key.myticclient.zoom", InputConstants.KEY_C);
         freelookKey = Compat.registerKey("key.myticclient.freelook", InputConstants.KEY_LALT);
 
-        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(ID, "hud"), (graphics, delta) -> renderHud(graphics));
-        HudElementRegistry.replaceElement(VanillaHudElements.CROSSHAIR, original -> (graphics, delta) -> {
-            if (!crosshair.render(graphics)) original.render(graphics, delta);
-        });
-        HudElementRegistry.replaceElement(VanillaHudElements.SCOREBOARD, original -> (graphics, delta) -> {
-            if (!scoreboard.enabled()) {
-                original.render(graphics, delta);
-            } else if (!scoreboard.hide.get()) {
-                float s = scoreboard.scale.floatValue();
-                graphics.pose().pushMatrix();
-                graphics.pose().translate(graphics.guiWidth(), graphics.guiHeight() / 2f);
-                graphics.pose().scale(s, s);
-                graphics.pose().translate(-graphics.guiWidth(), -graphics.guiHeight() / 2f);
-                original.render(graphics, delta);
-                graphics.pose().popMatrix();
-            }
-        });
-        HudElementRegistry.replaceElement(VanillaHudElements.BOSS_BAR, original -> (graphics, delta) -> {
-            if (!hideBossbar.enabled()) original.render(graphics, delta);
-        });
+        Compat.registerHud();
 
         CombatTracker.register();
         ClientTickEvents.END_CLIENT_TICK.register(MyticClient::tick);
@@ -217,7 +197,31 @@ public final class MyticClient implements ClientModInitializer {
         return module;
     }
 
-    private static void renderHud(GuiGraphics graphics) {
+    /** Eigenes Fadenkreuz statt des normalen (original zeichnet das normale). */
+    public static void hudCrosshair(GuiGraphics graphics, Runnable original) {
+        if (!crosshair.render(graphics)) original.run();
+    }
+
+    /** Scoreboard verkleinern oder ausblenden. */
+    public static void hudScoreboard(GuiGraphics graphics, Runnable original) {
+        if (!scoreboard.enabled()) {
+            original.run();
+        } else if (!scoreboard.hide.get()) {
+            float s = scoreboard.scale.floatValue();
+            Gfx.push(graphics);
+            Gfx.translate(graphics, graphics.guiWidth(), graphics.guiHeight() / 2f);
+            Gfx.scale(graphics, s, s);
+            Gfx.translate(graphics, -graphics.guiWidth(), -graphics.guiHeight() / 2f);
+            original.run();
+            Gfx.pop(graphics);
+        }
+    }
+
+    public static void hudBossbar(Runnable original) {
+        if (!hideBossbar.enabled()) original.run();
+    }
+
+    public static void renderHud(GuiGraphics graphics) {
         Minecraft mc = Minecraft.getInstance();
         ClickCounter.poll();
         Ui.frame();

@@ -1,0 +1,19 @@
+{
+  "required": true,
+  "package": "de.myticlegacy.client.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "GameRendererMixin",
+    "MouseHandlerMixin",
+    "MinecraftMixin",
+    "OptionInstanceAccessor",
+    "EntityMixin",
+    "CameraMixin",
+    "LevelMixin",
+    "GuiCompatMixin",
+    "BossOverlayMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
