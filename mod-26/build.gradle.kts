@@ -11,8 +11,11 @@ version = "2.2.0+$mc"
 group = "de.myticlegacy"
 base { archivesName.set("mytic-client") }
 
-// Eigene Dateien hier haben Vorrang vor dem gemeinsamen Quellcode
+// Vorrang: src/mc<version>/ (z. B. mc26.1.2) > src/mc<major.minor>/ (z. B. mc26.1) > src/main/ > gemeinsamer Code aus ../mod
 val shared = file("../mod/src/main/java")
+val minor = mc.split(".").take(2).joinToString(".")
+val overrideDirs = listOf("src/mc$mc/java", "src/mc$minor/java", "src/main/java").distinct().map { file(it) }.filter { it.isDirectory }
+val versionDirs = overrideDirs.dropLast(1)
 val overrides = file("src/main/java")
 val sharedFiltered = layout.buildDirectory.dir("shared-src")
 // Umbenennungen von 1.21.11 → 26.x (Zeichen-API heißt jetzt "extract", Eingabe über SDL statt GLFW)
@@ -29,20 +32,24 @@ val renames = listOf(
     Regex("""super\.renderBackground\(""") to "super.extractBackground(",
     Regex("""original\.render\(""") to "original.extractRenderState(",
     Regex("""setTooltipForNextFrame\(font, """) to "setTooltipForNextFrame(",
-    Regex("""InputConstants\.Type\.KEYSYM""") to "InputConstants.Type.KEYBOARD",
 )
 val copyShared by tasks.registering(Sync::class) {
     from(shared) {
-        exclude { f -> !f.isDirectory && overrides.resolve(f.relativePath.pathString).exists() }
+        exclude { f -> !f.isDirectory && overrideDirs.any { it.resolve(f.relativePath.pathString).exists() } }
         filter { line -> renames.fold(line) { acc, (regex, replacement) -> regex.replace(acc, replacement) } }
     }
     into(sharedFiltered)
 }
+val mainFiltered = layout.buildDirectory.dir("main-src")
+val copyMain by tasks.registering(Sync::class) {
+    from(overrides) { exclude { f -> !f.isDirectory && versionDirs.any { it.resolve(f.relativePath.pathString).exists() } } }
+    into(mainFiltered)
+}
 sourceSets.main {
-    java.setSrcDirs(listOf(overrides, sharedFiltered))
+    java.setSrcDirs(versionDirs + listOf(mainFiltered, sharedFiltered))
     resources.setSrcDirs(listOf("src/main/resources", "../mod/src/main/resources"))
 }
-tasks.compileJava { dependsOn(copyShared) }
+tasks.compileJava { dependsOn(copyShared, copyMain) }
 tasks.processResources {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     inputs.property("version", project.version)

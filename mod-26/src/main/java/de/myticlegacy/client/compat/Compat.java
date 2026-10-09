@@ -5,13 +5,21 @@ import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.PlayerFaceExtractor;
+import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.options.OptionsScreen;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.world.level.Level;
 
 /** Fassung für Minecraft 26.x: Bildschirme liegen in Minecraft#gui, HUD-Sichtbarkeit in Hud, Zeit in der Welt-Uhr. */
 public final class Compat {
+    public static final InputConstants.Type KEY_TYPE = InputConstants.Type.KEYBOARD;
+
     private Compat() {
+    }
+
+    public static Screen optionsScreen(Screen parent) {
+        return new OptionsScreen(parent, Minecraft.getInstance().options);
     }
 
     public static Screen screen(Minecraft mc) {

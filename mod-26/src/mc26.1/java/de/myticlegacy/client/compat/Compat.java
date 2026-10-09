@@ -1,29 +1,25 @@
 package de.myticlegacy.client.compat;
 
-import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.PlayerFaceRenderer;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.PlayerFaceExtractor;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.options.OptionsScreen;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.world.level.Level;
 
-/**
- * Alles, was sich zwischen Minecraft-Versionen unterscheidet, an einer Stelle.
- * Diese Fassung gilt für 1.21.11; andere Versionen haben eine eigene Compat.java im jeweiligen Build-Projekt.
- */
+/** Fassung für Minecraft 26.1.x: Bildschirme liegen in Minecraft#gui, HUD-Sichtbarkeit in Hud, Zeit in der Welt-Uhr. */
 public final class Compat {
-    /** Tastatur-Eingabetyp für Tastenbelegungen. */
     public static final InputConstants.Type KEY_TYPE = InputConstants.Type.KEYSYM;
 
     private Compat() {
     }
 
     public static Screen optionsScreen(Screen parent) {
-        return new OptionsScreen(parent, Minecraft.getInstance().options);
+        return new OptionsScreen(parent, Minecraft.getInstance().options, false);
     }
 
     public static Screen screen(Minecraft mc) {
@@ -39,14 +35,14 @@ public final class Compat {
     }
 
     public static long dayTime(Level level) {
-        return level.getDayTime();
+        return level.getDefaultClockTime();
     }
 
     public static KeyMapping registerKey(KeyMapping mapping) {
-        return KeyBindingHelper.registerKeyBinding(mapping);
+        return KeyMappingHelper.registerKeyMapping(mapping);
     }
 
-    public static void drawFace(GuiGraphics g, PlayerInfo info, int x, int y, int size) {
-        PlayerFaceRenderer.draw(g, info.getSkin(), x, y, size);
+    public static void drawFace(GuiGraphicsExtractor g, PlayerInfo info, int x, int y, int size) {
+        PlayerFaceExtractor.extractRenderState(g, info.getSkin(), x, y, size);
     }
 }

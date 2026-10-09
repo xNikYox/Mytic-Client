@@ -5,7 +5,6 @@ import de.myticlegacy.client.MyticClient;
 import net.minecraft.SharedConstants;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen;
-import net.minecraft.client.gui.screens.options.OptionsScreen;
 import net.minecraft.client.gui.screens.worldselection.SelectWorldScreen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
@@ -108,7 +107,7 @@ public class MyticTitleScreen extends MyticScreen {
                 case "Einzelspieler" -> Compat.setScreen(new SelectWorldScreen(this));
                 case "Mehrspieler" -> Compat.setScreen(new JoinMultiplayerScreen(this));
                 case "Mods & HUD" -> Compat.setScreen(new ModMenuScreen(this));
-                case "Optionen" -> Compat.setScreen(new OptionsScreen(this, minecraft.options));
+                case "Optionen" -> Compat.setScreen(Compat.optionsScreen(this));
                 default -> minecraft.stop();
             }
             return true;

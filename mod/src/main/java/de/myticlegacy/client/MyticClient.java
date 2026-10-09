@@ -171,9 +171,9 @@ public final class MyticClient implements ClientModInitializer {
         theme = module(new SimpleModules.Theme());
 
         KeyMapping.Category category = KeyMapping.Category.register(Identifier.fromNamespaceAndPath(ID, "main"));
-        menuKey = Compat.registerKey(new KeyMapping("key.myticclient.menu", InputConstants.Type.KEYSYM, InputConstants.KEY_RSHIFT, category));
-        zoomKey = Compat.registerKey(new KeyMapping("key.myticclient.zoom", InputConstants.Type.KEYSYM, InputConstants.KEY_C, category));
-        freelookKey = Compat.registerKey(new KeyMapping("key.myticclient.freelook", InputConstants.Type.KEYSYM, InputConstants.KEY_LALT, category));
+        menuKey = Compat.registerKey(new KeyMapping("key.myticclient.menu", Compat.KEY_TYPE, InputConstants.KEY_RSHIFT, category));
+        zoomKey = Compat.registerKey(new KeyMapping("key.myticclient.zoom", Compat.KEY_TYPE, InputConstants.KEY_C, category));
+        freelookKey = Compat.registerKey(new KeyMapping("key.myticclient.freelook", Compat.KEY_TYPE, InputConstants.KEY_LALT, category));
 
         HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(ID, "hud"), (graphics, delta) -> renderHud(graphics));
         HudElementRegistry.replaceElement(VanillaHudElements.CROSSHAIR, original -> (graphics, delta) -> {
