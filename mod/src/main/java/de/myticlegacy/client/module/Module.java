@@ -43,8 +43,20 @@ public class Module {
     }
 
     public ItemStack icon() {
-        if (iconStack == null) iconStack = new ItemStack(icon.get());
+        if (iconStack == null || iconStack.isEmpty()) iconStack = stack(icon.get());
         return iconStack;
+    }
+
+    /**
+     * ItemStack, ohne abzustürzen: In 26.x lassen sich Items erst nach dem Laden der Spieldaten (z. B. im Hauptmenü
+     * vor dem ersten Weltbeitritt) erzeugen. Bis dahin wird ein leerer Stack geliefert und später neu versucht.
+     */
+    public static ItemStack stack(Item item) {
+        try {
+            return new ItemStack(item);
+        } catch (RuntimeException e) {
+            return ItemStack.EMPTY;
+        }
     }
 
     public void resetSettings() {

@@ -43,7 +43,7 @@ import java.util.List;
 public final class MyticClient implements ClientModInitializer {
     public static final String ID = "myticclient";
     public static final String NAME = "Mytic Client";
-    public static final String VERSION = "2.2";
+    public static final String VERSION = "2.3";
     public static final Logger LOG = LoggerFactory.getLogger(NAME);
 
     public static final List<Module> MODULES = new ArrayList<>();
@@ -170,10 +170,9 @@ public final class MyticClient implements ClientModInitializer {
         hideBossbar = module(SimpleModules.hideBossbar());
         theme = module(new SimpleModules.Theme());
 
-        KeyMapping.Category category = KeyMapping.Category.register(Identifier.fromNamespaceAndPath(ID, "main"));
-        menuKey = Compat.registerKey(new KeyMapping("key.myticclient.menu", Compat.KEY_TYPE, InputConstants.KEY_RSHIFT, category));
-        zoomKey = Compat.registerKey(new KeyMapping("key.myticclient.zoom", Compat.KEY_TYPE, InputConstants.KEY_C, category));
-        freelookKey = Compat.registerKey(new KeyMapping("key.myticclient.freelook", Compat.KEY_TYPE, InputConstants.KEY_LALT, category));
+        menuKey = Compat.registerKey("key.myticclient.menu", InputConstants.KEY_RSHIFT);
+        zoomKey = Compat.registerKey("key.myticclient.zoom", InputConstants.KEY_C);
+        freelookKey = Compat.registerKey("key.myticclient.freelook", InputConstants.KEY_LALT);
 
         HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(ID, "hud"), (graphics, delta) -> renderHud(graphics));
         HudElementRegistry.replaceElement(VanillaHudElements.CROSSHAIR, original -> (graphics, delta) -> {

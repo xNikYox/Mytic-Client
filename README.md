@@ -22,7 +22,7 @@ Minecraft 1.21 – 1.21.11 und 26.x · Fabric · Windows
 - **Microsoft-Login:** Anmeldung mit dem echten Minecraft-Konto. Der Launcher prüft, ob das Konto Minecraft: Java Edition besitzt.
 - **Mehrere Konten:** schnell zwischen Konten wechseln. Die Anmeldedaten werden mit der Verschlüsselung des Betriebssystems gespeichert.
 - **Schnellverbindung:** direkt beim Start auf einen Server verbinden, zuletzt genutzte Server mit einem Klick.
-- **Alle Versionen:** jedes Profil kann eine eigene Minecraft-Version nutzen, von 1.21 bis 1.21.11 und 26.x. Java 21 bzw. 25 lädt der Launcher automatisch, und der Mod-Browser zeigt nur Mods für die gewählte Version. Die Mytic-Ingame-Mods gibt es zurzeit für 1.21.9 bis 1.21.11 und 26.1 bis 26.3, weitere Versionen folgen.
+- **Alle Versionen:** jedes Profil kann eine eigene Minecraft-Version nutzen, von 1.21 bis 1.21.11 und 26.x. Java 21 bzw. 25 lädt der Launcher automatisch, und der Mod-Browser zeigt nur Mods für die gewählte Version. Die Mytic-Ingame-Mods gibt es zurzeit für 1.21.6 bis 1.21.11 und 26.1 bis 26.3, weitere Versionen folgen.
 - **Profile:** mehrere Profile, jedes mit eigenen Mods und eigener Auswahl an Performance-Mods, zum Beispiel „PvP“ und „Survival“. Welten, Server-Liste, Texturpakete und Einstellungen teilen sich alle Profile.
 - **Mod-Browser:** Mods von Modrinth suchen und mit einem Klick installieren. Benötigte Mods kommen automatisch mit, eigene Mods lassen sich an- und ausschalten und werden bei jedem Start aktualisiert.
 - **Mods verwalten:** alle In-Game- und Performance-Mods per Schalter an- und ausschalten, mit Suche und Kategorien.
@@ -86,7 +86,8 @@ mod/        Fabric-Mod "myticclient" für 1.21.11 (Java 21): HUD, Mod-Menü, HUD
 mod-26/     Build für Minecraft 26.x (Java 25): nutzt den Quellcode aus mod/; Abweichungen in src/main (26.3), src/mc26.2, src/mc26.1
             Bauen: ./gradlew build -Pmc=26.1 (bzw. 26.1.1, 26.1.2, 26.2, 26.3)
 mod-121/    Build für Minecraft 1.21 bis 1.21.10 (Java 21): gleicher Quellcode, Abweichungen in src/mc<version>
-            Bauen: ./gradlew build -Pmc=1.21.10 (bzw. 1.21.9)
+            Bauen: ./gradlew build -Pmc=1.21.10 (bzw. 1.21.6 – 1.21.9)
+build-mods.sh  baut die Mod für alle Versionen und legt sie in launcher/resources/mods/<version>/
 launcher/   Electron-Launcher: Login, Download von Java/Minecraft/Fabric/Mods, Spielstart, Oberfläche
 docs/       Anleitung für den Microsoft-Login, Screenshots
 ```

@@ -6,8 +6,6 @@ import de.myticlegacy.client.MyticClient;
 import de.myticlegacy.client.hud.HudModule;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.input.KeyEvent;
-import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
@@ -17,7 +15,7 @@ import java.util.List;
  * HUD-Editor: Anzeigen ziehen (mit Hilfslinien und Einrasten), Mausrad ändert die Größe,
  * Rechtsklick öffnet die Einstellungen der Anzeige.
  */
-public class HudEditScreen extends Screen {
+public class HudEditScreen extends InputScreen {
     private static final int SNAP = 4;
 
     private final Screen parent;
@@ -124,7 +122,7 @@ public class HudEditScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+    protected boolean onClick(Input.Click event) {
         double mx = event.x();
         double my = event.y();
         int[] bar = toolbar();
@@ -144,7 +142,7 @@ public class HudEditScreen extends Screen {
             return true;
         }
         HudModule module = at(mx, my);
-        if (module == null) return super.mouseClicked(event, doubleClick);
+        if (module == null) return false;
         if (event.button() == 1) {
             Compat.setScreen(new ModMenuScreen(this, module));
             return true;
@@ -156,8 +154,8 @@ public class HudEditScreen extends Screen {
     }
 
     @Override
-    public boolean mouseDragged(MouseButtonEvent event, double dx, double dy) {
-        if (dragging == null) return super.mouseDragged(event, dx, dy);
+    protected boolean onDrag(Input.Click event, double dx, double dy) {
+        if (dragging == null) return false;
         int w = dragging.width();
         int h = dragging.height();
         int x = (int) Math.round(event.x() - offsetX);
@@ -203,18 +201,18 @@ public class HudEditScreen extends Screen {
     }
 
     @Override
-    public boolean mouseReleased(MouseButtonEvent event) {
+    protected boolean onRelease(Input.Click event) {
         if (dragging != null) {
             dragging = null;
             guides.clear();
             MyticClient.config().save();
             return true;
         }
-        return super.mouseReleased(event);
+        return false;
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double horizontal, double vertical) {
+    protected boolean onScroll(double mouseX, double mouseY, double vertical) {
         HudModule module = at(mouseX, mouseY);
         if (module == null) return false;
         module.scale.set(module.scale.get() + (vertical > 0 ? 0.05 : -0.05));
@@ -223,12 +221,12 @@ public class HudEditScreen extends Screen {
     }
 
     @Override
-    public boolean keyPressed(KeyEvent event) {
+    protected boolean onKey(Input.Key event) {
         if (event.key() == InputConstants.KEY_RSHIFT) {
             onClose();
             return true;
         }
-        return super.keyPressed(event);
+        return false;
     }
 
     @Override

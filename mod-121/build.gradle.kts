@@ -14,9 +14,11 @@ val fabricApi = mapOf(
 /** Versionsgruppen mit gleicher API, von speziell nach allgemein. */
 val groups = mapOf(
     "1.21.10" to listOf("1.21.10", "1.21.9"), "1.21.9" to listOf("1.21.9"),
+    "1.21.8" to listOf("1.21.8", "1.21.9"), "1.21.7" to listOf("1.21.7", "1.21.8", "1.21.9"), "1.21.6" to listOf("1.21.6", "1.21.8", "1.21.9"),
 )
+val patch = mc.split(".").getOrNull(2)?.toInt() ?: 0
 
-version = "2.2.0+$mc"
+version = "${file("../mod/build.gradle.kts").readLines().first { it.startsWith("version") }.substringAfter("\"").substringBefore("\"")}+$mc"
 group = "de.myticlegacy"
 base { archivesName.set("mytic-client") }
 
@@ -27,7 +29,7 @@ val sharedFiltered = layout.buildDirectory.dir("shared-src")
 val renames = buildList {
     add(Regex("""\bIdentifier\b""") to "ResourceLocation")
     add(Regex("""\.identifier\(\)""") to ".location()")
-    add(Regex("""\.renderOutline\(""") to ".submitOutline(")
+    if (patch >= 9) add(Regex("""\.renderOutline\(""") to ".submitOutline(")
 }
 val copyShared by tasks.registering(Sync::class) {
     inputs.property("mc", mc)

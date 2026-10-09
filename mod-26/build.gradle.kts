@@ -7,7 +7,7 @@ plugins {
 val mc = providers.gradleProperty("mc").get()
 val fabricApi = mapOf("26.3" to "0.161.0+26.3", "26.2" to "0.161.0+26.2", "26.1.2" to "0.155.3+26.1.2", "26.1.1" to "0.145.4+26.1.1", "26.1" to "0.145.1+26.1")
 
-version = "2.2.0+$mc"
+version = "${file("../mod/build.gradle.kts").readLines().first { it.startsWith("version") }.substringAfter("\"").substringBefore("\"")}+$mc"
 group = "de.myticlegacy"
 base { archivesName.set("mytic-client") }
 

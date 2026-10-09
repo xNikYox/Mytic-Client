@@ -2,6 +2,7 @@ package de.myticlegacy.client.hud;
 
 import de.myticlegacy.client.setting.BoolSetting;
 import de.myticlegacy.client.setting.ModeSetting;
+import de.myticlegacy.client.module.Module;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -34,8 +35,8 @@ public class ArmorModule extends HudModule {
     private List<ItemStack> stacks(boolean preview) {
         var player = Minecraft.getInstance().player;
         List<ItemStack> list = new ArrayList<>();
-        ItemStack[] demo = {new ItemStack(Items.DIAMOND_HELMET), new ItemStack(Items.DIAMOND_CHESTPLATE), new ItemStack(Items.DIAMOND_LEGGINGS),
-                new ItemStack(Items.DIAMOND_BOOTS), new ItemStack(Items.DIAMOND_SWORD)};
+        ItemStack[] demo = {Module.stack(Items.DIAMOND_HELMET), Module.stack(Items.DIAMOND_CHESTPLATE), Module.stack(Items.DIAMOND_LEGGINGS),
+                Module.stack(Items.DIAMOND_BOOTS), Module.stack(Items.DIAMOND_SWORD)};
         for (int i = 0; i < SLOTS.length; i++) {
             if (i == 4 && !showHand.get()) continue;
             ItemStack stack = player != null ? player.getItemBySlot(SLOTS[i]) : ItemStack.EMPTY;

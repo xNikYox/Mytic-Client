@@ -1,6 +1,7 @@
 package de.myticlegacy.client.hud;
 
 import de.myticlegacy.client.setting.BoolSetting;
+import de.myticlegacy.client.module.Module;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.world.item.Item;
@@ -70,7 +71,7 @@ public class ItemCounterModule extends HudModule {
         var font = Minecraft.getInstance().font;
         for (int i = 0; i < list.size(); i++) {
             int y = 1 + i * 18;
-            g.renderItem(new ItemStack(list.get(i).item), 2, y);
+            g.renderItem(Module.stack(list.get(i).item), 2, y);
             g.drawString(font, String.valueOf(list.get(i).amount), 21, y + 5, color(), textShadow());
         }
     }

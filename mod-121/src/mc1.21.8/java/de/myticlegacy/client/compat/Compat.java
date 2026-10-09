@@ -9,12 +9,11 @@ import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.options.OptionsScreen;
 import net.minecraft.client.multiplayer.PlayerInfo;
-import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.Level;
 
 /**
  * Alles, was sich zwischen Minecraft-Versionen unterscheidet, an einer Stelle.
- * Diese Fassung gilt für 1.21.11; andere Versionen haben eine eigene Compat.java im jeweiligen Build-Projekt.
+ * Diese Fassung gilt für 1.21.6 bis 1.21.8; andere Versionen haben eine eigene Compat.java im jeweiligen Build-Projekt.
  */
 public final class Compat {
     /** Tastatur-Eingabetyp für Tastenbelegungen. */
@@ -47,14 +46,10 @@ public final class Compat {
         return level.getDayTime();
     }
 
-    private static KeyMapping.Category category;
-
-    /** Registriert eine Tastenbelegung in der Kategorie "Mytic Client". */
+    /** Registriert eine Tastenbelegung in der Kategorie "Mytic Client" (bis 1.21.8: Kategorie als Übersetzungsschlüssel). */
     public static KeyMapping registerKey(String name, int key) {
-        if (category == null) category = KeyMapping.Category.register(Identifier.fromNamespaceAndPath("myticclient", "main"));
-        return KeyBindingHelper.registerKeyBinding(new KeyMapping(name, KEY_TYPE, key, category));
-    }
-    public static void drawFace(GuiGraphics g, PlayerInfo info, int x, int y, int size) {
+        return KeyBindingHelper.registerKeyBinding(new KeyMapping(name, KEY_TYPE, key, "key.category.myticclient.main"));
+    }    public static void drawFace(GuiGraphics g, PlayerInfo info, int x, int y, int size) {
         PlayerFaceRenderer.draw(g, info.getSkin(), x, y, size);
     }
 }

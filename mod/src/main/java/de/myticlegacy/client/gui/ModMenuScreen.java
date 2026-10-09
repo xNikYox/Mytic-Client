@@ -13,9 +13,6 @@ import de.myticlegacy.client.setting.Setting;
 import de.myticlegacy.client.setting.SliderSetting;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.input.CharacterEvent;
-import net.minecraft.client.input.KeyEvent;
-import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
@@ -73,6 +70,7 @@ public class ModMenuScreen extends MyticScreen {
 
     @Override
     protected void layout() {
+        Compat.textInput(this, true);
         pw = Math.min(560, Math.max(300, (int) (vw * shareW())));
         ph = Math.min(340, Math.max(200, (int) (vh * shareH())));
         pw = Math.min(pw, vw - 8);
@@ -365,7 +363,7 @@ public class ModMenuScreen extends MyticScreen {
     }
 
     @Override
-    protected boolean click(MouseButtonEvent event, boolean doubleClick) {
+    protected boolean click(Input.Click event, boolean doubleClick) {
         double mx = event.x();
         double my = event.y();
         if (event.button() != 0) return false;
@@ -463,7 +461,7 @@ public class ModMenuScreen extends MyticScreen {
     }
 
     @Override
-    protected boolean drag(MouseButtonEvent event, double dx, double dy) {
+    protected boolean drag(Input.Click event, double dx, double dy) {
         if (dragging == null) return false;
         int tx = cx() + cw() - 8 - 100;
         dragging.setFraction((event.x() - tx) / 100.0);
@@ -471,7 +469,7 @@ public class ModMenuScreen extends MyticScreen {
     }
 
     @Override
-    protected boolean release(MouseButtonEvent event) {
+    protected boolean release(Input.Click event) {
         if (dragging == null) return false;
         dragging = null;
         MyticClient.config().save();
@@ -479,7 +477,7 @@ public class ModMenuScreen extends MyticScreen {
     }
 
     @Override
-    public boolean charTyped(CharacterEvent event) {
+    protected boolean onChar(Input.Typed event) {
         if (selected != null || !event.isAllowedChatCharacter()) return false;
         searchFocused = true;
         if (query.length() < 30) {
@@ -490,7 +488,7 @@ public class ModMenuScreen extends MyticScreen {
     }
 
     @Override
-    public boolean keyPressed(KeyEvent event) {
+    protected boolean onKey(Input.Key event) {
         int key = event.key();
         if (key == InputConstants.KEY_ESCAPE) {
             if (selected != null) {
@@ -513,7 +511,13 @@ public class ModMenuScreen extends MyticScreen {
             onClose();
             return true;
         }
-        return super.keyPressed(event);
+        return false;
+    }
+
+    @Override
+    public void removed() {
+        Compat.textInput(this, false);
+        super.removed();
     }
 
     @Override

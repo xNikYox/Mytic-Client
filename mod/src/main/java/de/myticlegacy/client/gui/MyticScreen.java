@@ -2,15 +2,13 @@ package de.myticlegacy.client.gui;
 
 import de.myticlegacy.client.MyticClient;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 
 /**
  * Basis für Mytic-Menüs: zeichnet in einer eigenen, kompakteren GUI-Größe (eine Stufe kleiner als die Minecraft-GUI,
  * immer ganzzahlig, damit die Pixel-Schrift scharf bleibt). Unterklassen arbeiten in "virtuellen" Koordinaten vw × vh.
  */
-public abstract class MyticScreen extends Screen {
+public abstract class MyticScreen extends InputScreen {
     protected float scale = 1f;
     protected int vw;
     protected int vh;
@@ -75,39 +73,35 @@ public abstract class MyticScreen extends Screen {
         return y / scale;
     }
 
-    protected MouseButtonEvent virtual(MouseButtonEvent event) {
-        return new MouseButtonEvent(event.x() / scale, event.y() / scale, event.buttonInfo());
+    @Override
+    protected boolean onClick(Input.Click event) {
+        return click(new Input.Click(event.x() / scale, event.y() / scale, event.button()), false);
     }
 
     @Override
-    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-        return click(virtual(event), doubleClick);
+    protected boolean onDrag(Input.Click event, double dx, double dy) {
+        return drag(new Input.Click(event.x() / scale, event.y() / scale, event.button()), dx / scale, dy / scale);
     }
 
     @Override
-    public boolean mouseDragged(MouseButtonEvent event, double dx, double dy) {
-        return drag(virtual(event), dx / scale, dy / scale);
+    protected boolean onRelease(Input.Click event) {
+        return release(new Input.Click(event.x() / scale, event.y() / scale, event.button()));
     }
 
     @Override
-    public boolean mouseReleased(MouseButtonEvent event) {
-        return release(virtual(event));
+    protected boolean onScroll(double mouseX, double mouseY, double amount) {
+        return scroll(vx(mouseX), vy(mouseY), amount);
     }
 
-    @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double horizontal, double vertical) {
-        return scroll(vx(mouseX), vy(mouseY), vertical);
-    }
-
-    protected boolean click(MouseButtonEvent event, boolean doubleClick) {
+    protected boolean click(Input.Click event, boolean doubleClick) {
         return false;
     }
 
-    protected boolean drag(MouseButtonEvent event, double dx, double dy) {
+    protected boolean drag(Input.Click event, double dx, double dy) {
         return false;
     }
 
-    protected boolean release(MouseButtonEvent event) {
+    protected boolean release(Input.Click event) {
         return false;
     }
 

@@ -6,7 +6,6 @@ import net.minecraft.SharedConstants;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen;
 import net.minecraft.client.gui.screens.worldselection.SelectWorldScreen;
-import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 
 /** Hauptmenü des Mytic Client: Panorama, Logo, schlanke Knöpfe (Optionen und Beenden nebeneinander). */
@@ -100,7 +99,7 @@ public class MyticTitleScreen extends MyticScreen {
     }
 
     @Override
-    protected boolean click(MouseButtonEvent event, boolean doubleClick) {
+    protected boolean click(Input.Click event, boolean doubleClick) {
         for (Button b : buttons()) {
             if (!Ui.inside(event.x(), event.y(), b.x, b.y, b.w, BH)) continue;
             switch (b.label) {
