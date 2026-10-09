@@ -1,5 +1,6 @@
 package de.myticlegacy.client.module;
 
+import de.myticlegacy.client.compat.Compat;
 import de.myticlegacy.client.MyticClient;
 import de.myticlegacy.client.setting.BoolSetting;
 import de.myticlegacy.client.setting.SliderSetting;
@@ -26,7 +27,7 @@ public class ZoomModule extends Module {
     }
 
     public boolean active() {
-        return enabled() && MyticClient.zoomKey.isDown() && Minecraft.getInstance().screen == null;
+        return enabled() && MyticClient.zoomKey.isDown() && Compat.screen(Minecraft.getInstance()) == null;
     }
 
     /** Wird für jedes Bild aus GameRenderer#getFov aufgerufen. */

@@ -1,5 +1,6 @@
 package de.myticlegacy.client.module;
 
+import de.myticlegacy.client.compat.Compat;
 import de.myticlegacy.client.MyticClient;
 import de.myticlegacy.client.setting.BoolSetting;
 import net.minecraft.client.CameraType;
@@ -33,7 +34,7 @@ public class FreelookModule extends Module {
     }
 
     public void tick(Minecraft mc) {
-        boolean want = enabled() && MyticClient.freelookKey.isDown() && mc.screen == null && mc.player != null;
+        boolean want = enabled() && MyticClient.freelookKey.isDown() && Compat.screen(mc) == null && mc.player != null;
         if (want && !active) {
             yaw = mc.player.getYRot();
             pitch = mc.player.getXRot();

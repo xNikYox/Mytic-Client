@@ -1,10 +1,10 @@
 package de.myticlegacy.client.hud;
 
+import de.myticlegacy.client.compat.Compat;
 import de.myticlegacy.client.gui.Ui;
 import de.myticlegacy.client.setting.BoolSetting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.PlayerFaceRenderer;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Items;
@@ -52,7 +52,7 @@ public class TargetHudModule extends HudModule {
         }
         int face = 30;
         if (target instanceof Player player && mc.getConnection() != null && mc.getConnection().getPlayerInfo(player.getUUID()) != null) {
-            PlayerFaceRenderer.draw(g, mc.getConnection().getPlayerInfo(player.getUUID()).getSkin(), 4, 4, face);
+            Compat.drawFace(g, mc.getConnection().getPlayerInfo(player.getUUID()), 4, 4, face);
         } else {
             Ui.rect(g, 4, 4, face, face, 3, Ui.withAlpha(Ui.accent(), 160));
             Ui.centered(g, name.isEmpty() ? "?" : name.substring(0, 1).toUpperCase(), 4 + face / 2, 4 + face / 2 - 4, 0xFFFFFFFF, true);

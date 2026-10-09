@@ -1,5 +1,6 @@
 package de.myticlegacy.client;
 
+import de.myticlegacy.client.compat.Compat;
 import com.mojang.blaze3d.platform.InputConstants;
 import de.myticlegacy.client.gui.HudEditScreen;
 import de.myticlegacy.client.gui.ModMenuScreen;
@@ -22,7 +23,6 @@ import de.myticlegacy.client.module.SimpleModules;
 import de.myticlegacy.client.module.ZoomModule;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
@@ -32,7 +32,6 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.Items;
-import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -139,7 +138,7 @@ public final class MyticClient implements ClientModInitializer {
         }));
         hud(new TextModule("daytime", "Spielzeit", "Tag und Uhrzeit in der Minecraft-Welt", () -> Items.DAYLIGHT_DETECTOR, false, 10000, 137, "Tag", p -> {
             if (mc.level == null) return p ? "12 · 14:30" : "";
-            long time = mc.level.getDayTime();
+            long time = Compat.dayTime(mc.level);
             long day = time / 24000 + 1;
             long ticks = (time + 6000) % 24000;
             return day + " · " + String.format("%02d:%02d", ticks / 1000, ticks % 1000 * 60 / 1000);
@@ -172,9 +171,9 @@ public final class MyticClient implements ClientModInitializer {
         theme = module(new SimpleModules.Theme());
 
         KeyMapping.Category category = KeyMapping.Category.register(Identifier.fromNamespaceAndPath(ID, "main"));
-        menuKey = KeyBindingHelper.registerKeyBinding(new KeyMapping("key.myticclient.menu", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_RIGHT_SHIFT, category));
-        zoomKey = KeyBindingHelper.registerKeyBinding(new KeyMapping("key.myticclient.zoom", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_C, category));
-        freelookKey = KeyBindingHelper.registerKeyBinding(new KeyMapping("key.myticclient.freelook", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_LEFT_ALT, category));
+        menuKey = Compat.registerKey(new KeyMapping("key.myticclient.menu", InputConstants.Type.KEYSYM, InputConstants.KEY_RSHIFT, category));
+        zoomKey = Compat.registerKey(new KeyMapping("key.myticclient.zoom", InputConstants.Type.KEYSYM, InputConstants.KEY_C, category));
+        freelookKey = Compat.registerKey(new KeyMapping("key.myticclient.freelook", InputConstants.Type.KEYSYM, InputConstants.KEY_LALT, category));
 
         HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(ID, "hud"), (graphics, delta) -> renderHud(graphics));
         HudElementRegistry.replaceElement(VanillaHudElements.CROSSHAIR, original -> (graphics, delta) -> {
@@ -202,7 +201,7 @@ public final class MyticClient implements ClientModInitializer {
         ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> {
             if (screen instanceof TitleScreen && theme.customMenu.get()) {
                 client.execute(() -> {
-                    if (client.screen instanceof TitleScreen) client.setScreen(new MyticTitleScreen());
+                    if (Compat.screen(client) instanceof TitleScreen) Compat.setScreen(new MyticTitleScreen());
                 });
             }
         });
@@ -223,7 +222,7 @@ public final class MyticClient implements ClientModInitializer {
         Minecraft mc = Minecraft.getInstance();
         ClickCounter.poll();
         Ui.frame();
-        if (mc.options.hideGui || mc.screen instanceof HudEditScreen) return;
+        if (Compat.hudHidden(mc) || Compat.screen(mc) instanceof HudEditScreen) return;
         for (HudModule module : HUD) {
             if (module.enabled()) module.draw(graphics, false);
         }
@@ -231,7 +230,7 @@ public final class MyticClient implements ClientModInitializer {
 
     private static void tick(Minecraft mc) {
         while (menuKey.consumeClick()) {
-            if (mc.screen == null) mc.setScreen(new ModMenuScreen(null));
+            if (Compat.screen(mc) == null) Compat.setScreen(new ModMenuScreen(null));
         }
         if (mc.level == null) sessionStart = 0;
         else if (sessionStart == 0) sessionStart = System.currentTimeMillis();
@@ -240,7 +239,7 @@ public final class MyticClient implements ClientModInitializer {
         freelook.tick(mc);
         CombatTracker.tick(mc);
 
-        if (toggleSprint.enabled() && mc.player != null && mc.screen == null
+        if (toggleSprint.enabled() && mc.player != null && Compat.screen(mc) == null
                 && mc.options.keyUp.isDown() && !mc.player.isShiftKeyDown() && !mc.player.isUsingItem()) {
             mc.options.keySprint.setDown(true);
         }

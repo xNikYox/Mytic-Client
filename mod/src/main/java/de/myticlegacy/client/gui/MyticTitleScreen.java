@@ -1,5 +1,6 @@
 package de.myticlegacy.client.gui;
 
+import de.myticlegacy.client.compat.Compat;
 import de.myticlegacy.client.MyticClient;
 import net.minecraft.SharedConstants;
 import net.minecraft.client.gui.GuiGraphics;
@@ -104,10 +105,10 @@ public class MyticTitleScreen extends MyticScreen {
         for (Button b : buttons()) {
             if (!Ui.inside(event.x(), event.y(), b.x, b.y, b.w, BH)) continue;
             switch (b.label) {
-                case "Einzelspieler" -> minecraft.setScreen(new SelectWorldScreen(this));
-                case "Mehrspieler" -> minecraft.setScreen(new JoinMultiplayerScreen(this));
-                case "Mods & HUD" -> minecraft.setScreen(new ModMenuScreen(this));
-                case "Optionen" -> minecraft.setScreen(new OptionsScreen(this, minecraft.options));
+                case "Einzelspieler" -> Compat.setScreen(new SelectWorldScreen(this));
+                case "Mehrspieler" -> Compat.setScreen(new JoinMultiplayerScreen(this));
+                case "Mods & HUD" -> Compat.setScreen(new ModMenuScreen(this));
+                case "Optionen" -> Compat.setScreen(new OptionsScreen(this, minecraft.options));
                 default -> minecraft.stop();
             }
             return true;

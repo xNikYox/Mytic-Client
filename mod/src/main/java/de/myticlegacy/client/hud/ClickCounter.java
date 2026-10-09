@@ -1,12 +1,12 @@
 package de.myticlegacy.client.hud;
 
 import net.minecraft.client.Minecraft;
-import org.lwjgl.glfw.GLFW;
+import de.myticlegacy.client.compat.Compat;
 
 import java.util.ArrayDeque;
 
 /**
- * Zählt Klicks pro Sekunde. Fragt die Maustasten jedes Bild ab (keine Mixins nötig) und merkt sich die Zeitpunkte
+ * Zählt Klicks pro Sekunde. Fragt die Angriffs-/Benutzen-Taste jedes Bild ab (keine Mixins nötig) und merkt sich die Zeitpunkte
  * der Klicks der letzten Sekunde. Klicks in Menüs zählen nicht.
  */
 public final class ClickCounter {
@@ -21,9 +21,9 @@ public final class ClickCounter {
     public static void poll() {
         Minecraft mc = Minecraft.getInstance();
         long now = System.currentTimeMillis();
-        long window = mc.getWindow().handle();
-        boolean left = mc.screen == null && GLFW.glfwGetMouseButton(window, GLFW.GLFW_MOUSE_BUTTON_LEFT) == GLFW.GLFW_PRESS;
-        boolean right = mc.screen == null && GLFW.glfwGetMouseButton(window, GLFW.GLFW_MOUSE_BUTTON_RIGHT) == GLFW.GLFW_PRESS;
+        // über die Tastenbelegung statt direkt über GLFW/SDL: funktioniert in allen Versionen und mit umbelegten Tasten
+        boolean left = Compat.screen(mc) == null && mc.options.keyAttack.isDown();
+        boolean right = Compat.screen(mc) == null && mc.options.keyUse.isDown();
         if (left && !leftDown) LEFT.addLast(now);
         if (right && !rightDown) RIGHT.addLast(now);
         leftDown = left;

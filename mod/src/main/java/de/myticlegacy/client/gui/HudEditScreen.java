@@ -1,5 +1,7 @@
 package de.myticlegacy.client.gui;
 
+import de.myticlegacy.client.compat.Compat;
+import com.mojang.blaze3d.platform.InputConstants;
 import de.myticlegacy.client.MyticClient;
 import de.myticlegacy.client.hud.HudModule;
 import net.minecraft.client.gui.GuiGraphics;
@@ -7,7 +9,6 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
-import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -133,7 +134,7 @@ public class HudEditScreen extends Screen {
             int bw = (bar[2] - 16) / 3;
             int index = (int) ((tx - bar[0] - 4) / (bw + 4));
             switch (index) {
-                case 0 -> minecraft.setScreen(new ModMenuScreen(this));
+                case 0 -> Compat.setScreen(new ModMenuScreen(this));
                 case 1 -> {
                     MyticClient.HUD.forEach(HudModule::resetPosition);
                     MyticClient.config().save();
@@ -145,7 +146,7 @@ public class HudEditScreen extends Screen {
         HudModule module = at(mx, my);
         if (module == null) return super.mouseClicked(event, doubleClick);
         if (event.button() == 1) {
-            minecraft.setScreen(new ModMenuScreen(this, module));
+            Compat.setScreen(new ModMenuScreen(this, module));
             return true;
         }
         dragging = module;
@@ -223,7 +224,7 @@ public class HudEditScreen extends Screen {
 
     @Override
     public boolean keyPressed(KeyEvent event) {
-        if (event.key() == GLFW.GLFW_KEY_RIGHT_SHIFT) {
+        if (event.key() == InputConstants.KEY_RSHIFT) {
             onClose();
             return true;
         }
@@ -233,7 +234,7 @@ public class HudEditScreen extends Screen {
     @Override
     public void onClose() {
         MyticClient.config().save();
-        minecraft.setScreen(parent);
+        Compat.setScreen(parent);
     }
 
     @Override

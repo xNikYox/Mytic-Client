@@ -1,5 +1,7 @@
 package de.myticlegacy.client.gui;
 
+import de.myticlegacy.client.compat.Compat;
+import com.mojang.blaze3d.platform.InputConstants;
 import de.myticlegacy.client.MyticClient;
 import de.myticlegacy.client.hud.HudModule;
 import de.myticlegacy.client.module.Category;
@@ -15,7 +17,6 @@ import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
-import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -382,7 +383,7 @@ public class ModMenuScreen extends MyticScreen {
         }
         int fy = py + ph - FOOTER + 6;
         if (Ui.inside(mx, my, px + 10, fy, font.width("HUD bearbeiten") + 20, 16)) {
-            minecraft.setScreen(new HudEditScreen(this));
+            Compat.setScreen(new HudEditScreen(this));
             return true;
         }
         if (!Ui.inside(mx, my, cx(), cy(), cw(), ch())) return false;
@@ -491,7 +492,7 @@ public class ModMenuScreen extends MyticScreen {
     @Override
     public boolean keyPressed(KeyEvent event) {
         int key = event.key();
-        if (key == GLFW.GLFW_KEY_ESCAPE) {
+        if (key == InputConstants.KEY_ESCAPE) {
             if (selected != null) {
                 selected = null;
                 scrollPos = scrollTarget = 0;
@@ -503,12 +504,12 @@ public class ModMenuScreen extends MyticScreen {
                 return true;
             }
         }
-        if (searchFocused && key == GLFW.GLFW_KEY_BACKSPACE) {
-            if (!query.isEmpty()) query = (event.modifiers() & GLFW.GLFW_MOD_CONTROL) != 0 ? "" : query.substring(0, query.length() - 1);
+        if (searchFocused && key == InputConstants.KEY_BACKSPACE) {
+            if (!query.isEmpty()) query = event.hasControlDown() ? "" : query.substring(0, query.length() - 1);
             scrollPos = scrollTarget = 0;
             return true;
         }
-        if (key == GLFW.GLFW_KEY_RIGHT_SHIFT) {
+        if (key == InputConstants.KEY_RSHIFT) {
             onClose();
             return true;
         }
@@ -518,7 +519,7 @@ public class ModMenuScreen extends MyticScreen {
     @Override
     public void onClose() {
         MyticClient.config().save();
-        minecraft.setScreen(parent);
+        Compat.setScreen(parent);
     }
 
     @Override

@@ -1,5 +1,6 @@
 package de.myticlegacy.client.module;
 
+import de.myticlegacy.client.compat.Compat;
 import de.myticlegacy.client.setting.BoolSetting;
 import de.myticlegacy.client.setting.ColorSetting;
 import de.myticlegacy.client.setting.ModeSetting;
@@ -33,7 +34,7 @@ public class CrosshairModule extends Module {
     public boolean render(GuiGraphics g) {
         if (!enabled()) return false;
         Minecraft mc = Minecraft.getInstance();
-        if (!mc.options.getCameraType().isFirstPerson() || mc.options.hideGui) return true;
+        if (!mc.options.getCameraType().isFirstPerson() || Compat.hudHidden(mc)) return true;
         int cx = g.guiWidth() / 2;
         int cy = g.guiHeight() / 2;
         int len = size.intValue();
