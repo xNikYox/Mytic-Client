@@ -34,6 +34,8 @@ val renames = listOf(
     Regex("""setTooltipForNextFrame\(font, """) to "setTooltipForNextFrame(",
 )
 val copyShared by tasks.registering(Sync::class) {
+    inputs.property("mc", mc)
+    inputs.property("renames", renames.map { it.first.pattern + "=>" + it.second })
     from(shared) {
         exclude { f -> !f.isDirectory && overrideDirs.any { it.resolve(f.relativePath.pathString).exists() } }
         filter { line -> renames.fold(line) { acc, (regex, replacement) -> regex.replace(acc, replacement) } }
