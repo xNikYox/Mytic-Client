@@ -177,8 +177,8 @@ class ModBrowser {
   async list() {
     const state = await this.state();
     return Object.values(state.mods)
-      .map(({ id, slug, title, icon, enabled, dependency, requiredBy, versionNumber }) => ({
-        id, slug, title, icon, enabled, dependency, versionNumber,
+      .map(({ id, slug, title, icon, enabled, dependency, requiredBy, versionNumber, incompatible }) => ({
+        id, slug, title, icon, enabled, dependency, versionNumber, incompatible: Boolean(incompatible),
         requiredBy: requiredBy.map((r) => (state.mods[r] ? state.mods[r].title : r)),
       }))
       .sort((a, b) => Number(a.dependency) - Number(b.dependency) || a.title.localeCompare(b.title));
@@ -190,9 +190,30 @@ class ModBrowser {
     for (const entry of Object.values(state.mods)) {
       try {
         const latest = await this.latestVersion(entry.id);
-        if (latest && latest.version.id !== entry.versionId) {
+        if (!latest) {
+          // für diese Minecraft-Version nicht verfügbar: automatisch ausschalten (und später wieder einschalten)
+          if (!entry.incompatible) {
+            if (entry.enabled !== false) {
+              await fsp.rename(path.join(this.modsDir, entry.file), path.join(this.modsDir, `${entry.file}.disabled`)).catch(() => {});
+              entry.autoDisabled = true;
+            }
+            entry.enabled = false;
+            entry.incompatible = true;
+            log(`[Mods] ${entry.title} gibt es nicht für ${this.gameVersion} – vorübergehend ausgeschaltet`);
+          }
+          continue;
+        }
+        if (latest.version.id !== entry.versionId) {
           await this.writeVersion(entry, latest.version, latest.file);
-          log(`[Mods] ${entry.title} aktualisiert auf ${entry.versionNumber}`);
+          log(`[Mods] ${entry.title}: ${entry.versionNumber}`);
+        }
+        if (entry.incompatible) {
+          entry.incompatible = false;
+          if (entry.autoDisabled) {
+            await fsp.rename(path.join(this.modsDir, `${entry.file}.disabled`), path.join(this.modsDir, entry.file)).catch(() => {});
+            entry.enabled = true;
+            entry.autoDisabled = false;
+          }
         }
       } catch (error) {
         log(`[Mods] ${entry.title}: ${error.message}`);

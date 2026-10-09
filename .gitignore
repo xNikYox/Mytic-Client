@@ -4,3 +4,4 @@ mod/.gradle/
 mod/build/
 mod/run/
 launcher/test-results/
+launcher/scripts/.dev-update-site

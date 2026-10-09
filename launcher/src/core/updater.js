@@ -6,7 +6,7 @@ const crypto = require("node:crypto");
 const { fetchRetry, USER_AGENT } = require("./download");
 
 const REPO = "xNikYox/Mytic-Client";
-const ASSET_PATTERN = /^MyticClient-(\d+\.\d+\.\d+)\.exe$/i;
+const ASSET_PATTERN = /^MyticClient-(?:Dev-)?(\d+\.\d+\.\d+)\.exe$/i;
 
 /** Vergleicht Versionen wie "2.0.10" und "2.1.0". Ergebnis > 0, wenn a neuer ist. */
 function compareVersions(a, b) {
@@ -39,6 +39,28 @@ async function checkForUpdate(currentVersion, repo = REPO) {
     sha256: digest,
     notes: String(release.body || "").slice(0, 4000),
     page: release.html_url,
+  };
+}
+
+/**
+ * Neueste Version von der eigenen Download-Seite (für die Entwicklerversion).
+ * base: z. B. "http://server/proxy/8765/", project: "mytic-client-dev".
+ */
+async function checkSiteUpdate(currentVersion, base, project) {
+  const root = base.endsWith("/") ? base : `${base}/`;
+  const response = await fetchRetry(`${root}api/latest/${project}`, { headers: { Accept: "application/json" } });
+  if (!response.ok) throw new Error(`Update-Prüfung fehlgeschlagen (HTTP ${response.status})`);
+  const info = await response.json();
+  if (!/^\d+\.\d+\.\d+$/.test(info.version || "") || compareVersions(info.version, currentVersion) <= 0) return null;
+  if (!ASSET_PATTERN.test(info.name || "")) return null;
+  return {
+    version: info.version,
+    name: info.name,
+    url: new URL(info.url, root).toString(),
+    size: info.size,
+    sha256: info.sha256 || null,
+    notes: "",
+    page: root,
   };
 }
 
@@ -99,4 +121,4 @@ async function removeOldVersion(oldFile, currentFile, { tries = 30, delayMs = 10
   return false;
 }
 
-module.exports = { compareVersions, checkForUpdate, downloadUpdate, removeOldVersion, REPO, ASSET_PATTERN };
+module.exports = { compareVersions, checkForUpdate, checkSiteUpdate, downloadUpdate, removeOldVersion, REPO, ASSET_PATTERN };

@@ -6,7 +6,7 @@ const path = require("node:path");
 const os = require("node:os");
 const crypto = require("node:crypto");
 const { dirs: makeDirs } = require("./core/paths");
-const { Installer, buildCommand, launch, MANAGED_MODS, MC_VERSION, defaultMemoryMb } = require("./core/minecraft");
+const { Installer, buildCommand, launch, MANAGED_MODS, MC_VERSION, defaultMemoryMb, availableVersions, bundledMytic } = require("./core/minecraft");
 const auth = require("./core/auth");
 const updater = require("./core/updater");
 const { ModBrowser } = require("./core/modrinth");
@@ -16,6 +16,7 @@ const { spawn } = require("node:child_process");
 const DIRS = makeDirs();
 /** Offline-Konten nur für Entwickler-Tests: im Quellcode-Start (npm start) oder mit MYTIC_DEV=1, nie in der veröffentlichten EXE. */
 const DEV_BUILD = Boolean(readJsonSync(path.join(app.isPackaged ? path.join(process.resourcesPath, "resources") : path.join(__dirname, "..", "resources"), "config.json")).devBuild);
+const DEV_UPDATE_SITE = readJsonSync(path.join(app.isPackaged ? path.join(process.resourcesPath, "resources") : path.join(__dirname, "..", "resources"), "config.json")).updateSite || process.env.MYTIC_UPDATE_SITE || "";
 const OFFLINE_ALLOWED = DEV_BUILD || process.env.MYTIC_DEV === "1" || (!app.isPackaged && process.env.MYTIC_RELEASE !== "1");
 
 function readJsonSync(file) {
@@ -94,7 +95,7 @@ async function saveSettings(next) {
 }
 
 function browserFor(profile) {
-  return new ModBrowser(profiles.modsDir(DIRS.base, profile.id), MC_VERSION, MANAGED_MODS.map((m) => m.slug));
+  return new ModBrowser(profiles.modsDir(DIRS.base, profile.id), profile.mcVersion || MC_VERSION, MANAGED_MODS.map((m) => m.slug));
 }
 
 async function activeBrowser() {
@@ -105,7 +106,10 @@ async function profileList() {
   const current = await ensureProfiles();
   return {
     active: profiles.active(current).id,
-    list: await Promise.all(current.profiles.map(async (p) => ({ ...p, modCount: await profiles.countMods(DIRS.base, p.id) }))),
+    list: await Promise.all(current.profiles.map(async (p) => {
+      const mcVersion = p.mcVersion || profiles.DEFAULT_VERSION;
+      return { ...p, mcVersion, mytic: Boolean(bundledMytic(BUNDLED_MODS, mcVersion)), modCount: await profiles.countMods(DIRS.base, p.id) };
+    })),
   };
 }
 let updating = false;
@@ -312,11 +316,17 @@ ipcMain.handle("profiles:select", async (e, id) => {
   if (current.profiles.some((p) => p.id === id)) await saveSettings({ ...current, activeProfile: id });
   return profileList();
 });
-ipcMain.handle("profiles:create", async (e, name, copyFrom) => {
+ipcMain.handle("profiles:create", async (e, name, copyFrom, mcVersion) => {
   if (game) throw new Error("Bitte zuerst Minecraft beenden.");
-  await saveSettings(await profiles.create(await ensureProfiles(), DIRS.base, name, copyFrom || null));
+  await saveSettings(await profiles.create(await ensureProfiles(), DIRS.base, name, copyFrom || null, mcVersion || null));
   return profileList();
 });
+ipcMain.handle("profiles:version", async (e, id, mcVersion) => {
+  if (game) throw new Error("Bitte zuerst Minecraft beenden.");
+  await saveSettings(profiles.setVersion(await ensureProfiles(), id, String(mcVersion)));
+  return profileList();
+});
+ipcMain.handle("versions:list", () => availableVersions(path.join(DIRS.base, "versions-cache.json")));
 ipcMain.handle("profiles:rename", async (e, id, name) => {
   await saveSettings(profiles.rename(await ensureProfiles(), id, name));
   return profileList();
@@ -337,11 +347,13 @@ ipcMain.handle("profiles:perf", async (e, slug, on) => {
 // ---------------------------------------------------------------------------------------------- Updates
 
 async function checkUpdate() {
-  // Entwicklerversion: kein Auto-Update (sonst würde sie zur normalen Version)
-  if (DEV_BUILD) return;
   if (!app.isPackaged && process.env.MYTIC_UPDATE_TEST !== "1") return;
+  const current = process.env.MYTIC_UPDATE_TEST === "1" ? process.env.MYTIC_FAKE_VERSION || "0.0.0" : PACKAGE_VERSION;
   try {
-    const update = await updater.checkForUpdate(process.env.MYTIC_UPDATE_TEST === "1" ? process.env.MYTIC_FAKE_VERSION || "0.0.0" : PACKAGE_VERSION);
+    // Entwicklerversion aktualisiert sich über die eigene Download-Seite (bleibt intern), die normale über GitHub
+    const update = DEV_BUILD
+      ? (DEV_UPDATE_SITE ? await updater.checkSiteUpdate(current, DEV_UPDATE_SITE, "mytic-client-dev") : null)
+      : await updater.checkForUpdate(current);
     if (update) {
       pendingUpdate = update;
       emit("update", { version: update.version, size: update.size, notes: update.notes, canInstall: Boolean(PORTABLE_FILE) });
@@ -449,6 +461,7 @@ ipcMain.handle("game:launch", async () => {
     const profileMods = profiles.modsDir(DIRS.base, profile.id);
     const account = await activeAccount();
     const installer = new Installer(DIRS, {
+      version: profile.mcVersion,
       log: (line) => emit("log", line),
       progress: (p) => emit("progress", p),
     });
@@ -461,7 +474,7 @@ ipcMain.handle("game:launch", async () => {
     }
     const command = buildCommand(install, DIRS, account, { ...current, modsDir: profileMods });
     emit("status", "Minecraft startet …");
-    emit("log", `[Launcher] Starte Minecraft ${MC_VERSION} (Fabric) als ${account.name} – Profil „${profile.name}“`);
+    emit("log", `[Launcher] Starte Minecraft ${profile.mcVersion} (Fabric) als ${account.name} – Profil „${profile.name}“`);
     game = launch(command, DIRS, {
       onLog: (line) => emit("log", line),
       onExit: (code) => {

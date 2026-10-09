@@ -7,12 +7,15 @@ const AdmZip = require("adm-zip");
 const { getJson, downloadAll, downloadFile, isValid } = require("./download");
 const { ensureJava } = require("./java");
 
+/** Standardversion für neue Profile. */
 const MC_VERSION = "1.21.11";
+/** Unterstützte Versionen: alle Releases ab 1.21 und die neuen Jahresversionen 26.x. */
+const SUPPORTED = /^(1\.21(\.\d+)?|2\d\.\d+(\.\d+)?)$/;
 const VERSION_MANIFEST = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
 const FABRIC_META = "https://meta.fabricmc.net/v2";
 const MODRINTH = "https://api.modrinth.com/v2";
 const LAUNCHER_NAME = "MyticClient";
-const LAUNCHER_VERSION = "2.5.0";
+const LAUNCHER_VERSION = "2.6.0";
 
 /** Mods, die der Launcher verwaltet. required = immer installiert, sonst über die Einstellungen schaltbar. */
 const MANAGED_MODS = [
@@ -77,8 +80,9 @@ function libraryKey(name) {
 // ---------------------------------------------------------------------------------------------- Installation
 
 class Installer {
-  constructor(dirs, { platform = process.platform, arch = process.arch, log = () => {}, progress = () => {} } = {}) {
+  constructor(dirs, { version = MC_VERSION, platform = process.platform, arch = process.arch, log = () => {}, progress = () => {} } = {}) {
     this.dirs = dirs;
+    this.mcVersion = version;
     this.platform = platform;
     this.arch = arch;
     this.log = log;
@@ -90,24 +94,24 @@ class Installer {
   }
 
   async versionJson() {
-    const file = path.join(this.dirs.versions, MC_VERSION, `${MC_VERSION}.json`);
+    const file = path.join(this.dirs.versions, this.mcVersion, `${this.mcVersion}.json`);
     try {
       return JSON.parse(await fsp.readFile(file, "utf8"));
     } catch {
       const manifest = await getJson(VERSION_MANIFEST);
-      const entry = manifest.versions.find((v) => v.id === MC_VERSION);
-      if (!entry) throw new Error(`Minecraft ${MC_VERSION} nicht gefunden`);
+      const entry = manifest.versions.find((v) => v.id === this.mcVersion);
+      if (!entry) throw new Error(`Minecraft ${this.mcVersion} nicht gefunden`);
       await downloadFile(entry.url, file, { sha1: entry.sha1 });
       return JSON.parse(await fsp.readFile(file, "utf8"));
     }
   }
 
   async fabricProfile() {
-    const file = path.join(this.dirs.versions, `fabric-${MC_VERSION}`, "profile.json");
+    const file = path.join(this.dirs.versions, `fabric-${this.mcVersion}`, "profile.json");
     try {
-      const loaders = await getJson(`${FABRIC_META}/versions/loader/${MC_VERSION}`);
+      const loaders = await getJson(`${FABRIC_META}/versions/loader/${this.mcVersion}`);
       const loader = (loaders.find((l) => l.loader.stable) || loaders[0]).loader.version;
-      const profile = await getJson(`${FABRIC_META}/versions/loader/${MC_VERSION}/${loader}/profile/json`);
+      const profile = await getJson(`${FABRIC_META}/versions/loader/${this.mcVersion}/${loader}/profile/json`);
       await fsp.mkdir(path.dirname(file), { recursive: true });
       await fsp.writeFile(file, JSON.stringify(profile, null, 2));
       return profile;
@@ -181,7 +185,7 @@ class Installer {
   }
 
   async modrinthFile(slug) {
-    const params = `loaders=${encodeURIComponent('["fabric"]')}&game_versions=${encodeURIComponent(`["${MC_VERSION}"]`)}`;
+    const params = `loaders=${encodeURIComponent('["fabric"]')}&game_versions=${encodeURIComponent(`["${this.mcVersion}"]`)}`;
     const versions = await getJson(`${MODRINTH}/project/${slug}/version?${params}`);
     const version = versions.find((v) => v.version_type === "release") || versions[0];
     if (!version) return null;
@@ -212,7 +216,7 @@ class Installer {
       try {
         const info = await this.modrinthFile(slug);
         if (!info) {
-          this.log(`[Mods] ${slug}: keine Version für ${MC_VERSION}, übersprungen`);
+          this.log(`[Mods] ${slug}: keine Version für ${this.mcVersion}, übersprungen`);
           continue;
         }
         const target = path.join(modsDir, info.filename);
@@ -225,9 +229,11 @@ class Installer {
         this.log(`[Mods] ${slug}: ${error.message}`);
       }
     }
-    for (const name of await fsp.readdir(bundledModsDir)) {
+    const bundled = bundledMytic(bundledModsDir, this.mcVersion);
+    if (!bundled) this.log(`[Mods] Mytic-Ingame-Mods gibt es für ${this.mcVersion} noch nicht – Start mit Fabric und Performance-Mods`);
+    for (const name of bundled ? await fsp.readdir(bundled) : []) {
       if (!name.endsWith(".jar")) continue;
-      await fsp.copyFile(path.join(bundledModsDir, name), path.join(modsDir, name));
+      await fsp.copyFile(path.join(bundled, name), path.join(modsDir, name));
       files.push({ slug: "mytic", file: name });
     }
     const keep = new Set(files.map((f) => f.file));
@@ -252,7 +258,7 @@ class Installer {
       onProgress: (d, t) => this.step("Java herunterladen", d, t),
     });
 
-    const clientJar = path.join(this.dirs.versions, MC_VERSION, `${MC_VERSION}.jar`);
+    const clientJar = path.join(this.dirs.versions, this.mcVersion, `${this.mcVersion}.jar`);
     const client = version.downloads.client;
     const { libraries, natives } = this.libraries(version, fabric);
     const items = [
@@ -268,13 +274,40 @@ class Installer {
     await downloadAll(items, { concurrency: 16, onProgress: (d, t) => this.step("Bibliotheken", d, t) });
 
     if (!skipAssets) await this.assets(version, { verify });
-    const nativesDir = path.join(this.dirs.versions, MC_VERSION, "natives");
+    const nativesDir = path.join(this.dirs.versions, this.mcVersion, "natives");
     this.step("Native Dateien entpacken");
     await this.extractNatives(natives, nativesDir);
 
     const mods = bundledModsDir ? await this.mods(enabledMods, bundledModsDir, modsDir) : [];
     this.step("Fertig", 1, 1);
-    return { version, fabric, java, clientJar, libraries, nativesDir, logConfig, mods };
+    return { mcVersion: this.mcVersion, version, fabric, java, clientJar, libraries, nativesDir, logConfig, mods };
+  }
+}
+
+/** Ordner mit der Mytic-Mod für eine Minecraft-Version (resources/mods/<version>/), oder null. */
+function bundledMytic(bundledModsDir, mcVersion) {
+  const dir = path.join(bundledModsDir, mcVersion);
+  try {
+    return require("node:fs").readdirSync(dir).some((f) => f.endsWith(".jar")) ? dir : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Alle startbaren Versionen: Mojang-Releases ab 1.21, die Fabric unterstützt. Neueste zuerst. */
+async function availableVersions(cacheFile) {
+  try {
+    const [manifest, fabric] = await Promise.all([getJson(VERSION_MANIFEST), getJson(`${FABRIC_META}/versions/game`)]);
+    const fabricOk = new Set(fabric.filter((v) => v.stable).map((v) => v.version));
+    const list = manifest.versions.filter((v) => v.type === "release" && SUPPORTED.test(v.id) && fabricOk.has(v.id)).map((v) => v.id);
+    if (cacheFile && list.length) await fsp.writeFile(cacheFile, JSON.stringify(list)).catch(() => {});
+    return list;
+  } catch (error) {
+    try {
+      return JSON.parse(await fsp.readFile(cacheFile, "utf8"));
+    } catch {
+      return [MC_VERSION];
+    }
   }
 }
 
@@ -288,7 +321,7 @@ function buildCommand(install, dirs, account, settings = {}, { platform = proces
   const features = { has_custom_resolution: Boolean(settings.width && settings.height) };
   const vars = {
     auth_player_name: account.name,
-    version_name: `fabric-${MC_VERSION}`,
+    version_name: `fabric-${install.mcVersion}`,
     game_directory: dirs.game,
     assets_root: dirs.assets,
     assets_index_name: version.assetIndex.id,
@@ -393,4 +426,4 @@ function defaultMemoryMb() {
   return Math.max(2048, Math.min(4096, Math.floor(total / 2 / 512) * 512));
 }
 
-module.exports = { Log4jParser, Installer, buildCommand, launch, rulesAllow, collectArguments, mavenPath, MANAGED_MODS, MC_VERSION, defaultMemoryMb };
+module.exports = { Log4jParser, Installer, buildCommand, launch, rulesAllow, collectArguments, mavenPath, MANAGED_MODS, MC_VERSION, defaultMemoryMb, availableVersions, bundledMytic };

@@ -243,6 +243,7 @@ function switchControl(checked, disabled, label, onChange) {
 }
 
 let profileState = { active: null, list: [] };
+let versions = [];
 const activeProfile = () => profileState.list.find((p) => p.id === profileState.active) || { perf: {}, name: "Standard", color: "#9b5cff" };
 
 function perfEnabled(mod) {
@@ -505,6 +506,7 @@ function browserCard(mod, { installedEntry } = {}) {
   body.append(title);
   if (mod.description != null) body.append(el("p", "mr-desc", mod.description));
   if (installed && installed.dependency) body.append(el("span", "mr-req", `Benötigt von: ${installed.requiredBy.join(", ")}`));
+  if (installed && installed.incompatible) body.append(el("span", "mr-req warn", `Nicht verfügbar für ${activeProfile().mcVersion} – automatisch aus`));
 
   const foot = el("div", "mr-foot");
   const stats = el("div", "mr-stats");
@@ -591,9 +593,9 @@ async function loadBrowser(reset) {
     browserTotal = page.total;
     browserOffset += page.hits.length;
     results.append(...page.hits.map((m) => browserCard(m)));
-    if (reset && page.hits.length === 0) results.append(el("p", "sub", "Keine passenden Mods für 1.21.11 gefunden."));
+    if (reset && page.hits.length === 0) results.append(el("p", "sub", `Keine passenden Mods für ${activeProfile().mcVersion} gefunden.`));
     $("browser-more").hidden = browserOffset >= browserTotal;
-    $("browser-info").textContent = `${formatCount(browserTotal)} Mods für Minecraft 1.21.11 mit Fabric · Installiert ins Profil „${activeProfile().name}“`;
+    $("browser-info").textContent = `${formatCount(browserTotal)} Mods für Minecraft ${activeProfile().mcVersion} mit Fabric · Installiert ins Profil „${activeProfile().name}“`;
   } catch (error) {
     if (reset) results.replaceChildren(el("p", "sub", `Modrinth ist gerade nicht erreichbar: ${errorText(error)}`));
   }
@@ -652,13 +654,33 @@ function iconButton(svg, title, className) {
   return b;
 }
 
+function fillVersionSelect(select, value) {
+  const list = versions.length ? versions : [value];
+  select.replaceChildren(...list.map((v) => {
+    const option = el("option", null, v);
+    option.value = v;
+    return option;
+  }));
+  select.value = value;
+}
+
 async function applyProfiles(next, switched) {
+  const before = activeProfile();
   profileState = next;
   const p = activeProfile();
+  if (before && before.mcVersion && before.mcVersion !== p.mcVersion && before.id === p.id) switched = true;
   $("profile-name").textContent = p.name;
+  $("mc-version").textContent = p.mcVersion;
+  $("version-profile").textContent = p.name;
+  fillVersionSelect($("profile-version"), p.mcVersion);
+  fillVersionSelect($("profile-new-version"), p.mcVersion);
+  $("version-hint").hidden = p.mytic;
+  $("version-hint").textContent = `Mytic-Ingame-Mods (HUD, Menü) gibt es für ${p.mcVersion} noch nicht – das Spiel startet mit Fabric und Performance-Mods. Weitere Versionen folgen.`;
+  $("mytic-notice").hidden = p.mytic;
+  $("mytic-notice").textContent = `Hinweis: Für Minecraft ${p.mcVersion} (Profil „${p.name}“) gibt es die Mytic-Ingame-Mods noch nicht. Sie folgen in den nächsten Updates.`;
   $("profile-dot").style.background = p.color;
   $("profile-dot").style.color = p.color;
-  $("launch-profile").textContent = `Profil: ${p.name}`;
+  $("launch-profile").textContent = `Profil: ${p.name} · ${p.mcVersion}`;
   renderProfileList();
   if (switched) {
     installedMods = await api.listMods();
@@ -678,14 +700,16 @@ function renderProfileList() {
     dot.style.background = p.color;
     dot.style.color = p.color;
     const who = el("div", "who");
-    who.append(el("b", null, p.name), el("small", null, p.modCount === 1 ? "1 eigener Mod" : `${p.modCount} eigene Mods`));
+    const title = el("b", null, p.name);
+    who.append(title, el("small", null, p.modCount === 1 ? "1 eigener Mod" : `${p.modCount} eigene Mods`));
+    const chip = el("span", "ver-chip", p.mcVersion);
     const actions = el("div", "prof-actions");
     const edit = iconButton(ICON_EDIT, "Umbenennen");
     const copy = iconButton(ICON_COPY, "Duplizieren");
     const del = iconButton(ICON_TRASH, "Löschen", "danger");
     actions.append(edit, copy);
     if (profileState.list.length > 1) actions.append(del);
-    row.append(dot, who, actions);
+    row.append(dot, who, chip, actions);
 
     row.addEventListener("click", async (e) => {
       if (e.target.closest(".prof-actions") || row.classList.contains("editing")) return;
@@ -720,7 +744,7 @@ function renderProfileList() {
     });
     copy.addEventListener("click", async () => {
       try {
-        await applyProfiles(await api.createProfile(`${p.name} (Kopie)`.slice(0, 24), p.id), true);
+        await applyProfiles(await api.createProfile(`${p.name} (Kopie)`.slice(0, 24), p.id, p.mcVersion), true);
         toast(`Profil „${p.name}“ dupliziert`);
       } catch (error) {
         profileError(errorText(error));
@@ -755,12 +779,24 @@ $("profiles").addEventListener("click", (e) => {
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") $("profiles").hidden = true;
 });
+$("profile-version").addEventListener("change", async () => {
+  profileError("");
+  try {
+    const version = $("profile-version").value;
+    await applyProfiles(await api.setProfileVersion(activeProfile().id, version), true);
+    toast(`Profil „${activeProfile().name}“ nutzt jetzt Minecraft ${version}`);
+  } catch (error) {
+    profileError(errorText(error));
+    fillVersionSelect($("profile-version"), activeProfile().mcVersion);
+  }
+});
+
 $("profile-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   profileError("");
   try {
     const name = $("profile-new").value;
-    await applyProfiles(await api.createProfile(name, null), true);
+    await applyProfiles(await api.createProfile(name, null, $("profile-new-version").value), true);
     $("profile-new").value = "";
     toast(`Profil „${activeProfile().name}“ erstellt`);
   } catch (error) {
@@ -810,6 +846,7 @@ $("update-install").addEventListener("click", async () => {
   state = await api.state();
   $("offline-area").hidden = !state.offlineAllowed;
   profileState = await api.listProfiles();
+  versions = await api.listVersions().catch(() => []);
   renderAccounts();
   renderFilters();
   renderMods();

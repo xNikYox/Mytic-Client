@@ -98,3 +98,22 @@ test("Profile: Umzug, Anlegen, Duplizieren, Löschen", async () => {
   await assert.rejects(profiles.create(s, base, "   "));
   await fsp.rm(base, { recursive: true });
 });
+
+const http = require("node:http");
+const { checkSiteUpdate } = require("../src/core/updater");
+
+test("Update über die Download-Seite (Entwicklerversion)", async () => {
+  const server = http.createServer((req, res) => {
+    if (req.url === "/proxy/8765/api/latest/mytic-client-dev") {
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ version: "2.6.0", name: "MyticClient-Dev-2.6.0.exe", size: 5, sha256: "abc", url: "download/mytic-client-dev" }));
+    } else { res.statusCode = 404; res.end(); }
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const base = `http://127.0.0.1:${server.address().port}/proxy/8765/`;
+  const update = await checkSiteUpdate("2.5.0", base, "mytic-client-dev");
+  assert.equal(update.version, "2.6.0");
+  assert.equal(update.url, `${base}download/mytic-client-dev`);
+  assert.equal(await checkSiteUpdate("2.6.0", base, "mytic-client-dev"), null);
+  server.close();
+});

@@ -4,6 +4,7 @@ const fsp = require("node:fs/promises");
 const path = require("node:path");
 const crypto = require("node:crypto");
 
+const DEFAULT_VERSION = "1.21.11";
 const COLORS = ["#9b5cff", "#3ee6d0", "#ff6fb5", "#ffcf5a", "#4da3ff", "#5be38a", "#ff9f43", "#ff5c72"];
 
 function profileDir(base, id) {
@@ -30,7 +31,7 @@ function newId(existing) {
 /** Legt beim ersten Start das Profil "Standard" an und zieht die bisherigen Mods dorthin um. */
 async function migrate(settings, base, gameDir) {
   if (Array.isArray(settings.profiles) && settings.profiles.length) return settings;
-  const standard = { id: "standard", name: "Standard", color: COLORS[0], perf: settings.mods || {}, created: Date.now() };
+  const standard = { id: "standard", name: "Standard", color: COLORS[0], mcVersion: DEFAULT_VERSION, perf: settings.mods || {}, created: Date.now() };
   const oldMods = path.join(gameDir, "mods");
   const target = modsDir(base, standard.id);
   await fsp.mkdir(target, { recursive: true });
@@ -53,7 +54,7 @@ async function countMods(base, id) {
   }
 }
 
-async function create(settings, base, name, copyFrom) {
+async function create(settings, base, name, copyFrom, mcVersion) {
   const profiles = settings.profiles;
   const id = newId(profiles);
   const source = copyFrom ? profiles.find((p) => p.id === copyFrom) : null;
@@ -61,6 +62,7 @@ async function create(settings, base, name, copyFrom) {
     id,
     name: cleanName(name),
     color: COLORS[profiles.length % COLORS.length],
+    mcVersion: mcVersion || (source && source.mcVersion) || DEFAULT_VERSION,
     perf: source ? { ...source.perf } : {},
     created: Date.now(),
   };
@@ -82,7 +84,13 @@ async function remove(settings, base, id) {
 }
 
 function active(settings) {
-  return settings.profiles.find((p) => p.id === settings.activeProfile) || settings.profiles[0];
+  const profile = settings.profiles.find((p) => p.id === settings.activeProfile) || settings.profiles[0];
+  return { ...profile, mcVersion: profile.mcVersion || DEFAULT_VERSION };
 }
 
-module.exports = { migrate, create, rename, remove, active, countMods, modsDir, profileDir, COLORS };
+function setVersion(settings, id, mcVersion) {
+  if (!/^[0-9][0-9.]*$/.test(String(mcVersion))) throw new Error("Ungültige Version");
+  return { ...settings, profiles: settings.profiles.map((p) => (p.id === id ? { ...p, mcVersion } : p)) };
+}
+
+module.exports = { migrate, create, rename, remove, active, setVersion, countMods, modsDir, profileDir, COLORS, DEFAULT_VERSION };

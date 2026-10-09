@@ -1,0 +1,31 @@
+// Versionsauswahl: Profil auf 1.21.8 stellen, Mod-Browser zeigt Mods für 1.21.8, Hinweis zur Mytic-Mod erscheint.
+const { app, BrowserWindow } = require("electron");
+const fs = require("node:fs");
+const path = require("node:path");
+const out = process.env.SHOT_DIR;
+app.commandLine.appendSwitch("ozone-platform", "headless");
+require("../src/main.js");
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+app.whenReady().then(async () => {
+  await wait(4000);
+  const win = BrowserWindow.getAllWindows()[0];
+  const js = (code) => win.webContents.executeJavaScript(code);
+  const shot = async (name) => fs.writeFileSync(path.join(out, `${name}.png`), (await win.capturePage()).toPNG());
+  console.log("Versionen:", await js(`[...document.getElementById('profile-version').options].map(o=>o.value).join(', ')`));
+  await js(`document.getElementById('profile-button').click()`);
+  await wait(400);
+  await js(`const s=document.getElementById('profile-version'); s.value='1.21.8'; s.dispatchEvent(new Event('change'))`);
+  await wait(1500);
+  console.log("Startseite:", await js(`document.getElementById('mc-version').textContent`), "|", await js(`document.getElementById('launch-profile').textContent`));
+  console.log("Hinweis sichtbar:", !(await js(`document.getElementById('version-hint').hidden`)));
+  await shot("version-popover");
+  await js(`document.getElementById('profiles').hidden=true; document.querySelector('[data-page=browser]').click()`);
+  await wait(4000);
+  console.log("Mod-Browser:", await js(`document.getElementById('browser-info').textContent`));
+  await js(`document.getElementById('profile-button').click()`);
+  await wait(300);
+  await js(`const s=document.getElementById('profile-version'); s.value='1.21.11'; s.dispatchEvent(new Event('change'))`);
+  await wait(1200);
+  console.log("Zurück auf:", await js(`document.getElementById('mc-version').textContent`), "| Hinweis sichtbar:", !(await js(`document.getElementById('version-hint').hidden`)));
+  app.exit(0);
+});
