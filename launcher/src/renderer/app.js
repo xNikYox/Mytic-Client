@@ -93,6 +93,8 @@ function el(tag, className, text) {
       r: (Math.random() * 1.3 + 0.3) * devicePixelRatio,
       s: Math.random() * 0.15 + 0.03,
       p: Math.random() * Math.PI * 2,
+      // Neon-Partikel: Cyan, Violett, Pink, ab und zu weiß
+      c: ["34, 229, 255", "162, 89, 255", "255, 43, 214", "235, 225, 255"][Math.floor(Math.random() * 4)],
     }));
   };
   const draw = (t) => {
@@ -101,7 +103,9 @@ function el(tag, className, text) {
       p.y -= p.s * devicePixelRatio;
       if (p.y < -4) p.y = canvas.height + 4;
       const a = 0.25 + 0.45 * (0.5 + 0.5 * Math.sin(t / 900 + p.p));
-      ctx.fillStyle = `rgba(214, 196, 255, ${a})`;
+      ctx.fillStyle = `rgba(${p.c}, ${a})`;
+      ctx.shadowColor = `rgba(${p.c}, ${a})`;
+      ctx.shadowBlur = 6 * devicePixelRatio;
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
       ctx.fill();

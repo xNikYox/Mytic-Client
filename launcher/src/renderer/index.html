@@ -5,6 +5,7 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: https://mc-heads.net https://cdn.modrinth.com; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'self'">
   <title>Mytic Client</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="neon.css">
 </head>
 <body>
   <canvas id="stars" aria-hidden="true"></canvas>
@@ -59,36 +60,42 @@
     <section class="page active" id="page-home">
       <div class="hero">
         <div class="hero-scene" id="hero-scene" aria-hidden="true">
+          <div class="hero-floor"><div class="hero-grid"></div></div>
           <svg viewBox="0 0 900 420" preserveAspectRatio="xMaxYMid slice">
             <defs>
-              <linearGradient id="grass" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3ee6d0"/><stop offset="1" stop-color="#1b9c8f"/></linearGradient>
-              <linearGradient id="rock" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#43325f"/><stop offset="1" stop-color="#140f22" stop-opacity="0"/></linearGradient>
-              <linearGradient id="crystal" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e3ccff"/><stop offset=".5" stop-color="#9b5cff"/><stop offset="1" stop-color="#5b2bd1"/></linearGradient>
-              <radialGradient id="glow"><stop offset="0" stop-color="#b98bff" stop-opacity=".7"/><stop offset="1" stop-color="#b98bff" stop-opacity="0"/></radialGradient>
+              <linearGradient id="sun" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe66b"/><stop offset=".45" stop-color="#ff7a59"/><stop offset="1" stop-color="#ff2bd6"/></linearGradient>
+              <linearGradient id="ridge" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1a0f33"/><stop offset="1" stop-color="#07050f"/></linearGradient>
+              <linearGradient id="cubeTop" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7df9ff"/><stop offset="1" stop-color="#22b8ff"/></linearGradient>
+              <linearGradient id="cubeLeft" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b56bff"/><stop offset="1" stop-color="#5b1fd1"/></linearGradient>
+              <linearGradient id="cubeRight" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff4fd8"/><stop offset="1" stop-color="#8f1a9e"/></linearGradient>
+              <radialGradient id="sunGlow"><stop offset="0" stop-color="#ff4fd8" stop-opacity=".55"/><stop offset="1" stop-color="#ff4fd8" stop-opacity="0"/></radialGradient>
+              <mask id="sunCut">
+                <rect x="0" y="0" width="900" height="420" fill="#fff"/>
+                <rect x="400" y="214" width="500" height="5" fill="#000"/><rect x="400" y="232" width="500" height="7" fill="#000"/>
+                <rect x="400" y="252" width="500" height="9" fill="#000"/><rect x="400" y="274" width="500" height="11" fill="#000"/>
+              </mask>
+              <filter id="neon" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
             </defs>
-            <g class="layer far" data-depth="8">
-              <path fill="#2a1f42" d="M770 330 q50-12 100 0 q-14 28-50 54 q-36-24-50-54z"/>
-              <path fill="#2a1f42" d="M780 110 q40-10 80 0 q-12 24-40 42 q-28-18-40-42z"/>
-              <path fill="#2a1f42" d="M470 70 q30-8 60 0 q-10 18-30 32 q-20-14-30-32z"/>
+            <g class="layer far" data-depth="6">
+              <circle class="sun-glow" cx="640" cy="190" r="230" fill="url(#sunGlow)"/>
+              <circle class="sun" cx="640" cy="200" r="118" fill="url(#sun)" mask="url(#sunCut)"/>
             </g>
-            <g class="layer mid" data-depth="18">
-              <circle cx="610" cy="170" r="150" fill="url(#glow)"/>
-              <path fill="url(#rock)" d="M420 262 q190-48 380 0 l-14 10 q-60 110-176 140 q-116-30-176-140z"/>
-              <path fill="url(#grass)" d="M420 262 q190-48 380 0 q-4 10-16 14 q-174-40-348 0 q-12-4-16-14z"/>
-              <rect x="590" y="150" width="40" height="110" fill="#2b2042"/>
-              <path d="M578 154 l32-50 l32 50z" fill="#9b5cff"/>
-              <rect x="530" y="190" width="26" height="70" fill="#2b2042"/><path d="M522 193 l21-30 l21 30z" fill="#c9a4ff"/>
-              <rect x="664" y="190" width="26" height="70" fill="#2b2042"/><path d="M656 193 l21-30 l21 30z" fill="#c9a4ff"/>
-              <rect x="604" y="196" width="12" height="18" rx="6" fill="#f4c04e"/>
-              <circle cx="490" cy="244" r="20" fill="#f29ac3"/><circle cx="472" cy="252" r="13" fill="#e978b0"/>
-              <circle cx="742" cy="242" r="17" fill="#f29ac3"/><circle cx="756" cy="250" r="11" fill="#e978b0"/>
+            <g class="layer mid" data-depth="14">
+              <path fill="url(#ridge)" d="M380 300 L470 222 L520 258 L600 176 L660 240 L720 196 L790 262 L850 214 L900 250 L900 330 L380 330 Z"/>
+              <path fill="none" stroke="#22e5ff" stroke-width="2" filter="url(#neon)" d="M380 300 L470 222 L520 258 L600 176 L660 240 L720 196 L790 262 L850 214 L900 250"/>
+              <path fill="none" stroke="#ff2bd6" stroke-width="1.5" opacity=".7" d="M470 222 L500 300 M600 176 L590 300 M720 196 L740 300 M850 214 L830 300"/>
             </g>
-            <g class="layer near" data-depth="30">
-              <path class="float" d="M610 40 l16 34 l-16 34 l-16-34z" fill="url(#crystal)"/>
-              <path class="float slow" d="M820 300 l10 22 l-10 22 l-10-22z" fill="url(#crystal)"/>
-              <path class="float" d="M455 120 l8 16 l-8 16 l-8-16z" fill="url(#crystal)"/>
+            <g class="layer near" data-depth="28">
+              <g class="float cube">
+                <path d="M780 96 l46 -26 l46 26 l-46 26 z" fill="url(#cubeTop)"/>
+                <path d="M780 96 l46 26 l0 54 l-46 -26 z" fill="url(#cubeLeft)"/>
+                <path d="M872 96 l-46 26 l0 54 l46 -26 z" fill="url(#cubeRight)"/>
+              </g>
+              <path class="float slow" d="M470 92 l9 18 l-9 18 l-9-18z" fill="#22e5ff"/>
+              <path class="float" d="M560 330 l7 14 l-7 14 l-7-14z" fill="#ff2bd6"/>
             </g>
           </svg>
+          <div class="scanlines"></div>
         </div>
         <div class="hero-content">
           <span class="chip"><i></i>Minecraft <b id="mc-version">1.21.11</b> · <span id="mc-loader">Fabric</span></span>
@@ -112,11 +119,11 @@
 
       <div class="cards">
         <article class="glass card">
-          <header><h3>Neu in 2.12</h3><span class="badge">Update</span></header>
+          <header><h3>Neu in 2.13</h3><span class="badge">Update</span></header>
           <ul class="news">
+            <li><b>Neon-Design:</b> neuer Launcher-Look mit Synthwave-Szene, Leuchtrahmen und Neon-Akzenten</li>
             <li><b>Minecraft 1.8.9:</b> die PvP-Version mit Forge, pro Profil wählbar</li>
             <li><b>Mytic-Mods auch für 1.8.9:</b> HUD, Zoom, Freelook, Mod-Menü – gleiche Einstellungen</li>
-            <li><b>Mod-Browser:</b> zeigt bei 1.8.9 automatisch Forge-Mods</li>
           </ul>
         </article>
         <article class="glass card">

@@ -17,6 +17,9 @@ app.whenReady().then(async () => {
   await shot("mods", "document.querySelector('[data-page=mods]').click()");
   await shot("settings", "document.querySelector('[data-page=settings]').click()");
   await shot("console", "document.querySelector('[data-page=console]').click()");
+  await shot("browser", "document.querySelector('[data-page=browser]').click()");
+  await new Promise((r) => setTimeout(r, 4000));
+  await shot("browser");
   await shot("accounts", "document.querySelector('[data-page=home]').click(); document.getElementById('account-button').click()");
   app.exit(0);
 });

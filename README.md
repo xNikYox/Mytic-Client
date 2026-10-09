@@ -18,6 +18,7 @@ Minecraft 1.8.9, 1.21 – 1.21.11 und 26.x · Fabric & Forge · Windows
 
 ### Launcher
 
+- **Neon-Design:** dunkler Gaming-Look mit Synthwave-Szene, Leuchtrahmen und Neon-Akzenten in Pink, Violett und Cyan.
 - **Ein Klick zum Spielen:** Java, Minecraft 1.21.11, Fabric und alle Mods werden automatisch heruntergeladen und aktuell gehalten. Spieler müssen nichts extra installieren.
 - **Microsoft-Login:** Anmeldung mit dem echten Minecraft-Konto. Der Launcher prüft, ob das Konto Minecraft: Java Edition besitzt.
 - **Mehrere Konten:** schnell zwischen Konten wechseln. Die Anmeldedaten werden mit der Verschlüsselung des Betriebssystems gespeichert.
