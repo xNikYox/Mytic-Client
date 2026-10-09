@@ -63,6 +63,10 @@ public class KeystrokesModule extends HudModule {
         int base = Ui.withAlpha(0x0B0812, background.get() ? (int) Math.round(backgroundOpacity.get() * 2.55) : 0);
         int fill = Ui.mix(base, Ui.withAlpha(pressedColor.get(), 210), pressed);
         int r = rounded.get() ? 3 : 0;
+        if (lunar()) {
+            Ui.rect(g, x, y, w, h, r, fill);
+            return;
+        }
         if (pressed > 0.05f && neon()) Ui.glow(g, x, y, w, h, r, Ui.accent2(), 3, pressed);
         if (background.get()) Ui.outline(g, x, y, w, h, r, Ui.mix(0x30FFFFFF, fill, pressed), fill);
         else Ui.rect(g, x, y, w, h, r, fill);

@@ -49,7 +49,7 @@ public final class SimpleModules {
             customMenu = new BoolSetting(this, "customMenu", "Mytic-Hauptmenü", true);
             menuBackground = new ModeSetting(this, "menuBackground", "Menü-Hintergrund", "Unschärfe", "Unschärfe", "Abdunkeln", "Aus");
             menuSize = new ModeSetting(this, "menuSize", "Menügröße", "Kompakt", "Kompakt", "Groß");
-            hudStyle = new ModeSetting(this, "hudStyle", "HUD-Stil", "Neon", "Neon", "Klassisch");
+            hudStyle = new ModeSetting(this, "hudStyle", "HUD-Stil", "Lunar", "Lunar", "Neon", "Klassisch");
         }
     }
 

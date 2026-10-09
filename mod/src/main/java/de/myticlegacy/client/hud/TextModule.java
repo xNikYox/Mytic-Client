@@ -32,12 +32,18 @@ public class TextModule extends HudModule {
         return v == null ? "" : v;
     }
 
+    /** Bezeichnungen, die bei Lunar als Einheit hinter dem Wert stehen ("120 FPS"). */
+    private boolean unit() {
+        return label.equals("FPS") || label.equals("CPS");
+    }
+
     private String labelPart() {
-        return showLabel.get() && !label.isEmpty() ? label + " " : "";
+        if (!showLabel.get() || label.isEmpty()) return "";
+        return lunar() && !unit() ? label + ": " : label + " ";
     }
 
     private String full(boolean preview) {
-        String text = labelPart() + value(preview);
+        String text = lunar() && unit() && showLabel.get() ? value(preview) + " " + label : labelPart() + value(preview);
         return brackets.get() ? "[" + text + "]" : text;
     }
 
@@ -62,6 +68,11 @@ public class TextModule extends HudModule {
         if (v.isEmpty()) return;
         int w = baseWidth();
         panel(g, w, baseHeight());
+        if (lunar()) {
+            String text = full(preview);
+            g.drawString(Ui.font(), text, (w - Ui.font().width(text)) / 2, 5, color(), textShadow());
+            return;
+        }
         var font = Ui.font();
         String open = brackets.get() ? "[" : "";
         String close = brackets.get() ? "]" : "";

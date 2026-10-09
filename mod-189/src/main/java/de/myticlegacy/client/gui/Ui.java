@@ -213,4 +213,15 @@ public final class Ui {
         neonLine(g, x + r + 4, y, w - 2 * r - 8, 1, alpha);
         corners(g, x + 3, y + 3, w - 6, h - 6, 8, alpha(accent2(), alpha), alpha(PINK, alpha));
     }
+    /** 1-Pixel-Rahmen mit leicht abgerundeten Ecken (Lunar-Knöpfe). */
+    public static void border(GuiGraphics g, int x, int y, int w, int h, int color) {
+        g.fill(x + 2, y, x + w - 2, y + 1, color);
+        g.fill(x + 2, y + h - 1, x + w - 2, y + h, color);
+        g.fill(x, y + 2, x + 1, y + h - 2, color);
+        g.fill(x + w - 1, y + 2, x + w, y + h - 2, color);
+        g.fill(x + 1, y + 1, x + 2, y + 2, color);
+        g.fill(x + w - 2, y + 1, x + w - 1, y + 2, color);
+        g.fill(x + 1, y + h - 2, x + 2, y + h - 1, color);
+        g.fill(x + w - 2, y + h - 2, x + w - 1, y + h - 1, color);
+    }
 }

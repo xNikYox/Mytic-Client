@@ -36,7 +36,7 @@ public abstract class HudModule extends Module {
         scale = new SliderSetting(this, "scale", "Größe", 0.5, 2.5, 0.05, 1.0, "×");
         background = new BoolSetting(this, "background", "Hintergrund", defaultBackground());
         backgroundOpacity = new SliderSetting(this, "bgOpacity", "Hintergrund-Deckkraft", 0, 100, 5, 55, " %");
-        rounded = new BoolSetting(this, "rounded", "Abgerundete Ecken", true);
+        rounded = new BoolSetting(this, "rounded", "Abgerundete Ecken", false);
         textColor = new ColorSetting(this, "textColor", "Textfarbe", 0xFFFFFFFF);
         shadow = new BoolSetting(this, "shadow", "Textschatten", true);
     }
@@ -108,7 +108,12 @@ public abstract class HudModule extends Module {
 
     /** Neon-Stil (Design → HUD-Stil): leuchtende Leiste am linken Rand. */
     protected boolean neon() {
-        return MyticClient.theme == null || MyticClient.theme.hudStyle.is("Neon");
+        return MyticClient.theme != null && MyticClient.theme.hudStyle.is("Neon");
+    }
+
+    /** Lunar-Stil (Standard): eckige dunkle Boxen, weißer Text, Einheit hinter dem Wert. */
+    protected boolean lunar() {
+        return MyticClient.theme == null || MyticClient.theme.hudStyle.is("Lunar");
     }
 
     protected void neonEdge(GuiGraphics g, int h) {
