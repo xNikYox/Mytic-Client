@@ -11,10 +11,10 @@ import java.util.Map;
 
 /** Zeichen-Helfer für das Mytic-Design: abgerundete Flächen, Farben, weiche Übergänge. */
 public final class Ui {
-    public static final int PANEL = 0xEE0F0C17;
-    public static final int SURFACE = 0xFF19152A;
-    public static final int SURFACE_HOVER = 0xFF241E3A;
-    public static final int LINE = 0xFF2C2545;
+    public static final int PANEL = 0xF20A0716;
+    public static final int SURFACE = 0xFF130D24;
+    public static final int SURFACE_HOVER = 0xFF1F1638;
+    public static final int LINE = 0xFF2C2050;
     public static final int TEXT = 0xFFF1EEF9;
     public static final int MUTED = 0xFF9A93B4;
     public static final int GREEN = 0xFF5BE38A;
@@ -131,8 +131,82 @@ public final class Ui {
     /** Schalter wie bei Lunar: Pille mit Knopf, animiert. */
     public static void toggle(GuiGraphics g, Object key, int x, int y, boolean on) {
         float t = animate(key, on, 14f);
-        rect(g, x, y, 20, 10, 5, mix(0xFF3A3352, accent(), t));
+        if (t > 0.01f) glow(g, x, y, 20, 10, 5, withAlpha(accent2(), Math.round(200 * t)), 3, 0.8f);
+        rect(g, x, y, 20, 10, 5, 0xFF2A2240);
+        if (t > 0.01f) {
+            int w = Math.max(10, Math.round(20 * t));
+            rect(g, x, y, w, 10, 5, alpha(accent(), t));
+            hGradient(g, x + 3, y + 1, w - 6, 8, alpha(accent(), t), alpha(accent2(), t));
+        }
         int knob = x + 1 + Math.round(10 * t);
         rect(g, knob, y + 1, 8, 8, 4, 0xFFFFFFFF);
+    }
+    // ------------------------------------------------------------------ Neon-Design
+
+    public static final int CYAN = 0xFF22E5FF;
+    public static final int PINK = 0xFFFF2BD6;
+
+    /** Zweite Neonfarbe zur Akzentfarbe: Cyan, bei bläulichen Akzenten Pink. */
+    public static int accent2() {
+        int a = accent();
+        int r = (a >> 16) & 0xFF, gr = (a >> 8) & 0xFF, b = a & 0xFF;
+        return b > 180 && gr > 140 && r < 120 ? PINK : CYAN;
+    }
+
+    /** Weiches Leuchten um ein Rechteck (vor der Fläche zeichnen). */
+    public static void glow(GuiGraphics g, int x, int y, int w, int h, int r, int color, int size, float strength) {
+        int base = Math.round(((color >>> 24) & 0xFF) * Math.max(0, Math.min(1, strength)));
+        for (int i = size; i >= 1; i--) {
+            int a = Math.round(base * 0.55f * (1f - (float) (i - 1) / size) / size * 2f);
+            if (a > 0) rect(g, x - i, y - i, w + 2 * i, h + 2 * i, r + i, withAlpha(color, Math.min(255, a)));
+        }
+    }
+
+    /** Waagerechter Farbverlauf von links nach rechts. */
+    public static void hGradient(GuiGraphics g, int x, int y, int w, int h, int left, int right) {
+        if (w <= 0 || h <= 0) return;
+        int step = Math.max(1, w / 48);
+        for (int i = 0; i < w; i += step) {
+            g.fill(x + i, y, x + Math.min(w, i + step), y + h, mix(left, right, (float) i / Math.max(1, w - 1)));
+        }
+    }
+
+    /** Neon-Linie: zweite Neonfarbe, Akzent, Pink – mit schwachem Schein darüber und darunter. */
+    public static void neonLine(GuiGraphics g, int x, int y, int w, int h, float alpha) {
+        int c1 = alpha(accent2(), alpha), c2 = alpha(accent(), alpha), c3 = alpha(PINK, alpha);
+        int half = w / 2;
+        hGradient(g, x, y - 1, half, 1, withAlpha(c1, 50), withAlpha(c2, 50));
+        hGradient(g, x + half, y - 1, w - half, 1, withAlpha(c2, 50), withAlpha(c3, 50));
+        hGradient(g, x, y, half, h, c1, c2);
+        hGradient(g, x + half, y, w - half, h, c2, c3);
+        hGradient(g, x, y + h, half, 1, withAlpha(c1, 50), withAlpha(c2, 50));
+        hGradient(g, x + half, y + h, w - half, 1, withAlpha(c2, 50), withAlpha(c3, 50));
+    }
+
+    /** Ecken-Markierungen wie bei einem HUD: oben links in c1, unten rechts in c2. */
+    public static void corners(GuiGraphics g, int x, int y, int w, int h, int len, int c1, int c2) {
+        g.fill(x, y, x + len, y + 1, c1);
+        g.fill(x, y, x + 1, y + len, c1);
+        g.fill(x + w - len, y + h - 1, x + w, y + h, c2);
+        g.fill(x + w - 1, y + h - len, x + w, y + h, c2);
+    }
+
+    /** Leuchtende Schrift: weicher Schein in der Textfarbe hinter dem Text. */
+    public static void glowText(GuiGraphics g, String text, int x, int y, int color, float strength) {
+        int halo = withAlpha(color, Math.round(70 * strength * (((color >>> 24) & 0xFF) / 255f)));
+        g.drawString(font(), text, x - 1, y, halo, false);
+        g.drawString(font(), text, x + 1, y, halo, false);
+        g.drawString(font(), text, x, y - 1, halo, false);
+        g.drawString(font(), text, x, y + 1, halo, false);
+        g.drawString(font(), text, x, y, color, false);
+    }
+
+    /** Panel im Neon-Stil: Leuchten, dunkle Fläche, Neon-Kante oben, HUD-Ecken. */
+    public static void neonPanel(GuiGraphics g, int x, int y, int w, int h, int r, float alpha) {
+        glow(g, x, y, w, h, r, withAlpha(accent(), Math.round(255 * alpha)), 8, 0.5f);
+        rect(g, x, y, w, h, r, alpha(mix(0xFF0A0716, accent(), 0.35f), alpha));
+        rect(g, x + 1, y + 1, w - 2, h - 2, Math.max(0, r - 1), alpha(PANEL, alpha));
+        neonLine(g, x + r + 4, y, w - 2 * r - 8, 1, alpha);
+        corners(g, x + 3, y + 3, w - 6, h - 6, 8, alpha(accent2(), alpha), alpha(PINK, alpha));
     }
 }

@@ -49,6 +49,7 @@ public class TargetHudModule extends HudModule {
         int h = baseHeight();
         if (background.get()) {
             Ui.rect(g, 0, 0, w, h, rounded.get() ? 4 : 0, Ui.withAlpha(0x0B0812, (int) Math.round(backgroundOpacity.get() * 2.55)));
+            neonEdge(g, h);
         }
         int face = 30;
         if (target instanceof Player player && mc.getConnection() != null && mc.getConnection().getPlayerInfo(player.getUUID()) != null) {

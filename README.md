@@ -35,6 +35,8 @@ Minecraft 1.8.9, 1.21 – 1.21.11 und 26.x · Fabric & Forge · Windows
 
 ### Im Spiel
 
+**Neon-Design:** Synthwave-Hauptmenü mit Neon-Sonne und laufendem Gitter, leuchtendes Mod-Menü, Neon-HUD (unter Design → HUD-Stil auch klassisch).
+
 Das Mod-Menü öffnest du mit **Rechts-Shift**. Es hat Suche, Kategorien, Mod-Karten mit Icons und eigene Einstellungen für jeden Mod. Dort findest du auch den **HUD-Editor**:
 - Anzeigen mit der Maus verschieben, mit Hilfslinien und Einrasten.
 - Mit dem Mausrad die Größe ändern.

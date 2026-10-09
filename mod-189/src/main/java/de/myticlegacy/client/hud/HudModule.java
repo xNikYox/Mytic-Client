@@ -102,7 +102,20 @@ public abstract class HudModule extends Module {
     protected void panel(GuiGraphics g, int w, int h) {
         if (background.get()) {
             Ui.rect(g, 0, 0, w, h, rounded.get() ? 3 : 0, Ui.withAlpha(0x0B0812, (int) Math.round(backgroundOpacity.get() * 2.55)));
+            neonEdge(g, h);
         }
+    }
+
+    /** Neon-Stil (Design → HUD-Stil): leuchtende Leiste am linken Rand. */
+    protected boolean neon() {
+        return MyticClient.theme == null || MyticClient.theme.hudStyle.is("Neon");
+    }
+
+    protected void neonEdge(GuiGraphics g, int h) {
+        if (!neon() || h < 6) return;
+        g.fill(-1, 3, 0, h - 3, Ui.withAlpha(Ui.accent2(), 60));
+        g.fillGradient(0, 2, 1, h - 2, Ui.accent2(), Ui.accent());
+        g.fill(1, 3, 2, h - 3, Ui.withAlpha(Ui.accent(), 70));
     }
 
     protected int color() {
