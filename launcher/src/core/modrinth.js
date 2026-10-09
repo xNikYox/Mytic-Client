@@ -8,12 +8,13 @@ const STATE_FILE = ".mytic-user.json";
 
 class ModBrowser {
   /**
-   * modsDir: Mods-Ordner des Spiels; gameVersion: z. B. "1.21.11";
+   * modsDir: Mods-Ordner des Spiels; gameVersion: z. B. "1.21.11"; loader: "fabric" oder "forge" (1.8.9);
    * managed: Slugs, die der Launcher selbst verwaltet (Fabric API, Sodium …) – die werden nie doppelt installiert.
    */
-  constructor(modsDir, gameVersion, managed = []) {
+  constructor(modsDir, gameVersion, managed = [], loader = "fabric") {
     this.modsDir = modsDir;
     this.gameVersion = gameVersion;
+    this.loader = loader;
     this.managedSlugs = new Set(managed);
     this.managedIds = null;
   }
@@ -55,7 +56,7 @@ class ModBrowser {
   // ------------------------------------------------------------------------------------------ Suche
 
   async search({ query = "", sort = "relevance", category = "", offset = 0, limit = 24 } = {}) {
-    const facets = [["project_type:mod"], ["categories:fabric"], [`versions:${this.gameVersion}`]];
+    const facets = [["project_type:mod"], [`categories:${this.loader}`], [`versions:${this.gameVersion}`]];
     if (category) facets.push([`categories:${category}`]);
     const params = new URLSearchParams({ query, index: sort, offset: String(offset), limit: String(limit), facets: JSON.stringify(facets) });
     const result = await getJson(`${API}/search?${params}`);
@@ -82,7 +83,7 @@ class ModBrowser {
   // ------------------------------------------------------------------------------------------ Installation
 
   async latestVersion(projectId) {
-    const params = `loaders=${encodeURIComponent('["fabric"]')}&game_versions=${encodeURIComponent(`["${this.gameVersion}"]`)}`;
+    const params = `loaders=${encodeURIComponent(`["${this.loader}"]`)}&game_versions=${encodeURIComponent(`["${this.gameVersion}"]`)}`;
     const versions = await getJson(`${API}/project/${projectId}/version?${params}`);
     const version = versions.find((v) => v.version_type === "release") || versions[0];
     if (!version) return null;

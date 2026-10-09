@@ -15,16 +15,30 @@ const VERSION_MANIFEST = "https://piston-meta.mojang.com/mc/game/version_manifes
 const FABRIC_META = "https://meta.fabricmc.net/v2";
 const MODRINTH = "https://api.modrinth.com/v2";
 const LAUNCHER_NAME = "MyticClient";
-const LAUNCHER_VERSION = "2.11.0";
+const LAUNCHER_VERSION = "2.12.0";
 
 /** Mods, die der Launcher verwaltet. required = immer installiert, sonst über die Einstellungen schaltbar. */
+/** Alte Versionen laufen mit Forge statt Fabric (Version → Forge-Version). */
+const FORGE_VERSIONS = { "1.8.9": "1.8.9-11.15.1.2318-1.8.9" };
+const FORGE_MAVEN = "https://maven.minecraftforge.net/";
+
+function loaderFor(mcVersion) {
+  return FORGE_VERSIONS[mcVersion] ? "forge" : "fabric";
+}
+
+/** Spielordner: alte Versionen (andere Optionen-/Weltformate) bekommen einen eigenen, z. B. game-1.8.9. */
+function gameDirFor(dirs, mcVersion) {
+  return loaderFor(mcVersion) === "forge" ? path.join(dirs.base, `game-${mcVersion}`) : dirs.game;
+}
+
 const MANAGED_MODS = [
-  { slug: "fabric-api", name: "Fabric API", required: true },
+  { slug: "fabric-api", name: "Fabric API", required: true, loaders: ["fabric"] },
   { slug: "sodium", name: "Sodium", description: "Deutlich mehr FPS durch neue Render-Engine", default: true },
   { slug: "lithium", name: "Lithium", description: "Schnellere Spiellogik, weniger Ruckler", default: true },
   { slug: "ferrite-core", name: "FerriteCore", description: "Weniger Arbeitsspeicher", default: true },
   { slug: "immediatelyfast", name: "ImmediatelyFast", description: "Schnelleres Zeichnen von HUD, Text und Items", default: true },
-  { slug: "entityculling", name: "EntityCulling", description: "Unsichtbare Entities werden nicht gezeichnet", default: true },
+  { slug: "entityculling", name: "EntityCulling", description: "Unsichtbare Entities werden nicht gezeichnet", default: true, loaders: ["fabric", "forge"] },
+  { slug: "patcher", name: "PolyPatcher", description: "Mehr FPS in 1.8.9 – bringt OneConfig mit (eigenes Menü ebenfalls auf Rechts-Shift)", default: false, loaders: ["forge"] },
   { slug: "iris", name: "Iris Shaders", description: "Shader-Unterstützung (braucht Sodium)", default: false, requires: ["sodium"] },
 ];
 
@@ -83,6 +97,7 @@ class Installer {
   constructor(dirs, { version = MC_VERSION, platform = process.platform, arch = process.arch, log = () => {}, progress = () => {} } = {}) {
     this.dirs = dirs;
     this.mcVersion = version;
+    this.loader = loaderFor(version);
     this.platform = platform;
     this.arch = arch;
     this.log = log;
@@ -125,6 +140,30 @@ class Installer {
     }
   }
 
+  /** Forge (alte Versionen): Profil aus dem Installer lesen; Forge selbst kommt als "universal"-JAR aus dem Forge-Maven. */
+  async forgeProfile() {
+    const forge = FORGE_VERSIONS[this.mcVersion];
+    const dir = path.join(this.dirs.versions, `forge-${forge}`);
+    const file = path.join(dir, "profile.json");
+    try {
+      return JSON.parse(await fsp.readFile(file, "utf8"));
+    } catch {
+      // noch nicht vorhanden
+    }
+    const installer = path.join(dir, "installer.jar");
+    const base = `${FORGE_MAVEN}net/minecraftforge/forge/${forge}/forge-${forge}`;
+    if (!(await isValid(installer))) await downloadFile(`${base}-installer.jar`, installer);
+    const info = JSON.parse(new AdmZip(installer).readAsText("install_profile.json")).versionInfo;
+    const libraries = info.libraries
+      .filter((l) => l.clientreq !== false)
+      .map((l) => (l.name.startsWith("net.minecraftforge:forge:")
+        ? { name: l.name, downloadUrl: `${base}-universal.jar` }
+        : { name: l.name, url: l.url || "https://libraries.minecraft.net/" }));
+    const profile = { mainClass: info.mainClass, minecraftArguments: info.minecraftArguments, libraries };
+    await fsp.writeFile(file, JSON.stringify(profile, null, 2));
+    return profile;
+  }
+
   /** Bibliotheken von Minecraft + Fabric; Fabric-Versionen ersetzen gleichnamige von Minecraft (z. B. ASM). */
   libraries(version, fabric) {
     const opts = { platform: this.platform, arch: this.arch };
@@ -151,7 +190,8 @@ class Installer {
     for (const lib of fabric.libraries) {
       const rel = mavenPath(lib.name);
       const base = (lib.url || "https://maven.fabricmc.net/").replace(/\/?$/, "/");
-      byKey.set(libraryKey(lib.name), { name: lib.name, url: base + rel.split(path.sep).join("/"), file: path.join(this.dirs.libraries, rel), sha1: lib.sha1, size: lib.size });
+      const url = lib.downloadUrl || base + rel.split(path.sep).join("/");
+      byKey.set(libraryKey(lib.name), { name: lib.name, url, file: path.join(this.dirs.libraries, rel), sha1: lib.sha1, size: lib.size });
     }
     return { libraries: [...byKey.values()], natives };
   }
@@ -161,7 +201,9 @@ class Installer {
     const indexFile = path.join(this.dirs.assets, "indexes", `${index.id}.json`);
     if (!(await isValid(indexFile, { sha1: index.sha1 }))) await downloadFile(index.url, indexFile, { sha1: index.sha1 });
     const objects = JSON.parse(await fsp.readFile(indexFile, "utf8")).objects;
-    const items = Object.values(objects).map(({ hash, size }) => ({
+    // gleiche Datei kann unter mehreren Namen stehen (z. B. im Index von 1.8) – nur einmal laden
+    const unique = [...new Map(Object.values(objects).map((o) => [o.hash, o])).values()];
+    const items = unique.map(({ hash, size }) => ({
       url: `https://resources.download.minecraft.net/${hash.slice(0, 2)}/${hash}`,
       file: path.join(this.dirs.assets, "objects", hash.slice(0, 2), hash),
       sha1: hash,
@@ -185,7 +227,7 @@ class Installer {
   }
 
   async modrinthFile(slug) {
-    const params = `loaders=${encodeURIComponent('["fabric"]')}&game_versions=${encodeURIComponent(`["${this.mcVersion}"]`)}`;
+    const params = `loaders=${encodeURIComponent(`["${this.loader}"]`)}&game_versions=${encodeURIComponent(`["${this.mcVersion}"]`)}`;
     const versions = await getJson(`${MODRINTH}/project/${slug}/version?${params}`);
     const version = versions.find((v) => v.version_type === "release") || versions[0];
     if (!version) return null;
@@ -205,7 +247,7 @@ class Installer {
     }
     const isOn = (m) => m.required || (enabled[m.slug] !== undefined ? Boolean(enabled[m.slug]) : Boolean(m.default));
     const slugs = new Set();
-    for (const mod of MANAGED_MODS.filter(isOn)) {
+    for (const mod of MANAGED_MODS.filter((m) => (m.loaders || ["fabric"]).includes(this.loader)).filter(isOn)) {
       slugs.add(mod.slug);
       for (const dep of mod.requires || []) slugs.add(dep);
     }
@@ -230,7 +272,7 @@ class Installer {
       }
     }
     const bundled = bundledMytic(bundledModsDir, this.mcVersion);
-    if (!bundled) this.log(`[Mods] Mytic-Ingame-Mods gibt es für ${this.mcVersion} noch nicht – Start mit Fabric und Performance-Mods`);
+    if (!bundled) this.log(`[Mods] Mytic-Ingame-Mods gibt es für ${this.mcVersion} noch nicht – Start ohne Mytic-Mod`);
     for (const name of bundled ? await fsp.readdir(bundled) : []) {
       if (!name.endsWith(".jar")) continue;
       await fsp.copyFile(path.join(bundled, name), path.join(modsDir, name));
@@ -248,8 +290,8 @@ class Installer {
   async install({ enabledMods = {}, bundledModsDir, modsDir, verify = false, skipAssets = false } = {}) {
     this.step("Minecraft-Version laden");
     const version = await this.versionJson();
-    this.step("Fabric laden");
-    const fabric = await this.fabricProfile();
+    this.step(this.loader === "forge" ? "Forge laden" : "Fabric laden");
+    const fabric = this.loader === "forge" ? await this.forgeProfile() : await this.fabricProfile();
 
     this.step("Java vorbereiten");
     const java = await ensureJava(version.javaVersion.component, this.dirs.runtime, {
@@ -278,9 +320,12 @@ class Installer {
     this.step("Native Dateien entpacken");
     await this.extractNatives(natives, nativesDir);
 
+    const gameDir = gameDirFor(this.dirs, this.mcVersion);
+    await fsp.mkdir(gameDir, { recursive: true });
+    if (!modsDir && this.loader === "forge") modsDir = path.join(gameDir, "mods");
     const mods = bundledModsDir ? await this.mods(enabledMods, bundledModsDir, modsDir) : [];
     this.step("Fertig", 1, 1);
-    return { mcVersion: this.mcVersion, version, fabric, java, clientJar, libraries, nativesDir, logConfig, mods };
+    return { mcVersion: this.mcVersion, loader: this.loader, gameDir, version, fabric, java, clientJar, libraries, nativesDir, logConfig, mods, modsDir };
   }
 }
 
@@ -300,6 +345,8 @@ async function availableVersions(cacheFile) {
     const [manifest, fabric] = await Promise.all([getJson(VERSION_MANIFEST), getJson(`${FABRIC_META}/versions/game`)]);
     const fabricOk = new Set(fabric.filter((v) => v.stable).map((v) => v.version));
     const list = manifest.versions.filter((v) => v.type === "release" && SUPPORTED.test(v.id) && fabricOk.has(v.id)).map((v) => v.id);
+    // ältere Versionen mit Forge ans Ende
+    for (const v of Object.keys(FORGE_VERSIONS)) if (manifest.versions.some((m) => m.id === v)) list.push(v);
     if (cacheFile && list.length) await fsp.writeFile(cacheFile, JSON.stringify(list)).catch(() => {});
     return list;
   } catch (error) {
@@ -316,6 +363,7 @@ async function availableVersions(cacheFile) {
 /** Baut die komplette Java-Kommandozeile. */
 function buildCommand(install, dirs, account, settings = {}, { platform = process.platform, arch = process.arch } = {}) {
   const { version, fabric, java, clientJar, libraries, nativesDir, logConfig } = install;
+  if (install.loader === "forge") return buildLegacyCommand(install, dirs, account, settings, platform);
   const separator = platform === "win32" ? ";" : ":";
   const classpath = [...libraries.map((l) => l.file), clientJar].join(separator);
   const features = { has_custom_resolution: Boolean(settings.width && settings.height) };
@@ -368,6 +416,61 @@ function buildCommand(install, dirs, account, settings = {}, { platform = proces
   return { java, args: [...jvm, fabric.mainClass, ...game] };
 }
 
+/** Kommandozeile für alte Versionen mit Forge (minecraftArguments-Format, LaunchWrapper, eigener Spielordner). */
+function buildLegacyCommand(install, dirs, account, settings, platform) {
+  const { version, fabric, java, clientJar, libraries, nativesDir, logConfig, gameDir } = install;
+  const separator = platform === "win32" ? ";" : ":";
+  const vars = {
+    auth_player_name: account.name,
+    version_name: `${install.mcVersion}-forge`,
+    game_directory: gameDir,
+    assets_root: dirs.assets,
+    assets_index_name: version.assetIndex.id,
+    auth_uuid: account.uuid.replace(/-/g, ""),
+    auth_access_token: account.accessToken || "0",
+    user_properties: "{}",
+    user_type: account.type === "microsoft" ? "msa" : "legacy",
+  };
+  const memory = Math.max(1024, Number(settings.memoryMb) || 4096);
+  const jvm = [
+    `-Xms${Math.min(1024, memory)}M`,
+    `-Xmx${memory}M`,
+    "-XX:+UseG1GC",
+    "-XX:MaxGCPauseMillis=200",
+    "-XX:+UnlockExperimentalVMOptions",
+    "-XX:G1NewSizePercent=20",
+    `-Djava.library.path=${nativesDir}`,
+    `-Dminecraft.launcher.brand=${LAUNCHER_NAME}`,
+    `-Dminecraft.launcher.version=${LAUNCHER_VERSION}`,
+    "-Dfml.ignoreInvalidMinecraftCertificates=true",
+    "-Dfml.ignorePatchDiscrepancies=true",
+    // Mytic-Einstellungen (Module, HUD-Positionen) teilen sich alle Versionen
+    `-Dmytic.config=${path.join(dirs.game, "config", "myticclient.json")}`,
+    ...(settings.jvmArgs ? settings.jvmArgs.split(/\s+/).filter(Boolean) : []),
+  ];
+  if (logConfig) jvm.push(substitute(logConfig.argument, { path: logConfig.file }));
+  jvm.push("-cp", [...libraries.map((l) => l.file), clientJar].join(separator));
+  const game = fabric.minecraftArguments.split(" ").filter(Boolean).map((a) => substitute(a, vars));
+  if (settings.width && settings.height) game.push("--width", String(settings.width), "--height", String(settings.height));
+  if (settings.fullscreen) game.push("--fullscreen");
+  if (settings.server) {
+    const [host, port] = settings.server.split(":");
+    game.push("--server", host, "--port", port || "25565");
+  }
+  // Mods des Profils: Forge lädt sie über --mods (Pfade relativ zum Spielordner)
+  const modsDir = settings.modsDir || install.modsDir;
+  if (modsDir) {
+    let jars = [];
+    try {
+      jars = require("node:fs").readdirSync(modsDir).filter((f) => f.endsWith(".jar"));
+    } catch {
+      // keine Mods
+    }
+    if (jars.length) game.push("--mods", jars.map((f) => path.relative(gameDir, path.join(modsDir, f))).join(","));
+  }
+  return { java, args: [...jvm, fabric.mainClass, ...game], cwd: gameDir };
+}
+
 /** Minecraft schreibt seine Logs als log4j-XML; daraus werden lesbare Zeilen wie "[12:00:01 INFO] [Logger] Text". */
 class Log4jParser {
   constructor(emit) {
@@ -400,7 +503,7 @@ class Log4jParser {
 }
 
 function launch(command, dirs, { onLog = () => {}, onExit = () => {} } = {}) {
-  const child = spawn(command.java, command.args, { cwd: dirs.game, windowsHide: false, env: { ...process.env, _JAVA_OPTIONS: undefined } });
+  const child = spawn(command.java, command.args, { cwd: command.cwd || dirs.game, windowsHide: false, env: { ...process.env, _JAVA_OPTIONS: undefined } });
   const forward = (stream) => {
     let buffer = "";
     const parser = new Log4jParser(onLog);
@@ -426,4 +529,4 @@ function defaultMemoryMb() {
   return Math.max(2048, Math.min(4096, Math.floor(total / 2 / 512) * 512));
 }
 
-module.exports = { Log4jParser, Installer, buildCommand, launch, rulesAllow, collectArguments, mavenPath, MANAGED_MODS, MC_VERSION, defaultMemoryMb, availableVersions, bundledMytic };
+module.exports = { loaderFor, gameDirFor, FORGE_VERSIONS, Log4jParser, Installer, buildCommand, launch, rulesAllow, collectArguments, mavenPath, MANAGED_MODS, MC_VERSION, defaultMemoryMb, availableVersions, bundledMytic };

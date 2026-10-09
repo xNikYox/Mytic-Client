@@ -6,7 +6,7 @@ const path = require("node:path");
 const os = require("node:os");
 const crypto = require("node:crypto");
 const { dirs: makeDirs } = require("./core/paths");
-const { Installer, buildCommand, launch, MANAGED_MODS, MC_VERSION, defaultMemoryMb, availableVersions, bundledMytic } = require("./core/minecraft");
+const { Installer, buildCommand, launch, MANAGED_MODS, MC_VERSION, defaultMemoryMb, availableVersions, bundledMytic, loaderFor, FORGE_VERSIONS } = require("./core/minecraft");
 const auth = require("./core/auth");
 const updater = require("./core/updater");
 const { ModBrowser } = require("./core/modrinth");
@@ -95,7 +95,10 @@ async function saveSettings(next) {
 }
 
 function browserFor(profile) {
-  return new ModBrowser(profiles.modsDir(DIRS.base, profile.id), profile.mcVersion || MC_VERSION, MANAGED_MODS.map((m) => m.slug));
+  const version = profile.mcVersion || MC_VERSION;
+  const loader = loaderFor(version);
+  const managed = MANAGED_MODS.filter((m) => (m.loaders || ["fabric"]).includes(loader)).map((m) => m.slug);
+  return new ModBrowser(profiles.modsDir(DIRS.base, profile.id), version, managed, loader);
 }
 
 async function activeBrowser() {
@@ -400,7 +403,8 @@ ipcMain.handle("state", () => ({
   settings: settings(),
   accounts: publicAccounts(),
   modules: gameModules(),
-  managedMods: MANAGED_MODS.map(({ slug, name, description, required, default: on, requires }) => ({ slug, name, description, required: Boolean(required), default: Boolean(on), requires: requires || [] })),
+  managedMods: MANAGED_MODS.map(({ slug, name, description, required, default: on, requires, loaders }) => ({ slug, name, description, required: Boolean(required), default: Boolean(on), requires: requires || [], loaders: loaders || ["fabric"] })),
+  forgeVersions: Object.keys(FORGE_VERSIONS),
   totalMemoryMb: Math.floor(os.totalmem() / 1024 / 1024),
   running: Boolean(game),
   offlineAllowed: OFFLINE_ALLOWED,

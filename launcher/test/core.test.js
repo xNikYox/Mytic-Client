@@ -117,3 +117,35 @@ test("Update über die Download-Seite (Entwicklerversion)", async () => {
   assert.equal(await checkSiteUpdate("2.6.0", base, "mytic-client-dev"), null);
   server.close();
 });
+
+test("1.8.9: Forge-Start mit eigenem Spielordner und Profil-Mods", async () => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const { loaderFor, gameDirFor, buildCommand } = require("../src/core/minecraft");
+  assert.equal(loaderFor("1.8.9"), "forge");
+  assert.equal(loaderFor("1.21.11"), "fabric");
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), "mytic-189-"));
+  const dirs = { base, game: path.join(base, "game"), assets: path.join(base, "assets") };
+  assert.equal(gameDirFor(dirs, "1.8.9"), path.join(base, "game-1.8.9"));
+  assert.equal(gameDirFor(dirs, "1.21.11"), dirs.game);
+  const modsDir = path.join(base, "profiles", "p1", "mods");
+  fs.mkdirSync(modsDir, { recursive: true });
+  fs.writeFileSync(path.join(modsDir, "a.jar"), "");
+  fs.writeFileSync(path.join(modsDir, "b.jar.disabled"), "");
+  const install = {
+    mcVersion: "1.8.9", loader: "forge", gameDir: gameDirFor(dirs, "1.8.9"), java: "java", clientJar: "client.jar",
+    libraries: [{ file: "lw.jar" }], nativesDir: "natives", logConfig: null, version: { assetIndex: { id: "1.8" } },
+    fabric: { mainClass: "net.minecraft.launchwrapper.Launch", minecraftArguments: "--username ${auth_player_name} --gameDir ${game_directory} --assetIndex ${assets_index_name} --userProperties ${user_properties} --tweakClass x.FMLTweaker" },
+  };
+  const cmd = buildCommand(install, dirs, offlineAccount("Steve"), { modsDir, server: "play.example.net" }, { platform: "linux" });
+  const args = cmd.args;
+  assert.equal(cmd.cwd, install.gameDir);
+  assert.equal(args[args.indexOf("--gameDir") + 1], install.gameDir);
+  assert.equal(args[args.indexOf("--userProperties") + 1], "{}");
+  assert.equal(args[args.indexOf("--mods") + 1], ["..", "profiles", "p1", "mods", "a.jar"].join(path.sep));
+  assert.deepEqual(args.slice(args.indexOf("--server"), args.indexOf("--server") + 4), ["--server", "play.example.net", "--port", "25565"]);
+  assert.ok(args.includes("net.minecraft.launchwrapper.Launch"));
+  assert.ok(args.some((a) => a.startsWith("-Dmytic.config=")));
+  fs.rmSync(base, { recursive: true, force: true });
+});

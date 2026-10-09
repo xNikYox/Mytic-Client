@@ -1,0 +1,34 @@
+// 1.8.9-Profil: Versionsauswahl mit Forge, passende Performance-Mods, Mod-Browser sucht Forge-Mods.
+const { app, BrowserWindow } = require("electron");
+const fs = require("node:fs");
+const path = require("node:path");
+const out = process.env.SHOT_DIR;
+app.commandLine.appendSwitch("ozone-platform", "headless");
+require("../src/main.js");
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+app.whenReady().then(async () => {
+  await wait(9000);
+  const win = BrowserWindow.getAllWindows()[0];
+  const js = (code) => win.webContents.executeJavaScript(`try { ${code} } catch (e) { "FEHLER: " + e.message }`);
+  const shot = async (name) => fs.writeFileSync(path.join(out, `${name}.png`), (await win.capturePage()).toPNG());
+  console.log("Versionen:", await js(`[...document.getElementById('profile-version').options].map(o=>o.textContent).join(', ')`));
+  await js(`document.getElementById('profile-button').click()`);
+  await wait(400);
+  await js(`const s=document.getElementById('profile-version'); s.value='1.8.9'; s.dispatchEvent(new Event('change'))`);
+  await wait(1500);
+  console.log("Startseite:", await js(`document.getElementById('launch-profile').textContent + ' / ' + document.getElementById('mc-loader').textContent`), "| Hinweis:", !(await js(`document.getElementById('version-hint').hidden`)));
+  console.log("Perf-Chips:", await js(`[...document.querySelectorAll('#perf-chips .pill')].map(p=>p.textContent+(p.classList.contains('on')?'*':'')).join(', ')`));
+  await js(`document.body.click()`);
+  await shot("v189-start");
+  console.log("Seite:", await js(`document.querySelector('[data-page="browser"]').click(); document.querySelector('.page.active').id`));
+  await wait(9000);
+  console.log("Browser:", await js(`document.getElementById('browser-info').textContent`));
+  console.log("Treffer:", await js(`[...document.querySelectorAll('#browser-results .mr-title, #browser-results b')].slice(0,6).map(e=>e.textContent).join(' | ')`));
+  await shot("v189-browser");
+  await js(`document.getElementById('profile-button').click()`);
+  await wait(300);
+  await js(`const s=document.getElementById('profile-version'); s.value='1.21.11'; s.dispatchEvent(new Event('change'))`);
+  await wait(1200);
+  console.log("Zurück:", await js(`document.getElementById('launch-profile').textContent`));
+  app.quit();
+});

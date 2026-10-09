@@ -4,7 +4,7 @@
 
 **Ein eigener Minecraft-Client im Stil von Lunar: moderner Launcher, FPS-Boost und 32 In-Game-Mods.**
 
-Minecraft 1.21 – 1.21.11 und 26.x · Fabric · Windows
+Minecraft 1.8.9, 1.21 – 1.21.11 und 26.x · Fabric & Forge · Windows
 
 **[⬇ Neueste Version herunterladen](https://github.com/xNikYox/Mytic-Client/releases/latest)**
 
@@ -22,7 +22,8 @@ Minecraft 1.21 – 1.21.11 und 26.x · Fabric · Windows
 - **Microsoft-Login:** Anmeldung mit dem echten Minecraft-Konto. Der Launcher prüft, ob das Konto Minecraft: Java Edition besitzt.
 - **Mehrere Konten:** schnell zwischen Konten wechseln. Die Anmeldedaten werden mit der Verschlüsselung des Betriebssystems gespeichert.
 - **Schnellverbindung:** direkt beim Start auf einen Server verbinden, zuletzt genutzte Server mit einem Klick.
-- **Alle Versionen:** jedes Profil kann eine eigene Minecraft-Version nutzen, von 1.21 bis 1.21.11 und 26.x. Java 21 bzw. 25 lädt der Launcher automatisch, und der Mod-Browser zeigt nur Mods für die gewählte Version. Die Mytic-Ingame-Mods laufen auf allen diesen Versionen.
+- **Alle Versionen:** jedes Profil kann eine eigene Minecraft-Version nutzen, von 1.21 bis 1.21.11 und 26.x (Fabric) sowie die PvP-Version 1.8.9 (Forge). Java 8, 21 bzw. 25 lädt der Launcher automatisch, und der Mod-Browser zeigt nur Mods für die gewählte Version und den passenden Loader. Die Mytic-Ingame-Mods laufen auf allen diesen Versionen.
+- **1.8.9 mit Forge:** eigener Spielordner (Optionen und Welten von 1.8.9 sind mit neuen Versionen nicht kompatibel), EntityCulling automatisch, PolyPatcher optional. Mod-Einstellungen und HUD-Positionen teilen sich alle Versionen.
 - **Profile:** mehrere Profile, jedes mit eigenen Mods und eigener Auswahl an Performance-Mods, zum Beispiel „PvP“ und „Survival“. Welten, Server-Liste, Texturpakete und Einstellungen teilen sich alle Profile.
 - **Mod-Browser:** Mods von Modrinth suchen und mit einem Klick installieren. Benötigte Mods kommen automatisch mit, eigene Mods lassen sich an- und ausschalten und werden bei jedem Start aktualisiert.
 - **Mods verwalten:** alle In-Game- und Performance-Mods per Schalter an- und ausschalten, mit Suche und Kategorien.
@@ -49,7 +50,7 @@ Jede HUD-Anzeige hat diese Einstellungen: Größe, Hintergrund, Deckkraft, abger
 
 ### Performance
 
-Diese Mods kommen automatisch von [Modrinth](https://modrinth.com): **Sodium**, **Lithium**, **FerriteCore**, **ImmediatelyFast** und **EntityCulling**. **Iris** für Shader lässt sich zuschalten.
+Diese Mods kommen automatisch von [Modrinth](https://modrinth.com): **Sodium**, **Lithium**, **FerriteCore**, **ImmediatelyFast** und **EntityCulling**. **Iris** für Shader lässt sich zuschalten. In 1.8.9 lädt der Launcher **EntityCulling**, **PolyPatcher** lässt sich zuschalten.
 
 ## Screenshots
 
@@ -87,6 +88,8 @@ mod-26/     Build für Minecraft 26.x (Java 25): nutzt den Quellcode aus mod/; A
             Bauen: ./gradlew build -Pmc=26.1 (bzw. 26.1.1, 26.1.2, 26.2, 26.3)
 mod-121/    Build für Minecraft 1.21 bis 1.21.10 (Java 21): gleicher Quellcode, Abweichungen in src/mc<version>
             Bauen: ./gradlew build -Pmc=1.21.10 (bzw. 1.21 – 1.21.9)
+mod-189/    Forge-Mod für Minecraft 1.8.9 (Java 8, gebaut mit JDK 21): eigener Quellcode mit gleichem Aufbau und gleicher
+            Konfiguration; Kompatibilitätsschicht in compat/, Forge-Events statt Mixins. Bauen: ./gradlew build
 build-mods.sh  baut die Mod für alle Versionen und legt sie in launcher/resources/mods/<version>/
 launcher/   Electron-Launcher: Login, Download von Java/Minecraft/Fabric/Mods, Spielstart, Oberfläche
 docs/       Anleitung für den Microsoft-Login, Screenshots
@@ -99,16 +102,14 @@ docs/       Anleitung für den Microsoft-Login, Screenshots
 
 ## Selbst bauen
 
-Du brauchst Java 21 und Node.js 20 oder neuer.
+Du brauchst JDK 21, JDK 25 (für 26.x) und Node.js 20 oder neuer.
 
 ```sh
-# 1. Mod bauen und in den Launcher legen
-cd mod
-./gradlew build
-cp build/libs/mytic-client-*.jar ../launcher/resources/mods/
+# 1. Mod für alle Versionen bauen (legt sie in launcher/resources/mods/<version>/)
+JAVA21_HOME=/pfad/zu/jdk-21 JAVA25_HOME=/pfad/zu/jdk-25 ./build-mods.sh
 
 # 2. Launcher starten, testen, bauen
-cd ../launcher
+cd launcher
 npm install
 npm start                          # Launcher zum Ausprobieren starten
 npm test                           # Unit-Tests

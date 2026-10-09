@@ -1,0 +1,82 @@
+package de.myticlegacy.client.hud;
+
+import de.myticlegacy.client.compat.Compat;
+import de.myticlegacy.client.gui.Ui;
+import de.myticlegacy.client.setting.BoolSetting;
+import net.minecraft.client.Minecraft;
+import de.myticlegacy.client.compat.GuiGraphics;
+import de.myticlegacy.client.compat.Font;
+import net.minecraft.client.network.NetworkPlayerInfo;
+import net.minecraft.entity.EntityLivingBase;
+import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.init.Items;
+
+/** Zeigt den anvisierten bzw. zuletzt getroffenen Gegner: Kopf, Name, Lebensbalken, Distanz. */
+public class TargetHudModule extends HudModule {
+    private final BoolSetting showDistance;
+    private float shownHealth = -1;
+
+    public TargetHudModule() {
+        super("targethud", "Target-HUD", "Leben und Name deines Gegners", () -> Items.skull, false, 10000, 200);
+        showDistance = new BoolSetting(this, "distance", "Distanz zeigen", true);
+    }
+
+    @Override
+    public boolean hasContent() {
+        return CombatTracker.target() != null;
+    }
+
+    @Override
+    public int baseWidth() {
+        return 128;
+    }
+
+    @Override
+    public int baseHeight() {
+        return 38;
+    }
+
+    @Override
+    protected void render(GuiGraphics g, boolean preview) {
+        Minecraft mc = Minecraft.getMinecraft();
+        EntityLivingBase target = CombatTracker.target();
+        if (target == null && !preview) return;
+        String name = target != null ? target.getDisplayName().getUnformattedText() : "Gegner";
+        float health = target != null ? target.getHealth() + target.getAbsorptionAmount() : 14.5f;
+        float max = target != null ? target.getMaxHealth() : 20f;
+        if (shownHealth < 0 || Math.abs(shownHealth - health) > max) shownHealth = health;
+        shownHealth += (health - shownHealth) * 0.15f;
+
+        int w = baseWidth();
+        int h = baseHeight();
+        if (background.get()) {
+            Ui.rect(g, 0, 0, w, h, rounded.get() ? 4 : 0, Ui.withAlpha(0x0B0812, (int) Math.round(backgroundOpacity.get() * 2.55)));
+        }
+        int face = 30;
+        NetworkPlayerInfo info = target instanceof EntityPlayer && mc.getNetHandler() != null ? mc.getNetHandler().getPlayerInfo(target.getUniqueID()) : null;
+        if (info != null) {
+            Compat.drawFace(g, info, 4, 4, face);
+        } else {
+            Ui.rect(g, 4, 4, face, face, 3, Ui.withAlpha(Ui.accent(), 160));
+            Ui.centered(g, name.isEmpty() ? "?" : name.substring(0, 1).toUpperCase(), 4 + face / 2, 4 + face / 2 - 4, 0xFFFFFFFF, true);
+        }
+        Font font = Ui.font();
+        int textX = face + 10;
+        String clipped = font.plainSubstrByWidth(name, w - textX - 4);
+        g.drawString(font, clipped, textX, 6, color(), textShadow());
+
+        float ratio = Math.max(0, Math.min(1, shownHealth / max));
+        int barW = w - textX - 6;
+        int barY = 18;
+        Ui.rect(g, textX, barY, barW, 5, 2, 0x80000000);
+        int barColor = ratio > 0.5f ? 0xFF5BE38A : ratio > 0.25f ? 0xFFFFD84A : 0xFFFF5C72;
+        Ui.rect(g, textX, barY, Math.max(4, Math.round(barW * ratio)), 5, 2, barColor);
+
+        String hp = String.format("%.1f ❤", health);
+        g.drawString(font, hp, textX, 27, 0xFFFF8A9E, textShadow());
+        if (showDistance.get()) {
+            String distance = target != null && mc.thePlayer != null ? String.format("%.1f m", mc.thePlayer.getDistanceToEntity(target)) : "2.8 m";
+            g.drawString(font, distance, w - 6 - font.width(distance), 27, 0xFFB0A8C8, textShadow());
+        }
+    }
+}

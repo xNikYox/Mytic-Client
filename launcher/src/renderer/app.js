@@ -246,13 +246,18 @@ let profileState = { active: null, list: [] };
 let versions = [];
 const activeProfile = () => profileState.list.find((p) => p.id === profileState.active) || { perf: {}, name: "Standard", color: "#9b5cff" };
 
+const loaderOf = (version) => ((state.forgeVersions || []).includes(version) ? "forge" : "fabric");
+const loaderName = (version) => (loaderOf(version) === "forge" ? "Forge" : "Fabric");
+/** Performance-Mods, die zum Loader des aktiven Profils passen (Fabric oder Forge bei 1.8.9). */
+const profileManagedMods = () => state.managedMods.filter((m) => m.loaders.includes(loaderOf(activeProfile().mcVersion)));
+
 function perfEnabled(mod) {
   return mod.required || ((activeProfile().perf || {})[mod.slug] ?? mod.default);
 }
 
 function allMods() {
   const game = state.modules.map((m) => ({ key: `m:${m.id}`, name: m.name, description: m.description, category: m.category, on: m.enabled, locked: false, game: m }));
-  const perf = state.managedMods.map((m) => ({
+  const perf = profileManagedMods().map((m) => ({
     key: `p:${m.slug}`, name: m.name, description: m.required ? "Wird immer benötigt" : m.description, category: "Performance", on: perfEnabled(m), locked: m.required, perf: m,
   }));
   return [...game, ...perf];
@@ -306,7 +311,7 @@ $("mod-search").addEventListener("input", renderMods);
 
 function renderSummary() {
   const chips = $("perf-chips");
-  chips.replaceChildren(...state.managedMods.filter((m) => !m.required).map((m) => el("span", `pill${perfEnabled(m) ? " on" : ""}`, m.name)));
+  chips.replaceChildren(...profileManagedMods().filter((m) => !m.required).map((m) => el("span", `pill${perfEnabled(m) ? " on" : ""}`, m.name)));
   $("ram-summary").textContent = `${(state.settings.memoryMb / 1024).toFixed(1)} GB`;
 }
 
@@ -595,7 +600,7 @@ async function loadBrowser(reset) {
     results.append(...page.hits.map((m) => browserCard(m)));
     if (reset && page.hits.length === 0) results.append(el("p", "sub", `Keine passenden Mods für ${activeProfile().mcVersion} gefunden.`));
     $("browser-more").hidden = browserOffset >= browserTotal;
-    $("browser-info").textContent = `${formatCount(browserTotal)} Mods für Minecraft ${activeProfile().mcVersion} mit Fabric · Installiert ins Profil „${activeProfile().name}“`;
+    $("browser-info").textContent = `${formatCount(browserTotal)} Mods für Minecraft ${activeProfile().mcVersion} mit ${loaderName(activeProfile().mcVersion)} · Installiert ins Profil „${activeProfile().name}“`;
   } catch (error) {
     if (reset) results.replaceChildren(el("p", "sub", `Modrinth ist gerade nicht erreichbar: ${errorText(error)}`));
   }
@@ -657,7 +662,7 @@ function iconButton(svg, title, className) {
 function fillVersionSelect(select, value) {
   const list = versions.length ? versions : [value];
   select.replaceChildren(...list.map((v) => {
-    const option = el("option", null, v);
+    const option = el("option", null, loaderOf(v) === "forge" ? `${v} · Forge` : v);
     option.value = v;
     return option;
   }));
@@ -671,11 +676,12 @@ async function applyProfiles(next, switched) {
   if (before && before.mcVersion && before.mcVersion !== p.mcVersion && before.id === p.id) switched = true;
   $("profile-name").textContent = p.name;
   $("mc-version").textContent = p.mcVersion;
+  $("mc-loader").textContent = loaderName(p.mcVersion);
   $("version-profile").textContent = p.name;
   fillVersionSelect($("profile-version"), p.mcVersion);
   fillVersionSelect($("profile-new-version"), p.mcVersion);
   $("version-hint").hidden = p.mytic;
-  $("version-hint").textContent = `Mytic-Ingame-Mods (HUD, Menü) gibt es für ${p.mcVersion} noch nicht – das Spiel startet mit Fabric und Performance-Mods. Weitere Versionen folgen.`;
+  $("version-hint").textContent = `Mytic-Ingame-Mods (HUD, Menü) gibt es für ${p.mcVersion} noch nicht – das Spiel startet mit ${loaderName(p.mcVersion)} und Performance-Mods. Weitere Versionen folgen.`;
   $("mytic-notice").hidden = p.mytic;
   $("mytic-notice").textContent = `Hinweis: Für Minecraft ${p.mcVersion} (Profil „${p.name}“) gibt es die Mytic-Ingame-Mods noch nicht. Sie folgen in den nächsten Updates.`;
   $("profile-dot").style.background = p.color;

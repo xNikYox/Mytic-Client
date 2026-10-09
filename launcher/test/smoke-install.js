@@ -7,7 +7,9 @@ const { offlineAccount } = require("../src/core/auth");
 (async () => {
   const d = dirs(process.argv[2]);
   let last = "";
+  const version = (process.argv.find((a) => a.startsWith("--version=")) || "").slice(10) || undefined;
   const installer = new Installer(d, {
+    version,
     log: (l) => console.log(l),
     progress: ({ label, done, total }) => {
       const line = `${label}${total ? ` ${done}/${total}` : ""}`;
