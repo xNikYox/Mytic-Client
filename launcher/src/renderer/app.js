@@ -783,11 +783,79 @@ $("profile-button").addEventListener("click", () => {
   $("accounts").hidden = true;
   $("profiles").hidden = !$("profiles").hidden;
 });
+// ---------------------------------------------------------------------------------------------- Import
+
+const IMPORT_SOURCE_CLASS = { "Modrinth App": "modrinth", NoRiskClient: "norisk", "Lunar Client": "lunar" };
+const LOADER_LABEL = { fabric: "Fabric", forge: "Forge", neoforge: "NeoForge", quilt: "Quilt", vanilla: "Vanilla", unknown: "" };
+
+function importRow(item) {
+  const row = el("div", `imp${item.target ? "" : " off"}`);
+  row.append(el("span", `imp-src ${IMPORT_SOURCE_CLASS[item.source] || ""}`, item.source));
+  const body = el("div", "imp-body");
+  const loader = LOADER_LABEL[item.loader] ?? item.loader;
+  const facts = [item.mcVersion ? `Minecraft ${item.mcVersion}` : "Version unbekannt", loader, `${item.modCount} ${item.modCount === 1 ? "Mod" : "Mods"}`].filter(Boolean).join(" · ");
+  body.append(el("b", null, item.name), el("small", null, facts));
+  if (item.reason) body.append(el("small", "warn", ` – ${item.reason}`));
+  else if (item.target !== item.mcVersion) body.append(el("small", null, ` → als ${item.target}`));
+  row.append(body);
+  const button = el("button", "mr-btn install", "Übernehmen");
+  button.disabled = !item.target;
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    button.textContent = "Importiere …";
+    try {
+      const result = await api.runImport(item.id);
+      await applyProfiles(result.profiles, true);
+      $("import").hidden = true;
+      toast(`Profil „${result.name}“ angelegt: ${result.copied} Mods übernommen, ${result.identified} davon bei Modrinth erkannt${result.skipped ? `, ${result.skipped} passten nicht` : ""}.`);
+    } catch (error) {
+      button.disabled = false;
+      button.textContent = "Übernehmen";
+      toast(errorText(error), true);
+    }
+  });
+  row.append(button);
+  return row;
+}
+
+async function scanImports() {
+  const list = $("import-list");
+  list.replaceChildren(el("p", "sub", "Suche nach Profilen …"));
+  try {
+    const items = await api.scanImports();
+    list.replaceChildren(...items.map(importRow));
+    if (!items.length) list.append(el("p", "sub", "Keine Profile gefunden. Installierte Launcher: Modrinth App, NoRiskClient oder Lunar Client – oder wähle eine .mrpack-Datei."));
+  } catch (error) {
+    list.replaceChildren(el("p", "error", errorText(error)));
+  }
+}
+
+$("import-open").addEventListener("click", () => {
+  $("profiles").hidden = true;
+  $("import").hidden = false;
+  scanImports();
+});
+$("import-rescan").addEventListener("click", scanImports);
+$("import-file").addEventListener("click", async () => {
+  try {
+    const item = await api.importFile();
+    if (item) $("import-list").prepend(importRow(item));
+  } catch (error) {
+    toast(errorText(error), true);
+  }
+});
+$("import").addEventListener("click", (e) => {
+  if (e.target === $("import")) $("import").hidden = true;
+});
+
 $("profiles").addEventListener("click", (e) => {
   if (e.target === $("profiles")) $("profiles").hidden = true;
 });
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") $("profiles").hidden = true;
+  if (e.key === "Escape") {
+    $("profiles").hidden = true;
+    $("import").hidden = true;
+  }
 });
 $("profile-version").addEventListener("change", async () => {
   profileError("");

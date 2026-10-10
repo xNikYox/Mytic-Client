@@ -149,3 +149,84 @@ test("1.8.9: Forge-Start mit eigenem Spielordner und Profil-Mods", async () => {
   assert.ok(args.some((a) => a.startsWith("-Dmytic.config=")));
   fs.rmSync(base, { recursive: true, force: true });
 });
+
+test("Import: Modrinth App, NoRiskClient, Lunar und .mrpack werden erkannt", () => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const AdmZip = require("adm-zip");
+  const { DatabaseSync } = require("node:sqlite");
+  const importer = require("../src/core/importer");
+  const { loaderFor } = require("../src/core/minecraft");
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "mytic-import-test-"));
+  const jar = (file, meta) => {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const zip = new AdmZip();
+    zip.addFile(meta, Buffer.from("{}"));
+    zip.writeZip(file);
+  };
+  const paths = {
+    modrinth: path.join(home, "ModrinthApp"),
+    noriskData: path.join(home, "norisk"),
+    noriskMeta: path.join(home, "norisk", "meta"),
+    lunar: path.join(home, ".lunarclient"),
+  };
+  // Modrinth App (neues Schema)
+  fs.mkdirSync(paths.modrinth, { recursive: true });
+  let db = new DatabaseSync(path.join(paths.modrinth, "app.db"));
+  db.exec(`CREATE TABLE instances (id TEXT, path TEXT, name TEXT, applied_content_set_id TEXT);
+           CREATE TABLE instance_content_sets (id TEXT, game_version TEXT, loader TEXT);
+           INSERT INTO instances VALUES ('a', 'pvp', 'PvP Pack', 'c1'), ('b', 'old', 'Alt', 'c2');
+           INSERT INTO instance_content_sets VALUES ('c1', '1.21.11', 'fabric'), ('c2', '1.20.1', 'forge');`);
+  db.close();
+  jar(path.join(paths.modrinth, "profiles", "pvp", "mods", "a.jar"), "fabric.mod.json");
+  jar(path.join(paths.modrinth, "profiles", "pvp", "mods", "b.jar"), "fabric.mod.json");
+  // NoRiskClient
+  fs.mkdirSync(paths.noriskMeta, { recursive: true });
+  db = new DatabaseSync(path.join(paths.noriskMeta, "app.db"));
+  db.exec(`CREATE TABLE profiles (id TEXT, name TEXT, path TEXT, game_version TEXT, loader TEXT, is_standard_version INTEGER);
+           CREATE TABLE profile_mods (profile_id TEXT, source TEXT, enabled INTEGER);
+           INSERT INTO profiles VALUES ('n1', 'Survival', 'survival', '1.21.10', 'fabric', 0), ('n2', 'NRC 1.21', 'std', '1.21.4', 'fabric', 1);`);
+  db.prepare("INSERT INTO profile_mods VALUES (?, ?, 1)").run("n1", JSON.stringify({ type: "modrinth", project_id: "P", version_id: "V", file_name: "sodium.jar", download_url: "https://cdn.modrinth.com/data/P/versions/V/sodium.jar" }));
+  db.prepare("INSERT INTO profile_mods VALUES (?, ?, 1)").run("n1", JSON.stringify({ type: "url", url: "https://evil.example/x.jar" }));
+  db.close();
+  jar(path.join(paths.noriskData, "profiles", "survival", "mods", "local.jar"), "fabric.mod.json");
+  // Lunar Client
+  jar(path.join(paths.lunar, "profiles", "lunar", "1.21", "mods", "fabric-1.21.11", "l.jar"), "fabric.mod.json");
+  jar(path.join(paths.lunar, "profiles", "lunar", "1.8", "mods", "f.jar"), "mcmod.info");
+
+  const available = ["1.21.11", "1.21.10", "1.21.4", "1.8.9"];
+  const { list } = importer.scan({ paths, available, loaderFor });
+  const by = (name) => list.find((e) => e.name === name);
+  assert.equal(by("PvP Pack").target, "1.21.11");
+  assert.equal(by("PvP Pack").modCount, 2);
+  assert.equal(by("Alt").target, null);
+  assert.equal(by("Survival").target, "1.21.10");
+  assert.equal(by("Survival").modCount, 2, "lokale Jar + Modrinth-Download, unsichere URL ignoriert");
+  assert.equal(by("NRC 1.21"), undefined, "Standard-Profile von NoRisk werden nicht angeboten");
+  assert.equal(by("Lunar 1.21.11").target, "1.21.11");
+  assert.equal(by("Lunar 1.8").target, "1.8.9", "Lunars 1.8-Ordner ist 1.8.9 (Forge)");
+  assert.equal(importer.resolveVersion("1.21", ["1.21.11", "1.21.9"]), "1.21.11");
+  assert.equal(importer.resolveVersion("1.21", ["1.21.11", "1.21"]), "1.21");
+
+  const pack = new AdmZip();
+  pack.addFile("modrinth.index.json", Buffer.from(JSON.stringify({
+    formatVersion: 1, game: "minecraft", name: "Mein Pack",
+    dependencies: { minecraft: "1.21.11", "fabric-loader": "0.19.5" },
+    files: [
+      { path: "mods/x.jar", downloads: ["https://cdn.modrinth.com/data/a/x.jar"], hashes: { sha1: "0" }, fileSize: 1 },
+      { path: "mods/server.jar", env: { client: "unsupported", server: "required" }, downloads: ["https://cdn.modrinth.com/s.jar"], hashes: {} },
+      { path: "config/a.json", downloads: ["https://cdn.modrinth.com/c"], hashes: {} },
+    ],
+  })));
+  pack.addFile("overrides/mods/extra.jar", Buffer.from("x"));
+  const packFile = path.join(home, "pack.mrpack");
+  pack.writeZip(packFile);
+  const entry = importer.readMrpack(packFile);
+  assert.equal(entry.downloads.length, 1);
+  assert.deepEqual(entry.packJars, ["overrides/mods/extra.jar"]);
+  const ev = importer.evaluate(entry, available, loaderFor);
+  assert.equal(ev.target, "1.21.11");
+  assert.equal(ev.modCount, 2);
+  fs.rmSync(home, { recursive: true, force: true });
+});

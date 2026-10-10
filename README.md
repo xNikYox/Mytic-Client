@@ -18,6 +18,7 @@ Minecraft 1.8.9, 1.21 – 1.21.11 und 26.x · Fabric & Forge · Windows
 
 ### Launcher
 
+- **Profile importieren:** Profile aus Modrinth App, NoRiskClient (NRC) und Lunar Client sowie Modrinth-Modpacks (.mrpack) übernehmen – mit Version und Mods. Die Mods werden über Modrinth erkannt und später automatisch aktualisiert.
 - **Neon-Design:** dunkler Gaming-Look mit Synthwave-Szene, Leuchtrahmen und Neon-Akzenten in Pink, Violett und Cyan.
 - **Ein Klick zum Spielen:** Java, Minecraft 1.21.11, Fabric und alle Mods werden automatisch heruntergeladen und aktuell gehalten. Spieler müssen nichts extra installieren.
 - **Microsoft-Login:** Anmeldung mit dem echten Minecraft-Konto. Der Launcher prüft, ob das Konto Minecraft: Java Edition besitzt.

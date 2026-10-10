@@ -196,6 +196,25 @@ input:focus, select:focus { border-color: var(--neon-cyan); box-shadow: 0 0 0 3p
 
 ::-webkit-scrollbar-thumb { background: linear-gradient(var(--neon-violet), var(--neon-pink)); background-clip: padding-box; }
 
+/* Import aus anderen Launchern */
+.import-open { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.import-open svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.popover.modal { background: rgba(3, 2, 8, .55); backdrop-filter: blur(4px); }
+.import-card { top: 50%; left: 50%; right: auto; transform: translate(-50%, -50%); width: min(620px, calc(100vw - 120px)); max-height: calc(100vh - 120px); animation: none; }
+.import-list { display: grid; gap: 8px; overflow: auto; max-height: calc(100vh - 300px); padding-right: 2px; }
+.imp { display: grid; grid-template-columns: 116px 1fr auto; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--glass-line); background: rgba(255, 255, 255, .03); }
+.imp.off { opacity: .6; }
+.imp-src { justify-self: start; font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 8px; border-radius: 99px; white-space: nowrap; background: rgba(162, 89, 255, .14); color: #e2c6ff; border: 1px solid rgba(162, 89, 255, .4); }
+.imp-src.modrinth { background: rgba(27, 217, 106, .12); color: #9ff2c3; border-color: rgba(27, 217, 106, .4); }
+.imp-src.norisk { background: rgba(255, 90, 90, .12); color: #ffb3b3; border-color: rgba(255, 90, 90, .4); }
+.imp-src.lunar { background: rgba(34, 229, 255, .1); color: #b9f6ff; border-color: rgba(34, 229, 255, .4); }
+.imp-body { min-width: 0; line-height: 1.3; }
+.imp-body b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.imp-body small { color: var(--muted); font-size: 12px; }
+.imp-body small.warn { color: #ffcf5a; }
+.imp .mr-btn { min-width: 108px; }
+.import-foot { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+
 @media (prefers-reduced-motion: reduce) {
   .hero-grid::before, .sun-glow, .chip i { animation: none; }
 }

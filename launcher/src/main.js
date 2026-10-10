@@ -1,5 +1,6 @@
 // Electron-Hauptprozess des Mytic Client Launchers.
-const { app, BrowserWindow, ipcMain, shell, safeStorage, session } = require("electron");
+const { app, BrowserWindow, ipcMain, shell, safeStorage, session, dialog } = require("electron");
+const importer = require("./core/importer");
 const fs = require("node:fs");
 const fsp = require("node:fs/promises");
 const path = require("node:path");
@@ -330,6 +331,49 @@ ipcMain.handle("profiles:version", async (e, id, mcVersion) => {
   return profileList();
 });
 ipcMain.handle("versions:list", () => availableVersions(path.join(DIRS.base, "versions-cache.json")));
+
+// ---------------------------------------------------------------------------------------------- Import aus anderen Launchern
+const importCache = new Map();
+
+ipcMain.handle("import:scan", async () => {
+  const available = await availableVersions(path.join(DIRS.base, "versions-cache.json"));
+  const { entries, list } = importer.scan({ available, loaderFor });
+  importCache.clear();
+  entries.forEach((entry, i) => importCache.set(entry.id, { entry, evaluation: list[i] }));
+  return list;
+});
+ipcMain.handle("import:file", async () => {
+  const result = await dialog.showOpenDialog(win, {
+    title: "Modpack importieren",
+    filters: [{ name: "Modrinth-Modpack", extensions: ["mrpack"] }],
+    properties: ["openFile"],
+  });
+  if (result.canceled || !result.filePaths[0]) return null;
+  let entry;
+  try {
+    entry = importer.readMrpack(result.filePaths[0]);
+  } catch {
+    throw new Error("Die Datei ist kein gültiges Modrinth-Modpack (.mrpack).");
+  }
+  const available = await availableVersions(path.join(DIRS.base, "versions-cache.json"));
+  const evaluation = importer.evaluate(entry, available, loaderFor);
+  importCache.set(entry.id, { entry, evaluation });
+  return evaluation;
+});
+ipcMain.handle("import:run", async (e, id) => {
+  if (game) throw new Error("Bitte zuerst Minecraft beenden.");
+  const cached = importCache.get(id);
+  if (!cached) throw new Error("Profil nicht mehr gefunden – bitte neu suchen.");
+  const result = await importer.importEntry(cached.entry, cached.evaluation, {
+    settings: await ensureProfiles(),
+    base: DIRS.base,
+    loaderFor,
+    browserFor,
+    log: (line) => emit("log", line),
+  });
+  await saveSettings(result.settings);
+  return { profiles: await profileList(), name: result.profile.name, copied: result.copied, identified: result.identified, skipped: result.skipped };
+});
 ipcMain.handle("profiles:rename", async (e, id, name) => {
   await saveSettings(profiles.rename(await ensureProfiles(), id, name));
   return profileList();

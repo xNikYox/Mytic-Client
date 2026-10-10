@@ -119,10 +119,11 @@
 
       <div class="cards">
         <article class="glass card">
-          <header><h3>Neu in 2.15</h3><span class="badge">Update</span></header>
+          <header><h3>Neu in 2.16</h3><span class="badge">Update</span></header>
           <ul class="news">
+            <li><b>Profile importieren:</b> aus Modrinth App, NoRiskClient, Lunar Client und .mrpack-Dateien</li>
             <li><b>Neues Hauptmenü im Spiel:</b> schlicht und klar mit Mond-Emblem</li>
-            <li><b>HUD im Lunar-Stil:</b> eckige dunkle Boxen, „120 FPS“ – Neon und Klassisch bleiben wählbar</li>
+            <li><b>HUD neu:</b> eckige dunkle Boxen, „120 FPS“ – Neon und Klassisch bleiben wählbar</li>
             <li><b>Minecraft 1.8.9:</b> die PvP-Version mit Forge, pro Profil wählbar</li>
           </ul>
         </article>
@@ -243,7 +244,22 @@
         <select id="profile-new-version" aria-label="Version des neuen Profils"></select>
         <button class="ghost" type="submit">Erstellen</button>
       </form>
+      <button class="ghost import-open" id="import-open" type="button">
+        <svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19h14"/></svg>Aus anderem Launcher importieren
+      </button>
       <p class="error" id="profile-error" hidden></p>
+    </div>
+  </div>
+
+  <!-- Import aus anderen Launchern -->
+  <div class="popover modal" id="import" hidden>
+    <div class="popover-card glass import-card" role="dialog" aria-label="Profile importieren">
+      <div class="pop-head"><b>Profile importieren</b><small>Übernimmt Minecraft-Version und Mods aus Modrinth App, NoRiskClient (NRC) und Lunar Client. Mods werden über Modrinth erkannt und später automatisch aktualisiert.</small></div>
+      <div class="import-list" id="import-list"></div>
+      <div class="import-foot">
+        <button class="ghost" id="import-file" type="button">Modpack-Datei (.mrpack) wählen …</button>
+        <button class="ghost" id="import-rescan" type="button">Neu suchen</button>
+      </div>
     </div>
   </div>
 
