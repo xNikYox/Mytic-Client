@@ -1,0 +1,43 @@
+# Baut den Windows-Installer (NSIS, Ein-Klick, pro Benutzer) auf einem echten Windows-Rechner
+# und hängt ihn an das GitHub-Release. Läuft automatisch, sobald ein Release "vX.Y.Z" veröffentlicht wird.
+name: Windows-Installer
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release-Tag, z. B. v2.18.0"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  installer:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'v')
+    runs-on: windows-latest
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: launcher/package-lock.json
+      - name: Abhängigkeiten
+        working-directory: launcher
+        run: npm ci
+      - name: Installer bauen
+        working-directory: launcher
+        run: npx electron-builder --win nsis --x64 --publish never -c.win.signAndEditExecutable=true
+      - name: An das Release hängen
+        working-directory: launcher
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" dist/MyticClient-Setup-*.exe --clobber --repo "${{ github.repository }}"

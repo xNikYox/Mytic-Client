@@ -241,7 +241,7 @@ function createWindow() {
   win.loadFile(path.join(__dirname, "renderer", "index.html"));
   win.once("ready-to-show", () => win.show());
   win.webContents.once("did-finish-load", () => {
-    checkUpdate();
+    afterStart().finally(checkUpdate);
     if (UPDATED_FROM && PORTABLE_FILE) {
       emit("updated", { version: PACKAGE_VERSION });
       updater.removeOldVersion(UPDATED_FROM, PORTABLE_FILE).then((ok) => {
@@ -403,46 +403,119 @@ ipcMain.handle("profiles:perf", async (e, slug, on) => {
   return profileList();
 });
 
-// ---------------------------------------------------------------------------------------------- Updates
+// ---------------------------------------------------------------------------------------------- Updates (wie bei Lunar)
+// Neue Versionen werden still im Hintergrund geladen und beim nächsten Start eingespielt.
+// Installierte Version: Installer im Hintergrund (/S). Portable Version: neue EXE ersetzt die alte.
 
-async function checkUpdate() {
-  if (!app.isPackaged && process.env.MYTIC_UPDATE_TEST !== "1") return;
-  const current = process.env.MYTIC_UPDATE_TEST === "1" ? process.env.MYTIC_FAKE_VERSION || "0.0.0" : PACKAGE_VERSION;
+const INSTALL_MODE = updater.installMode({ packaged: app.isPackaged, portableFile: PORTABLE_FILE, execPath: process.execPath });
+const UPDATE_DIR = path.join(DIRS.base, "updates");
+const MIGRATE_FILE = path.join(DIRS.base, "migrate-portable.json");
+/** Gesetzt, wenn eine portable Version aus einer älteren (vor dem Installer) aktualisiert wurde → einmalig umziehen. */
+const MIGRATE_MARKER = path.join(DIRS.base, "move-to-installer");
+let readyUpdate = null;
+
+function spawnDetached(file, args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(file, args, { detached: true, stdio: "ignore" });
+    child.once("spawn", () => {
+      child.unref();
+      resolve();
+    });
+    child.once("error", (error) => reject(new Error(`${path.basename(file)} konnte nicht gestartet werden: ${error.message}`)));
+  });
+}
+
+/** Bereitliegendes Update einspielen. true = der Launcher beendet sich dafür. */
+async function applyReadyUpdate() {
+  if (INSTALL_MODE === "zip") return false;
+  const ready = await updater.readReady(UPDATE_DIR, PACKAGE_VERSION);
+  if (!ready) return false;
   try {
+    if (ready.kind === "setup") {
+      if (ready.migrate && PORTABLE_FILE) await fsp.writeFile(MIGRATE_FILE, JSON.stringify({ oldPortable: PORTABLE_FILE }));
+      await spawnDetached(ready.file, ["/S", "--force-run"]);
+    } else if (PORTABLE_FILE) {
+      const target = path.join(path.dirname(PORTABLE_FILE), path.basename(ready.file));
+      await fsp.copyFile(ready.file, target);
+      await updater.clearReady(UPDATE_DIR);
+      await spawnDetached(target, [`--updated-from=${PORTABLE_FILE}`, "--portable-update"]);
+    } else {
+      return false;
+    }
+  } catch (error) {
+    await updater.clearReady(UPDATE_DIR);
+    emit("log", `[Launcher] Update konnte nicht eingespielt werden: ${error.message}`);
+    return false;
+  }
+  app.quit();
+  return true;
+}
+
+/** Nach dem Start: Umzug und Aufräumen. */
+async function afterStart() {
+  // Portable Version, die aus einer Version vor dem Installer aktualisiert wurde: beim nächsten Update umziehen
+  if (INSTALL_MODE === "portable" && UPDATED_FROM && !process.argv.includes("--portable-update") && !DEV_BUILD) {
+    await fsp.writeFile(MIGRATE_MARKER, "1").catch(() => {});
+  }
+  // Installierte Version nach dem Umzug: alte portable EXE löschen
+  if (INSTALL_MODE === "installed") {
+    const info = readJson(MIGRATE_FILE, null);
+    if (info && info.oldPortable) {
+      await fsp.rm(MIGRATE_FILE, { force: true });
+      await fsp.rm(MIGRATE_MARKER, { force: true });
+      const ok = await updater.removeMigratedPortable(info.oldPortable, process.execPath);
+      emit("installed-now", { removed: ok });
+    }
+    await updater.readReady(UPDATE_DIR, PACKAGE_VERSION); // räumt den eingespielten Installer weg
+  }
+}
+
+let checking = false;
+async function checkUpdate() {
+  const test = process.env.MYTIC_UPDATE_TEST === "1";
+  if (!app.isPackaged && !test) return;
+  if (checking || readyUpdate) return;
+  checking = true;
+  const current = test ? process.env.MYTIC_FAKE_VERSION || "0.0.0" : PACKAGE_VERSION;
+  try {
+    const migrate = INSTALL_MODE === "portable" && !DEV_BUILD && fs.existsSync(MIGRATE_MARKER);
+    const kind = INSTALL_MODE === "installed" || migrate ? "setup" : "portable";
     // Entwicklerversion aktualisiert sich über die eigene Download-Seite (bleibt intern), die normale über GitHub
     const update = DEV_BUILD
       ? (DEV_UPDATE_SITE ? await updater.checkSiteUpdate(current, DEV_UPDATE_SITE, "mytic-client-dev") : null)
-      : await updater.checkForUpdate(current);
-    if (update) {
-      pendingUpdate = update;
-      emit("update", { version: update.version, size: update.size, notes: update.notes, canInstall: Boolean(PORTABLE_FILE) });
+      : await updater.checkForUpdate(current, updater.REPO, { kind, allowSame: migrate });
+    if (!update) return;
+    pendingUpdate = update;
+    if (INSTALL_MODE === "zip" && !test) {
+      emit("update", { version: update.version, size: update.size, notes: update.notes, ready: false, manual: true });
+      return;
     }
+    // still im Hintergrund laden
+    const file = await updater.downloadUpdate(update, UPDATE_DIR);
+    const sha256 = update.sha256 || (await updater.sha256File(file));
+    readyUpdate = { version: update.version, file, sha256, kind: update.kind, migrate };
+    await updater.writeReady(UPDATE_DIR, readyUpdate);
+    emit("update", { version: update.version, notes: update.notes, ready: true, migrate });
   } catch (error) {
     emit("log", `[Launcher] ${error.message}`);
+  } finally {
+    checking = false;
   }
 }
-setInterval(checkUpdate, 6 * 60 * 60 * 1000);
+setInterval(checkUpdate, 30 * 60 * 1000);
 
+/** "Jetzt neu starten": bereitliegendes Update sofort einspielen (ZIP-Version: Release-Seite öffnen). */
 ipcMain.handle("update:install", async () => {
-  if (!pendingUpdate) throw new Error("Kein Update verfügbar.");
   if (game) throw new Error("Bitte zuerst Minecraft beenden.");
-  if (!PORTABLE_FILE) {
-    // ZIP-Version: Release-Seite öffnen, dort die neue Version herunterladen
-    shell.openExternal(pendingUpdate.page);
+  if (!readyUpdate) {
+    if (pendingUpdate) shell.openExternal(pendingUpdate.page);
     return { opened: true };
   }
   if (updating) return { busy: true };
   updating = true;
   try {
-    const file = await updater.downloadUpdate(pendingUpdate, path.dirname(PORTABLE_FILE), (done, total) => emit("update-progress", { done, total }));
-    const child = spawn(file, [`--updated-from=${PORTABLE_FILE}`], { detached: true, stdio: "ignore" });
-    // erst beenden, wenn die neue Version wirklich gestartet ist
-    await new Promise((resolve, reject) => {
-      child.once("spawn", resolve);
-      child.once("error", (error) => reject(new Error(`Neue Version konnte nicht gestartet werden: ${error.message}. Sie liegt hier: ${file}`)));
-    });
-    child.unref();
-    setTimeout(() => app.quit(), 400);
+    const quitting = await applyReadyUpdate();
+    if (!quitting) throw new Error("Update konnte nicht gestartet werden – es wird beim nächsten Start erneut versucht.");
     return { restarting: true };
   } finally {
     updating = false;
@@ -576,7 +649,11 @@ ipcMain.on("window", (e, action) => {
   if (action === "close") win.close();
 });
 
-app.whenReady().then(createWindow);
+app.whenReady().then(async () => {
+  // bereitliegendes Update vor dem Öffnen des Fensters einspielen (wie bei Lunar)
+  if (await applyReadyUpdate()) return;
+  createWindow();
+});
 app.on("window-all-closed", () => {
   if (!game) app.quit();
 });

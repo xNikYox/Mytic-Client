@@ -941,12 +941,26 @@ $("profile-form").addEventListener("submit", async (e) => {
 let updateInfo = null;
 api.onUpdate((info) => {
   updateInfo = info;
-  $("update-title").textContent = `Update auf v${info.version} verfügbar`;
-  const mb = info.size ? ` · ${(info.size / 1048576).toFixed(0)} MB` : "";
-  $("update-sub").textContent = info.canInstall ? `Ein Klick – deine Konten und Einstellungen bleiben erhalten${mb}` : `Neue Version auf GitHub herunterladen${mb}`;
-  $("update-install").textContent = info.canInstall ? "Jetzt aktualisieren" : "Herunterladen";
+  $("update-progress").hidden = true;
+  if (info.manual) {
+    // entpackte ZIP-Version: neue Version selbst herunterladen
+    const mb = info.size ? ` · ${(info.size / 1048576).toFixed(0)} MB` : "";
+    $("update-title").textContent = `Update auf v${info.version} verfügbar`;
+    $("update-sub").textContent = `Neue Version auf GitHub herunterladen${mb}`;
+    $("update-install").textContent = "Herunterladen";
+  } else if (info.migrate) {
+    $("update-title").textContent = "Mytic Client wird installiert";
+    $("update-sub").textContent = "Beim nächsten Start wird der Client fest installiert (Startmenü und Desktop). Konten und Einstellungen bleiben erhalten.";
+    $("update-install").textContent = "Jetzt neu starten";
+  } else {
+    // wie bei Lunar: schon geladen, wird beim nächsten Start eingespielt
+    $("update-title").textContent = `Update auf v${info.version} bereit`;
+    $("update-sub").textContent = "Wird beim nächsten Start automatisch installiert – oder jetzt neu starten.";
+    $("update-install").textContent = "Jetzt neu starten";
+  }
   $("update-banner").hidden = false;
 });
+api.onInstalledNow(() => toast("Mytic Client ist jetzt installiert – du findest ihn im Startmenü und auf dem Desktop."));
 api.onUpdateProgress(({ done, total }) => {
   $("update-progress").hidden = false;
   $("update-bar").style.width = `${Math.round((done / total) * 100)}%`;

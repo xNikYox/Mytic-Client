@@ -289,3 +289,53 @@ test("Import vom PC: Ordner, ZIP und einzelne Jars", () => {
   assert.equal(importer.evaluate(entry, available, loaderFor, "1.21.10").target, "1.21.10");
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test("Updates wie bei Lunar: Modus, bereitliegendes Update, Umzug", async () => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const updater = require("../src/core/updater");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "mytic-upd-"));
+  // Modus
+  const installDir = path.join(root, "Programs", "mytic-client");
+  fs.mkdirSync(installDir, { recursive: true });
+  fs.writeFileSync(path.join(installDir, "Uninstall Mytic Client.exe"), "");
+  assert.equal(updater.installMode({ packaged: true, portableFile: "", execPath: path.join(installDir, "Mytic Client.exe") }), "installed");
+  assert.equal(updater.installMode({ packaged: true, portableFile: "C:/x/MyticClient-2.17.0.exe", execPath: "C:/tmp/x.exe" }), "portable");
+  assert.equal(updater.installMode({ packaged: true, portableFile: "", execPath: path.join(root, "zip", "Mytic Client.exe") }), "zip");
+  assert.equal(updater.installMode({ packaged: false, portableFile: "", execPath: "x" }), "zip");
+  assert.ok(updater.SETUP_PATTERN.test("MyticClient-Setup-2.18.0.exe"));
+  assert.ok(!updater.ASSET_PATTERN.test("MyticClient-Setup-2.18.0.exe"));
+  // bereitliegendes Update
+  const dir = path.join(root, "updates");
+  fs.mkdirSync(dir);
+  const file = path.join(dir, "MyticClient-Setup-2.18.0.exe");
+  fs.writeFileSync(file, "setup");
+  const sha256 = await updater.sha256File(file);
+  await updater.writeReady(dir, { version: "2.18.0", file, sha256, kind: "setup" });
+  assert.equal((await updater.readReady(dir, "2.17.0")).version, "2.18.0");
+  assert.equal(await updater.readReady(dir, "2.18.0"), null, "schon installiert → aufräumen");
+  assert.equal(fs.existsSync(dir), false);
+  // manipulierte Datei wird nicht eingespielt
+  fs.mkdirSync(dir);
+  fs.writeFileSync(file, "setup");
+  await updater.writeReady(dir, { version: "2.18.0", file, sha256, kind: "setup" });
+  fs.writeFileSync(file, "boese");
+  assert.equal(await updater.readReady(dir, "2.17.0"), null);
+  // Umzug: gleiche Version erlaubt
+  fs.mkdirSync(dir);
+  fs.writeFileSync(file, "setup");
+  await updater.writeReady(dir, { version: "2.18.0", file, sha256, kind: "setup", migrate: true });
+  assert.equal((await updater.readReady(dir, "2.18.0")).migrate, true);
+  // alte portable EXE nach dem Umzug löschen – nur passende Namen
+  const old = path.join(root, "Downloads", "MyticClient-2.17.0.exe");
+  fs.mkdirSync(path.dirname(old), { recursive: true });
+  fs.writeFileSync(old, "");
+  const other = path.join(root, "Downloads", "wichtig.exe");
+  fs.writeFileSync(other, "");
+  assert.equal(await updater.removeMigratedPortable(other, null, { tries: 1 }), false);
+  assert.equal(await updater.removeMigratedPortable(old, path.join(installDir, "Mytic Client.exe"), { tries: 1 }), true);
+  assert.equal(fs.existsSync(old), false);
+  assert.equal(fs.existsSync(other), true);
+  fs.rmSync(root, { recursive: true, force: true });
+});

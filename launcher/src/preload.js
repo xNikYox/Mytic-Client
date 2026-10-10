@@ -43,6 +43,7 @@ contextBridge.exposeInMainWorld("mytic", {
   onUpdate: on("update"),
   onUpdateProgress: on("update-progress"),
   onUpdated: on("updated"),
+  onInstalledNow: on("installed-now"),
   onProgress: on("progress"),
   onLog: on("log"),
   onStatus: on("status"),

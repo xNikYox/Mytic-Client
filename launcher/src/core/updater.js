@@ -7,6 +7,19 @@ const { fetchRetry, USER_AGENT } = require("./download");
 
 const REPO = "xNikYox/Mytic-Client";
 const ASSET_PATTERN = /^MyticClient-(?:Dev-)?(\d+\.\d+\.\d+)\.exe$/i;
+/** Installer (NSIS, Ein-Klick, pro Benutzer) – wie bei Lunar. */
+const SETUP_PATTERN = /^MyticClient-Setup-(\d+\.\d+\.\d+)\.exe$/i;
+
+/**
+ * Wie läuft der Launcher? "installed" (Installer), "portable" (portable EXE) oder "zip" (entpackt/Entwicklung).
+ * Der Installer legt neben der EXE "Uninstall Mytic Client.exe" ab.
+ */
+function installMode({ packaged, portableFile, execPath }) {
+  if (!packaged) return "zip";
+  if (portableFile) return "portable";
+  if (fs.existsSync(path.join(path.dirname(execPath), "Uninstall Mytic Client.exe"))) return "installed";
+  return "zip";
+}
 
 /** Vergleicht Versionen wie "2.0.10" und "2.1.0". Ergebnis > 0, wenn a neuer ist. */
 function compareVersions(a, b) {
@@ -19,20 +32,26 @@ function compareVersions(a, b) {
   return 0;
 }
 
-/** Neueste Version auf GitHub, oder null, wenn die aktuelle schon die neueste ist. */
-async function checkForUpdate(currentVersion, repo = REPO) {
+/**
+ * Neueste Version auf GitHub, oder null, wenn die aktuelle schon die neueste ist.
+ * kind: "portable" (EXE) oder "setup" (Installer). allowSame: auch die gleiche Version liefern (Umzug zum Installer).
+ */
+async function checkForUpdate(currentVersion, repo = REPO, { kind = "portable", allowSame = false } = {}) {
   const response = await fetchRetry(`https://api.github.com/repos/${repo}/releases/latest`, {
     headers: { Accept: "application/vnd.github+json" },
   });
   if (!response.ok) throw new Error(`Update-Prüfung fehlgeschlagen (HTTP ${response.status})`);
   const release = await response.json();
   const version = String(release.tag_name || "").replace(/^v/, "");
-  if (!/^\d+\.\d+\.\d+$/.test(version) || compareVersions(version, currentVersion) <= 0) return null;
-  const asset = (release.assets || []).find((a) => ASSET_PATTERN.test(a.name));
+  const diff = compareVersions(version, currentVersion);
+  if (!/^\d+\.\d+\.\d+$/.test(version) || diff < 0 || (diff === 0 && !allowSame)) return null;
+  const pattern = kind === "setup" ? SETUP_PATTERN : ASSET_PATTERN;
+  const asset = (release.assets || []).find((a) => pattern.test(a.name));
   if (!asset) return null;
   const digest = typeof asset.digest === "string" && asset.digest.startsWith("sha256:") ? asset.digest.slice(7) : null;
   return {
     version,
+    kind,
     name: asset.name,
     url: asset.browser_download_url,
     size: asset.size,
@@ -55,6 +74,7 @@ async function checkSiteUpdate(currentVersion, base, project) {
   if (!ASSET_PATTERN.test(info.name || "")) return null;
   return {
     version: info.version,
+    kind: "portable",
     name: info.name,
     url: new URL(info.url, root).toString(),
     size: info.size,
@@ -121,4 +141,62 @@ async function removeOldVersion(oldFile, currentFile, { tries = 30, delayMs = 10
   return false;
 }
 
-module.exports = { compareVersions, checkForUpdate, checkSiteUpdate, downloadUpdate, removeOldVersion, REPO, ASSET_PATTERN };
+// ---------------------------------------------------------------------------------------------- Bereitliegende Updates
+
+/** Merkt sich ein fertig geladenes Update; es wird beim nächsten Start eingespielt (wie bei Lunar). */
+async function writeReady(dir, info) {
+  await fsp.mkdir(dir, { recursive: true });
+  await fsp.writeFile(path.join(dir, "ready.json"), JSON.stringify(info, null, 2));
+}
+
+/** Bereitliegendes Update, wenn es neuer ist (bzw. ein Umzug) und die Datei unverändert ist. Sonst aufräumen. */
+async function readReady(dir, currentVersion) {
+  let info;
+  try {
+    info = JSON.parse(await fsp.readFile(path.join(dir, "ready.json"), "utf8"));
+  } catch {
+    return null;
+  }
+  const valid = info && info.file && path.dirname(path.resolve(info.file)) === path.resolve(dir)
+    && (compareVersions(info.version, currentVersion) > 0 || (info.migrate && compareVersions(info.version, currentVersion) >= 0))
+    && fs.existsSync(info.file)
+    && (!info.sha256 || (await sha256File(info.file)) === String(info.sha256).toLowerCase());
+  if (!valid) {
+    await clearReady(dir);
+    return null;
+  }
+  return info;
+}
+
+async function clearReady(dir) {
+  await fsp.rm(dir, { recursive: true, force: true }).catch(() => {});
+}
+
+function sha256File(file) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash("sha256");
+    fs.createReadStream(file).on("data", (d) => hash.update(d)).on("error", reject).on("end", () => resolve(hash.digest("hex")));
+  });
+}
+
+/** Nach dem Umzug zum Installer: alte portable EXE löschen (nur MyticClient-x.y.z.exe, nie die laufende). */
+async function removeMigratedPortable(oldFile, currentFile, options) {
+  if (!oldFile || !ASSET_PATTERN.test(path.basename(oldFile))) return false;
+  if (currentFile && path.resolve(oldFile) === path.resolve(currentFile)) return false;
+  const { tries = 30, delayMs = 1000 } = options || {};
+  for (let i = 0; i < tries; i++) {
+    try {
+      await fsp.rm(path.resolve(oldFile));
+      return true;
+    } catch (error) {
+      if (error.code === "ENOENT") return true;
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
+  return false;
+}
+
+module.exports = {
+  compareVersions, checkForUpdate, checkSiteUpdate, downloadUpdate, removeOldVersion, installMode,
+  writeReady, readReady, clearReady, sha256File, removeMigratedPortable, REPO, ASSET_PATTERN, SETUP_PATTERN,
+};
