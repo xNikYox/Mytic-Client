@@ -789,7 +789,8 @@ const IMPORT_SOURCE_CLASS = { "Modrinth App": "modrinth", NoRiskClient: "norisk"
 const LOADER_LABEL = { fabric: "Fabric", forge: "Forge", neoforge: "NeoForge", quilt: "Quilt", vanilla: "Vanilla", unknown: "" };
 
 function importRow(item) {
-  const row = el("div", `imp${item.target ? "" : " off"}`);
+  const row = el("div", `imp${item.target || item.chooseVersion ? "" : " off"}`);
+  row.dataset.id = item.id;
   row.append(el("span", `imp-src ${IMPORT_SOURCE_CLASS[item.source] || ""}`, item.source));
   const body = el("div", "imp-body");
   const loader = LOADER_LABEL[item.loader] ?? item.loader;
@@ -800,16 +801,34 @@ function importRow(item) {
   row.append(body);
   const button = el("button", "mr-btn install", "Übernehmen");
   button.disabled = !item.target;
+  // Version unbekannt oder nicht unterstützt: selbst wählen
+  let chosen = null;
+  if (item.chooseVersion) {
+    const select = el("select", "imp-version");
+    select.append(el("option", null, "Version wählen …"));
+    for (const v of versions) {
+      const option = el("option", null, loaderOf(v) === "forge" ? `${v} · Forge` : v);
+      option.value = v;
+      select.append(option);
+    }
+    select.firstChild.value = "";
+    select.addEventListener("change", () => {
+      chosen = select.value || null;
+      button.disabled = !chosen;
+    });
+    body.append(el("br"), select);
+  }
   button.addEventListener("click", async () => {
     button.disabled = true;
     button.textContent = "Importiere …";
     try {
-      const result = await api.runImport(item.id);
+      const result = await api.runImport(item.id, chosen);
       await applyProfiles(result.profiles, true);
+      pickedImports = pickedImports.filter((p) => p.id !== item.id);
       $("import").hidden = true;
       toast(`Profil „${result.name}“ angelegt: ${result.copied} Mods übernommen, ${result.identified} davon bei Modrinth erkannt${result.skipped ? `, ${result.skipped} passten nicht` : ""}.`);
     } catch (error) {
-      button.disabled = false;
+      button.disabled = !item.target && !chosen;
       button.textContent = "Übernehmen";
       toast(errorText(error), true);
     }
@@ -818,13 +837,16 @@ function importRow(item) {
   return row;
 }
 
+/** Vom PC hochgeladene Einträge bleiben oben stehen, auch wenn die Suche danach fertig wird. */
+let pickedImports = [];
+
 async function scanImports() {
   const list = $("import-list");
-  list.replaceChildren(el("p", "sub", "Suche nach Profilen …"));
+  list.replaceChildren(...pickedImports.map(importRow), el("p", "sub", "Suche nach Profilen …"));
   try {
     const items = await api.scanImports();
-    list.replaceChildren(...items.map(importRow));
-    if (!items.length) list.append(el("p", "sub", "Keine Profile gefunden. Installierte Launcher: Modrinth App, NoRiskClient oder Lunar Client – oder wähle eine .mrpack-Datei."));
+    list.replaceChildren(...pickedImports.map(importRow), ...items.map(importRow));
+    if (!items.length && !pickedImports.length) list.append(el("p", "sub", "Keine Profile gefunden. Installierte Launcher: Modrinth App, NoRiskClient oder Lunar Client – oder wähle eine .mrpack-Datei."));
   } catch (error) {
     list.replaceChildren(el("p", "error", errorText(error)));
   }
@@ -836,14 +858,46 @@ $("import-open").addEventListener("click", () => {
   scanImports();
 });
 $("import-rescan").addEventListener("click", scanImports);
-$("import-file").addEventListener("click", async () => {
+/** Vom PC gewählte Profile oben in die Liste setzen. */
+function showPicked(items) {
+  const list = $("import-list");
+  pickedImports = [...items, ...pickedImports.filter((p) => !items.some((i) => i.id === p.id))];
+  list.querySelectorAll("p.sub:not(:last-child)").forEach((p) => p.remove());
+  for (const item of [...items].reverse()) {
+    const old = [...list.children].find((c) => c.dataset.id === item.id);
+    if (old) old.remove();
+    list.prepend(importRow(item));
+  }
+  if (!items.length) toast("In der Auswahl wurden keine Mods oder Profile gefunden.", true);
+}
+async function pick(kind) {
   try {
-    const item = await api.importFile();
-    if (item) $("import-list").prepend(importRow(item));
+    const items = await api.pickImport(kind);
+    if (items.length) showPicked(items);
+  } catch (error) {
+    toast(errorText(error), true);
+  }
+}
+$("import-folder").addEventListener("click", () => pick("folder"));
+$("import-file").addEventListener("click", () => pick("files"));
+const drop = $("import-drop");
+["dragenter", "dragover"].forEach((type) => drop.addEventListener(type, (e) => {
+  e.preventDefault();
+  drop.classList.add("over");
+}));
+["dragleave", "drop"].forEach((type) => drop.addEventListener(type, () => drop.classList.remove("over")));
+drop.addEventListener("drop", async (e) => {
+  e.preventDefault();
+  const paths = [...e.dataTransfer.files].map((f) => api.pathForFile(f)).filter(Boolean);
+  if (!paths.length) return;
+  try {
+    showPicked(await api.importPaths(paths));
   } catch (error) {
     toast(errorText(error), true);
   }
 });
+// Dateien außerhalb der Ablage nicht im Fenster öffnen
+["dragover", "drop"].forEach((type) => document.addEventListener(type, (e) => e.preventDefault()));
 $("import").addEventListener("click", (e) => {
   if (e.target === $("import")) $("import").hidden = true;
 });

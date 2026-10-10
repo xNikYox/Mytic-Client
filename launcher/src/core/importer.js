@@ -247,6 +247,128 @@ function readMrpack(file) {
   };
 }
 
+/** Minecraft-Version aus den Metadaten der Mods (fabric.mod.json bzw. mcmod.info), die häufigste gewinnt. */
+function guessVersion(jars) {
+  const count = {};
+  for (const jar of jars.slice(0, 60)) {
+    let found = null;
+    try {
+      const zip = new AdmZip(jar);
+      const fabric = zip.getEntry("fabric.mod.json");
+      if (fabric) {
+        const meta = JSON.parse(zip.readAsText(fabric).replace(/^﻿/, ""));
+        const dep = meta.depends && meta.depends.minecraft;
+        const text = Array.isArray(dep) ? dep.join(" ") : String(dep || "");
+        const m = text.match(/(\d+\.\d+(?:\.\d+)?)/);
+        if (m) found = m[1];
+      }
+      const info = !found && zip.getEntry("mcmod.info");
+      if (info) {
+        const m = zip.readAsText(info).match(/"mcversion"\s*:\s*"(\d+\.\d+(?:\.\d+)?)/);
+        if (m) found = m[1];
+      }
+    } catch {
+      // keine lesbare Jar
+    }
+    if (found) count[found] = (count[found] || 0) + 1;
+  }
+  return Object.entries(count).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+}
+
+function readJson(file) {
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8").replace(/^﻿/, ""));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Beliebiger Profil-Ordner vom PC: Modrinth/NRC/Lunar-Profil, CurseForge-Instanz, Prism/MultiMC-Instanz,
+ * .minecraft-Ordner oder einfach ein Ordner mit Mods.
+ */
+function readFolder(dir) {
+  let name = path.basename(dir);
+  let mcVersion = null;
+  let loader = null;
+  const cf = readJson(path.join(dir, "minecraftinstance.json"));
+  if (cf) {
+    name = cf.name || name;
+    mcVersion = cf.gameVersion || null;
+    loader = cf.baseModLoader && cf.baseModLoader.name ? normLoader(cf.baseModLoader.name.split("-")[0]) : null;
+  }
+  const mmc = readJson(path.join(dir, "mmc-pack.json"));
+  if (mmc && Array.isArray(mmc.components)) {
+    for (const c of mmc.components) {
+      if (c.uid === "net.minecraft") mcVersion = c.version || mcVersion;
+      if (/fabric-loader/.test(c.uid)) loader = "fabric";
+      if (/minecraftforge/.test(c.uid)) loader = "forge";
+      if (/neoforge/.test(c.uid)) loader = "neoforge";
+      if (/quilt/.test(c.uid)) loader = "quilt";
+    }
+  }
+  const theseus = readJson(path.join(dir, "profile.json"));
+  if (theseus && theseus.metadata) {
+    name = theseus.metadata.name || name;
+    mcVersion = theseus.metadata.game_version || mcVersion;
+    loader = theseus.metadata.loader ? normLoader(theseus.metadata.loader) : loader;
+  }
+  const modsDir = [path.join(dir, "mods"), path.join(dir, ".minecraft", "mods"), path.join(dir, "minecraft", "mods"), dir]
+    .find((d) => jarsIn(d).length) || path.join(dir, "mods");
+  const jars = jarsIn(modsDir);
+  // Lunar-Unterordner wie "fabric-1.21.4" verraten die Version
+  if (!mcVersion) {
+    const m = path.basename(modsDir).match(/(\d+\.\d+(?:\.\d+)?)/) || name.match(/(\d+\.\d+(?:\.\d+)?)/);
+    mcVersion = m ? m[1] : guessVersion(jars);
+  }
+  return { id: `dir:${dir}`, source: "Ordner", name, mcVersion, loader: loader || guessLoader(jars), jars, downloads: [] };
+}
+
+/** Datei vom PC: .mrpack, .zip (Modpack-Export mit mods-Ordner) oder einzelne .jar-Mods. */
+function readFiles(files) {
+  const entries = [];
+  const jars = files.filter((f) => f.toLowerCase().endsWith(".jar"));
+  if (jars.length) {
+    entries.push({ id: `jars:${jars.join("|")}`, source: "Mod-Dateien", name: jars.length === 1 ? path.basename(jars[0], ".jar") : `${jars.length} Mods`, mcVersion: guessVersion(jars), loader: guessLoader(jars), jars, downloads: [] });
+  }
+  for (const file of files.filter((f) => !f.toLowerCase().endsWith(".jar"))) {
+    const zip = new AdmZip(file);
+    if (zip.getEntry("modrinth.index.json")) {
+      entries.push(readMrpack(file));
+      continue;
+    }
+    const packJars = zip.getEntries().filter((e) => /(^|\/)mods\/[^/]+\.jar$/i.test(e.entryName)).map((e) => e.entryName);
+    const cf = zip.getEntry("manifest.json") ? JSON.parse(zip.readAsText("manifest.json")) : null;
+    const mc = cf && cf.minecraft;
+    const loaderId = mc && mc.modLoaders && mc.modLoaders[0] && mc.modLoaders[0].id;
+    entries.push({
+      id: `zip:${file}`,
+      source: cf ? "CurseForge-Export" : "ZIP-Datei",
+      name: (cf && cf.name) || path.basename(file).replace(/\.zip$/i, ""),
+      mcVersion: (mc && mc.version) || null,
+      loader: loaderId ? normLoader(loaderId.split("-")[0]) : "unknown",
+      jars: [],
+      downloads: [],
+      packFile: file,
+      packJars,
+    });
+  }
+  return entries;
+}
+
+/** Ordner oder Dateien vom PC (Dialog oder Drag & Drop). */
+function readPaths(paths) {
+  const dirs = paths.filter((p) => {
+    try {
+      return fs.statSync(p).isDirectory();
+    } catch {
+      return false;
+    }
+  });
+  const files = paths.filter((p) => !dirs.includes(p) && fs.existsSync(p));
+  return [...dirs.map(readFolder), ...readFiles(files)];
+}
+
 // ---------------------------------------------------------------------------------------------- Bewertung
 
 /** Passende Mytic-Version: exakt, oder bei "1.21" die neueste 1.21.x. */
@@ -262,11 +384,12 @@ function resolveVersion(version, available) {
 
 const LOADER_NAMES = { fabric: "Fabric", forge: "Forge", neoforge: "NeoForge", quilt: "Quilt" };
 
-function evaluate(entry, available, loaderFor) {
+function evaluate(entry, available, loaderFor, chosenVersion = null) {
   const modCount = entry.jars.length + entry.downloads.length + (entry.packJars ? entry.packJars.length : 0);
   const base = { id: entry.id, source: entry.source, name: entry.name, mcVersion: entry.mcVersion, loader: entry.loader, modCount };
-  const target = resolveVersion(entry.mcVersion, available);
-  if (!target) return { ...base, target: null, reason: entry.mcVersion ? `Minecraft ${entry.mcVersion} wird nicht unterstützt` : "Minecraft-Version unbekannt" };
+  const target = chosenVersion && available.includes(chosenVersion) ? chosenVersion : resolveVersion(entry.mcVersion, available);
+  // Version unbekannt oder nicht unterstützt: der Spieler kann selbst eine wählen
+  if (!target) return { ...base, target: null, chooseVersion: true, reason: entry.mcVersion ? `Minecraft ${entry.mcVersion} wird nicht unterstützt – Version wählen` : "Minecraft-Version unbekannt – bitte wählen" };
   const need = loaderFor(target);
   if (modCount > 0 && !["unknown", "vanilla", need].includes(entry.loader)) {
     return { ...base, target: null, reason: `${LOADER_NAMES[entry.loader] || entry.loader}-Mods laufen hier nicht (${target} nutzt ${LOADER_NAMES[need]})` };
@@ -389,4 +512,4 @@ async function importEntry(entry, evaluation, ctx) {
   return { settings, profile, copied, identified, skipped };
 }
 
-module.exports = { sourcePaths, scan, readMrpack, evaluate, resolveVersion, importEntry, loaderOfJar, normLoader, noriskDownload };
+module.exports = { sourcePaths, scan, readMrpack, readFolder, readFiles, readPaths, guessVersion, evaluate, resolveVersion, importEntry, loaderOfJar, normLoader, noriskDownload };

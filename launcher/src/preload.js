@@ -1,5 +1,5 @@
 // Sichere Brücke zwischen Oberfläche und Hauptprozess.
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
 const on = (channel) => (callback) => {
   const listener = (event, payload) => callback(payload);
@@ -33,8 +33,10 @@ contextBridge.exposeInMainWorld("mytic", {
   setProfileVersion: (id, mcVersion) => ipcRenderer.invoke("profiles:version", id, mcVersion),
   listVersions: () => ipcRenderer.invoke("versions:list"),
   scanImports: () => ipcRenderer.invoke("import:scan"),
-  importFile: () => ipcRenderer.invoke("import:file"),
-  runImport: (id) => ipcRenderer.invoke("import:run", id),
+  pickImport: (kind) => ipcRenderer.invoke("import:pick", kind),
+  importPaths: (paths) => ipcRenderer.invoke("import:paths", paths),
+  pathForFile: (file) => webUtils.getPathForFile(file),
+  runImport: (id, version) => ipcRenderer.invoke("import:run", id, version),
   renameProfile: (id, name) => ipcRenderer.invoke("profiles:rename", id, name),
   deleteProfile: (id) => ipcRenderer.invoke("profiles:delete", id),
   setProfilePerf: (slug, on) => ipcRenderer.invoke("profiles:perf", slug, on),

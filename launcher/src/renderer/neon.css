@@ -200,8 +200,8 @@ input:focus, select:focus { border-color: var(--neon-cyan); box-shadow: 0 0 0 3p
 .import-open { display: flex; align-items: center; justify-content: center; gap: 8px; }
 .import-open svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .popover.modal { background: rgba(3, 2, 8, .55); backdrop-filter: blur(4px); }
-.import-card { top: 50%; left: 50%; right: auto; transform: translate(-50%, -50%); width: min(620px, calc(100vw - 120px)); max-height: calc(100vh - 120px); animation: none; }
-.import-list { display: grid; gap: 8px; overflow: auto; max-height: calc(100vh - 300px); padding-right: 2px; }
+.import-card { top: 50%; left: 50%; right: auto; transform: translate(-50%, -50%); width: min(640px, calc(100vw - 120px)); max-height: calc(100vh - 80px); grid-template-rows: auto auto minmax(0, 1fr) auto; overflow: hidden; animation: none; }
+.import-list { display: grid; align-content: start; gap: 8px; overflow: auto; min-height: 0; padding-right: 4px; }
 .imp { display: grid; grid-template-columns: 116px 1fr auto; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--glass-line); background: rgba(255, 255, 255, .03); }
 .imp.off { opacity: .6; }
 .imp-src { justify-self: start; font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 8px; border-radius: 99px; white-space: nowrap; background: rgba(162, 89, 255, .14); color: #e2c6ff; border: 1px solid rgba(162, 89, 255, .4); }
@@ -213,7 +213,18 @@ input:focus, select:focus { border-color: var(--neon-cyan); box-shadow: 0 0 0 3p
 .imp-body small { color: var(--muted); font-size: 12px; }
 .imp-body small.warn { color: #ffcf5a; }
 .imp .mr-btn { min-width: 108px; }
-.import-foot { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.import-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.import-foot .hint { margin: 0; }
+.drop-zone {
+  display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; align-items: center; padding: 12px 14px; border-radius: 14px;
+  border: 1.5px dashed rgba(34, 229, 255, .45); background: rgba(34, 229, 255, .05); transition: border-color .15s, background .15s, box-shadow .15s;
+}
+.drop-zone > svg { width: 28px; height: 28px; fill: none; stroke: var(--neon-cyan); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 6px rgba(34, 229, 255, .6)); }
+.drop-zone b { display: block; }
+.drop-zone small { color: var(--muted); font-size: 12px; }
+.drop-buttons { grid-column: 1 / -1; display: flex; gap: 8px; }
+.drop-zone.over { border-color: var(--neon-pink); background: rgba(255, 43, 214, .08); box-shadow: 0 0 24px -6px rgba(255, 43, 214, .6); }
+.imp-version { height: 30px; width: 150px; padding: 0 8px; border-radius: 9px; font-size: 12.5px; margin-top: 4px; }
 
 @media (prefers-reduced-motion: reduce) {
   .hero-grid::before, .sun-glow, .chip i { animation: none; }

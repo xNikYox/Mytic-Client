@@ -342,29 +342,41 @@ ipcMain.handle("import:scan", async () => {
   entries.forEach((entry, i) => importCache.set(entry.id, { entry, evaluation: list[i] }));
   return list;
 });
-ipcMain.handle("import:file", async () => {
-  const result = await dialog.showOpenDialog(win, {
-    title: "Modpack importieren",
-    filters: [{ name: "Modrinth-Modpack", extensions: ["mrpack"] }],
-    properties: ["openFile"],
-  });
-  if (result.canceled || !result.filePaths[0]) return null;
-  let entry;
-  try {
-    entry = importer.readMrpack(result.filePaths[0]);
-  } catch {
-    throw new Error("Die Datei ist kein gültiges Modrinth-Modpack (.mrpack).");
-  }
+/** Ordner/Dateien vom PC einlesen und bewerten. */
+async function importFromPaths(paths) {
   const available = await availableVersions(path.join(DIRS.base, "versions-cache.json"));
-  const evaluation = importer.evaluate(entry, available, loaderFor);
-  importCache.set(entry.id, { entry, evaluation });
-  return evaluation;
+  let entries;
+  try {
+    entries = importer.readPaths(paths);
+  } catch {
+    throw new Error("Die Datei konnte nicht gelesen werden. Unterstützt: Profil-Ordner, .mrpack, .zip und .jar.");
+  }
+  return entries.map((entry) => {
+    const evaluation = importer.evaluate(entry, available, loaderFor);
+    importCache.set(entry.id, { entry, evaluation });
+    return evaluation;
+  });
+}
+ipcMain.handle("import:pick", async (e, kind) => {
+  const result = await dialog.showOpenDialog(win, kind === "folder"
+    ? { title: "Profil-Ordner wählen", properties: ["openDirectory"] }
+    : {
+      title: "Modpack oder Mods wählen",
+      filters: [{ name: "Modpacks und Mods", extensions: ["mrpack", "zip", "jar"] }],
+      properties: ["openFile", "multiSelections"],
+    });
+  if (result.canceled || !result.filePaths.length) return [];
+  return importFromPaths(result.filePaths);
 });
-ipcMain.handle("import:run", async (e, id) => {
+ipcMain.handle("import:paths", (e, paths) => importFromPaths((paths || []).filter((p) => typeof p === "string")));
+ipcMain.handle("import:run", async (e, id, version) => {
   if (game) throw new Error("Bitte zuerst Minecraft beenden.");
   const cached = importCache.get(id);
   if (!cached) throw new Error("Profil nicht mehr gefunden – bitte neu suchen.");
-  const result = await importer.importEntry(cached.entry, cached.evaluation, {
+  const evaluation = version
+    ? importer.evaluate(cached.entry, await availableVersions(path.join(DIRS.base, "versions-cache.json")), loaderFor, String(version))
+    : cached.evaluation;
+  const result = await importer.importEntry(cached.entry, evaluation, {
     settings: await ensureProfiles(),
     base: DIRS.base,
     loaderFor,

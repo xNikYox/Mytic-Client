@@ -230,3 +230,62 @@ test("Import: Modrinth App, NoRiskClient, Lunar und .mrpack werden erkannt", () 
   assert.equal(ev.modCount, 2);
   fs.rmSync(home, { recursive: true, force: true });
 });
+
+test("Import vom PC: Ordner, ZIP und einzelne Jars", () => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const AdmZip = require("adm-zip");
+  const importer = require("../src/core/importer");
+  const { loaderFor } = require("../src/core/minecraft");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "mytic-pc-import-"));
+  const fabricJar = (file, mc) => {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const zip = new AdmZip();
+    zip.addFile("fabric.mod.json", Buffer.from(JSON.stringify({ id: "x", depends: { minecraft: mc } })));
+    zip.writeZip(file);
+  };
+  const available = ["1.21.11", "1.21.10", "1.21.4", "1.8.9"];
+  // CurseForge-Instanz
+  const cf = path.join(root, "CF Pack");
+  fs.mkdirSync(cf, { recursive: true });
+  fs.writeFileSync(path.join(cf, "minecraftinstance.json"), JSON.stringify({ name: "Mein CF", gameVersion: "1.21.4", baseModLoader: { name: "fabric-0.16.9-1.21.4" } }));
+  fabricJar(path.join(cf, "mods", "a.jar"), "~1.21.4");
+  // Prism/MultiMC-Instanz
+  const prism = path.join(root, "Prism");
+  fs.mkdirSync(prism, { recursive: true });
+  fs.writeFileSync(path.join(prism, "mmc-pack.json"), JSON.stringify({ components: [{ uid: "net.minecraft", version: "1.21.10" }, { uid: "net.fabricmc.fabric-loader", version: "0.17" }] }));
+  fabricJar(path.join(prism, ".minecraft", "mods", "b.jar"), ">=1.21.10");
+  // Ordner ohne Metadaten: Version aus den Mods
+  const plain = path.join(root, "Meine Mods");
+  fabricJar(path.join(plain, "c.jar"), "1.21.11");
+  fabricJar(path.join(plain, "d.jar"), ["1.21.11"]);
+  // Lunar-Unterordner mit Version im Namen
+  const lunar = path.join(root, "fabric-1.21.4");
+  fabricJar(path.join(lunar, "e.jar"), "*");
+  // ZIP-Export mit mods-Ordner und einzelne Jar
+  const zip = new AdmZip();
+  zip.addFile("export/mods/f.jar", Buffer.from("x"));
+  zip.addFile("export/config/a.txt", Buffer.from("x"));
+  const zipFile = path.join(root, "export.zip");
+  zip.writeZip(zipFile);
+  const single = path.join(root, "single.jar");
+  fabricJar(single, "1.21.11");
+
+  const items = importer.readPaths([cf, prism, plain, lunar, zipFile, single]).map((e) => importer.evaluate(e, available, loaderFor));
+  const by = (name) => items.find((i) => i.name === name);
+  assert.equal(by("Mein CF").target, "1.21.4");
+  assert.equal(by("Prism").target, "1.21.10");
+  assert.equal(by("Prism").modCount, 1);
+  assert.equal(by("Meine Mods").target, "1.21.11");
+  assert.equal(by("Meine Mods").modCount, 2);
+  assert.equal(by("fabric-1.21.4").target, "1.21.4");
+  assert.equal(by("export").modCount, 1);
+  assert.equal(by("export").target, null, "ZIP ohne Version: Spieler wählt sie");
+  assert.equal(by("export").chooseVersion, true);
+  assert.equal(by("single").target, "1.21.11");
+  // selbst gewählte Version
+  const entry = importer.readPaths([zipFile])[0];
+  assert.equal(importer.evaluate(entry, available, loaderFor, "1.21.10").target, "1.21.10");
+  fs.rmSync(root, { recursive: true, force: true });
+});
