@@ -23,6 +23,7 @@ import de.myticlegacy.client.module.LightOverlayModule;
 import de.myticlegacy.client.module.FreelookModule;
 import de.myticlegacy.client.module.Module;
 import de.myticlegacy.client.module.SimpleModules;
+import de.myticlegacy.client.module.SnaplookModule;
 import de.myticlegacy.client.module.ZoomModule;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -44,7 +45,7 @@ import java.util.List;
 public final class MyticClient implements ClientModInitializer {
     public static final String ID = "myticclient";
     public static final String NAME = "Mytic Client";
-    public static final String VERSION = "2.9";
+    public static final String VERSION = "2.10";
     public static final Logger LOG = LoggerFactory.getLogger(NAME);
 
     public static final List<Module> MODULES = new ArrayList<>();
@@ -66,6 +67,8 @@ public final class MyticClient implements ClientModInitializer {
     public static KeyMapping menuKey;
     public static KeyMapping zoomKey;
     public static KeyMapping freelookKey;
+    public static KeyMapping snaplookKey;
+    public static SnaplookModule snaplook;
     /** Tasten für Auto Text (anfangs unbelegt). */
     public static final KeyMapping[] autoTextKeys = new KeyMapping[AutoTextModule.SLOTS];
     public static AutoTextModule autoText;
@@ -164,6 +167,7 @@ public final class MyticClient implements ClientModInitializer {
         // ------------------------------------------------------------------------------ Mechanik & Visuell
         zoom = module(new ZoomModule());
         freelook = module(new FreelookModule());
+        snaplook = module(new SnaplookModule());
         toggleSprint = module(SimpleModules.toggleSprint());
         toggleSneak = module(SimpleModules.toggleSneak());
         crosshair = module(new CrosshairModule());
@@ -180,6 +184,7 @@ public final class MyticClient implements ClientModInitializer {
         menuKey = Compat.registerKey("key.myticclient.menu", InputConstants.KEY_RSHIFT);
         zoomKey = Compat.registerKey("key.myticclient.zoom", InputConstants.KEY_C);
         freelookKey = Compat.registerKey("key.myticclient.freelook", InputConstants.KEY_LALT);
+        snaplookKey = Compat.registerKey("key.myticclient.snaplook", InputConstants.KEY_V);
         for (int i = 0; i < AutoTextModule.SLOTS; i++) autoTextKeys[i] = Compat.registerKey("key.myticclient.autotext" + (i + 1), -1);
 
         Compat.registerHud();
@@ -250,6 +255,7 @@ public final class MyticClient implements ClientModInitializer {
 
         zoom.tick(mc);
         freelook.tick(mc);
+        snaplook.tick(mc);
         autoText.tick(mc);
         lightOverlay.tick(mc);
         CombatTracker.tick(mc);

@@ -12,6 +12,7 @@ import net.minecraft.world.item.Items;
 public class FreelookModule extends Module {
     private final BoolSetting invert;
     private final ModeSetting mode;
+    private final ModeSetting perspective;
     /** Umschalten-Modus: an/aus per Tastendruck. */
     private boolean toggled;
     private boolean wasDown;
@@ -24,6 +25,7 @@ public class FreelookModule extends Module {
         super("freelook", "Freelook", "Umsehen mit gedrückter Alt-Taste, ohne dich zu drehen (auf manchen Servern verboten)",
                 Category.MECHANIK, () -> Items.ENDER_EYE, false);
         mode = new ModeSetting(this, "mode", "Modus", "Halten", "Halten", "Umschalten");
+        perspective = new ModeSetting(this, "perspective", "Perspektive", "Hinten", "Hinten", "Vorne", "Ego");
         invert = new BoolSetting(this, "invert", "Maus umkehren", false);
     }
 
@@ -50,7 +52,7 @@ public class FreelookModule extends Module {
             yaw = mc.player.getYRot();
             pitch = mc.player.getXRot();
             previous = mc.options.getCameraType();
-            mc.options.setCameraType(CameraType.THIRD_PERSON_BACK);
+            mc.options.setCameraType(perspective.is("Vorne") ? CameraType.THIRD_PERSON_FRONT : perspective.is("Ego") ? CameraType.FIRST_PERSON : CameraType.THIRD_PERSON_BACK);
             active = true;
         } else if (!want && active) {
             mc.options.setCameraType(previous != null ? previous : CameraType.FIRST_PERSON);

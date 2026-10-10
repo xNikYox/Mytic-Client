@@ -23,6 +23,7 @@ import de.myticlegacy.client.module.LightOverlayModule;
 import de.myticlegacy.client.module.FreelookModule;
 import de.myticlegacy.client.module.Module;
 import de.myticlegacy.client.module.SimpleModules;
+import de.myticlegacy.client.module.SnaplookModule;
 import de.myticlegacy.client.module.ZoomModule;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiIngame;
@@ -69,7 +70,7 @@ import java.util.List;
 public final class MyticClient {
     public static final String ID = "myticclient";
     public static final String NAME = "Mytic Client";
-    public static final String VERSION = "2.9";
+    public static final String VERSION = "2.10";
     public static final Logger LOG = LogManager.getLogger(NAME);
 
     public static final List<Module> MODULES = new ArrayList<Module>();
@@ -91,6 +92,8 @@ public final class MyticClient {
     public static KeyBinding menuKey;
     public static KeyBinding zoomKey;
     public static KeyBinding freelookKey;
+    public static KeyBinding snaplookKey;
+    public static SnaplookModule snaplook;
     /** Tasten für Auto Text (anfangs unbelegt). */
     public static final KeyBinding[] autoTextKeys = new KeyBinding[AutoTextModule.SLOTS];
     public static AutoTextModule autoText;
@@ -193,6 +196,7 @@ public final class MyticClient {
         // ------------------------------------------------------------------------------ Mechanik & Visuell
         zoom = module(new ZoomModule());
         freelook = module(new FreelookModule());
+        snaplook = module(new SnaplookModule());
         toggleSprint = module(SimpleModules.toggleSprint());
         toggleSneak = module(SimpleModules.toggleSneak());
         crosshair = module(new CrosshairModule());
@@ -209,6 +213,7 @@ public final class MyticClient {
         menuKey = Compat.registerKey("key.myticclient.menu", InputConstants.KEY_RSHIFT);
         zoomKey = Compat.registerKey("key.myticclient.zoom", InputConstants.KEY_C);
         freelookKey = Compat.registerKey("key.myticclient.freelook", InputConstants.KEY_LALT);
+        snaplookKey = Compat.registerKey("key.myticclient.snaplook", InputConstants.KEY_V);
         for (int i = 0; i < AutoTextModule.SLOTS; i++) autoTextKeys[i] = Compat.registerKey("key.myticclient.autotext" + (i + 1), 0);
 
         CombatTracker.register();
@@ -380,6 +385,7 @@ public final class MyticClient {
 
         zoom.tick(mc);
         freelook.tick(mc);
+        snaplook.tick(mc);
         autoText.tick(mc);
         lightOverlay.tick(mc);
         CombatTracker.tick(mc);

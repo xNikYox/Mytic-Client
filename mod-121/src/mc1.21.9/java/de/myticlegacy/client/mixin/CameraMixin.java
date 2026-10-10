@@ -18,6 +18,9 @@ abstract class CameraMixin {
     /** Freelook: direkt nach dem Setzen der Spieler-Blickrichtung die Freelook-Richtung verwenden. */
     @Inject(method = "setup", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/Camera;setRotation(FF)V", shift = At.Shift.AFTER))
     private void mytic$freelook(BlockGetter level, Entity entity, boolean detached, boolean mirror, float partialTick, CallbackInfo ci) {
-        if (MyticClient.freelook.active()) setRotation(MyticClient.freelook.yaw(), MyticClient.freelook.pitch());
+        if (!MyticClient.freelook.active()) return;
+        // Ansicht von vorne: Kamera gespiegelt (wie Minecraft selbst bei F5 „von vorne“)
+        if (mirror) setRotation(MyticClient.freelook.yaw() + 180f, -MyticClient.freelook.pitch());
+        else setRotation(MyticClient.freelook.yaw(), MyticClient.freelook.pitch());
     }
 }
