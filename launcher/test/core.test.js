@@ -479,3 +479,49 @@ Suspected Mods: Crashy (crashy), Minecraft (minecraft)`;
   assert.ok(actions.includes("disable:crashy"));
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test("Freunde: Launcher meldet Microsoft-Konto mit Zertifikat an (ohne Token an den Server)", async () => {
+  const nodeCrypto = require("node:crypto");
+  const { FriendsClient } = require("../src/core/friends");
+  const server = path.join(__dirname, "..", "..", "friends-server", "src");
+  const { createApi } = await import(path.join(server, "api.js"));
+  const { openDb } = await import(path.join(server, "node-server.js"));
+  const { certificatePayload, epochMillis } = await import(path.join(server, "mojang.js"));
+  const rsa = () => nodeCrypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const certKey = rsa();
+  const propertyKey = rsa();
+  const spki = (k) => k.publicKey.export({ type: "spki", format: "der" }).toString("base64");
+  const uuid = "c".repeat(32);
+  const accessToken = "geheimes-minecraft-token";
+  const seen = [];
+  const api = createApi(openDb(":memory:"), { mojangKeys: { playerCertificateKeys: [spki(certKey)], profilePropertyKeys: [spki(propertyKey)] }, fetch: async () => new Response(null, { status: 404 }) });
+  // Mojang nachgebildet: Zertifikat wie api.minecraftservices.com (PEM mit "RSA"-Kopf), Profil wie der Sessionserver
+  const player = rsa();
+  const expiresAt = new Date(Date.now() + 86400000).toISOString().replace("Z", "123Z");
+  const pem = (der, label) => `-----BEGIN RSA ${label} KEY-----\n${der.toString("base64").match(/.{1,64}/g).join("\n")}\n-----END RSA ${label} KEY-----\n`;
+  const publicDer = player.publicKey.export({ type: "spki", format: "der" });
+  const value = Buffer.from(JSON.stringify({ timestamp: Date.now(), profileId: uuid, profileName: "Tester", textures: {} })).toString("base64");
+  const fakeFetch = async (url, options = {}) => {
+    seen.push({ url: String(url), body: options.body ? String(options.body) : "" });
+    if (String(url).includes("player/certificates")) {
+      assert.equal(options.headers.authorization, `Bearer ${accessToken}`);
+      return Response.json({
+        keyPair: { privateKey: pem(player.privateKey.export({ type: "pkcs8", format: "der" }), "PRIVATE"), publicKey: pem(publicDer, "PUBLIC") },
+        publicKeySignatureV2: nodeCrypto.sign("sha1", certificatePayload(uuid, epochMillis(expiresAt), publicDer), certKey.privateKey).toString("base64"),
+        expiresAt,
+        refreshedAfter: new Date(Date.now() + 3600000).toISOString(),
+      });
+    }
+    if (String(url).includes("sessionserver")) {
+      return Response.json({ id: uuid, name: "Tester", properties: [{ name: "textures", value, signature: nodeCrypto.sign("sha1", Buffer.from(value), propertyKey.privateKey).toString("base64") }] });
+    }
+    return api(new Request(url, options));
+  };
+  const client = new FriendsClient({ base: "http://friends.test/", fetchImpl: fakeFetch });
+  const account = { type: "microsoft", uuid: "cccccccc-cccc-cccc-cccc-cccccccccccc", name: "Tester", accessToken };
+  const data = await client.call(account, "POST", "api/presence", { place: "launcher" });
+  assert.equal(data.me.name, "Tester");
+  assert.equal(data.me.uuid, uuid);
+  // das Minecraft-Token ging nur an Mojang, nie an den Friends-Server
+  assert.ok(seen.filter((r) => r.url.startsWith("http://friends.test/")).every((r) => !r.body.includes(accessToken)));
+});

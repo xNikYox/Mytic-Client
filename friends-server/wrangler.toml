@@ -1,0 +1,13 @@
+# Nur zur Info/für wrangler – veröffentlicht wird mit deploy.mjs (Cloudflare-API).
+name = "mytic-friends"
+main = "src/worker.js"
+compatibility_date = "2026-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[durable_objects.bindings]]
+name = "FRIENDS"
+class_name = "FriendsStore"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["FriendsStore"]

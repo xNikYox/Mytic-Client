@@ -12,6 +12,9 @@ public final class InputConstants {
     public static final int KEY_A = Keyboard.KEY_A;
     public static final int KEY_F = Keyboard.KEY_F;
     public static final int KEY_V = Keyboard.KEY_V;
+    public static final int KEY_1 = Keyboard.KEY_1;
+    public static final int KEY_2 = Keyboard.KEY_2;
+    public static final int KEY_3 = Keyboard.KEY_3;
     public static final int KEY_RETURN = Keyboard.KEY_RETURN;
     public static final int KEY_NUMPADENTER = Keyboard.KEY_NUMPADENTER;
 

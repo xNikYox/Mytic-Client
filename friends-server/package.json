@@ -1,0 +1,10 @@
+{
+  "name": "mytic-friends-server",
+  "private": true,
+  "type": "module",
+  "description": "Freundesliste für den Mytic Client (Node oder Cloudflare Workers)",
+  "scripts": {
+    "start": "node src/node-server.js",
+    "test": "node --test test/*.test.js"
+  }
+}

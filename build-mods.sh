@@ -23,7 +23,7 @@ echo "1.8.9 (Forge)"
 (cd mod-189 && JAVA_HOME=$J21 retry ./gradlew --no-daemon -q build)
 put 1.8.9 "mod-189/build/libs/mytic-client-$VERSION+1.8.9.jar"
 
-for v in 26.3 26.2 26.1.2 26.1.1 26.1; do
+for v in ${MODS_26:-26.3 26.2 26.1.2 26.1.1 26.1}; do
   echo "$v"
   (cd mod-26 && JAVA_HOME=$J25 retry ./gradlew --no-daemon -q build -Pmc=$v)
   put $v "mod-26/build/libs/mytic-client-$VERSION+$v.jar"

@@ -3,6 +3,8 @@ package de.myticlegacy.client;
 import de.myticlegacy.client.compat.Gfx;
 import de.myticlegacy.client.compat.Compat;
 import com.mojang.blaze3d.platform.InputConstants;
+import de.myticlegacy.client.friends.Friends;
+import de.myticlegacy.client.gui.HubScreen;
 import de.myticlegacy.client.gui.HudEditScreen;
 import de.myticlegacy.client.gui.ModMenuScreen;
 import de.myticlegacy.client.gui.MyticTitleScreen;
@@ -21,6 +23,7 @@ import de.myticlegacy.client.module.AutoTextModule;
 import de.myticlegacy.client.module.CrosshairModule;
 import de.myticlegacy.client.module.LightOverlayModule;
 import de.myticlegacy.client.module.FreelookModule;
+import de.myticlegacy.client.module.FriendsModule;
 import de.myticlegacy.client.module.Module;
 import de.myticlegacy.client.module.SimpleModules;
 import de.myticlegacy.client.module.SnaplookModule;
@@ -45,7 +48,7 @@ import java.util.List;
 public final class MyticClient implements ClientModInitializer {
     public static final String ID = "myticclient";
     public static final String NAME = "Mytic Client";
-    public static final String VERSION = "2.10";
+    public static final String VERSION = "2.11";
     public static final Logger LOG = LoggerFactory.getLogger(NAME);
 
     public static final List<Module> MODULES = new ArrayList<>();
@@ -73,6 +76,7 @@ public final class MyticClient implements ClientModInitializer {
     public static final KeyMapping[] autoTextKeys = new KeyMapping[AutoTextModule.SLOTS];
     public static AutoTextModule autoText;
     public static LightOverlayModule lightOverlay;
+    public static FriendsModule friends;
 
     private static Config config;
     private static boolean fullbrightApplied;
@@ -179,6 +183,7 @@ public final class MyticClient implements ClientModInitializer {
         hideBossbar = module(SimpleModules.hideBossbar());
         autoText = module(new AutoTextModule());
         lightOverlay = module(new LightOverlayModule());
+        friends = module(new FriendsModule());
         theme = module(new SimpleModules.Theme());
 
         menuKey = Compat.registerKey("key.myticclient.menu", InputConstants.KEY_RSHIFT);
@@ -190,6 +195,7 @@ public final class MyticClient implements ClientModInitializer {
         Compat.registerHud();
         de.myticlegacy.client.render.WorldRender.register(sink -> lightOverlay.draw(sink));
 
+        Friends.start();
         CombatTracker.register();
         ClientTickEvents.END_CLIENT_TICK.register(MyticClient::tick);
         ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> {
@@ -246,10 +252,27 @@ public final class MyticClient implements ClientModInitializer {
         }
     }
 
+    /** Status für die Freundesliste weitergeben und Benachrichtigungen im Chat zeigen. */
+    private static void tickFriends(Minecraft mc) {
+        if (!Friends.available()) return;
+        Friends.visible = friends.enabled();
+        Friends.showServer = friends.showServer.get();
+        Friends.notify = friends.notify.get();
+        Friends.mcVersion = Compat.versionName();
+        if (mc.level == null) Friends.currentServer = null;
+        else if (mc.getCurrentServer() != null) Friends.currentServer = mc.getCurrentServer().ip;
+        else Friends.currentServer = mc.hasSingleplayerServer() ? "Einzelspieler" : null;
+        if (mc.player == null) return;
+        String notice;
+        while ((notice = Friends.pollNotice()) != null) Compat.chat(mc, "§8[§dMytic§8] " + notice);
+    }
+
     private static void tick(Minecraft mc) {
+        // Rechts-Shift: Übersicht (Freunde, Mods, Cosmetics); Strg + Rechts-Shift: direkt die Mods
         while (menuKey.consumeClick()) {
-            if (Compat.screen(mc) == null) Compat.setScreen(new ModMenuScreen(null));
+            if (Compat.screen(mc) == null) Compat.setScreen(Compat.ctrlDown() ? new ModMenuScreen(null) : new HubScreen());
         }
+        tickFriends(mc);
         if (mc.level == null) sessionStart = 0;
         else if (sessionStart == 0) sessionStart = System.currentTimeMillis();
 

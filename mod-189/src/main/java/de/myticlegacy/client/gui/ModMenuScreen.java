@@ -185,8 +185,13 @@ public class ModMenuScreen extends MyticScreen {
 
     @Override
     protected void renderBackground(GuiGraphics g) {
+        background(g, width, height);
+    }
+
+    /** Hintergrund aller Mytic-Menüs: Panorama im Hauptmenü, im Spiel unscharf oder abgedunkelt. */
+    static void background(GuiGraphics g, int width, int height) {
         String mode = MyticClient.theme.menuBackground.get();
-        if (mc.theWorld == null) {
+        if (net.minecraft.client.Minecraft.getMinecraft().theWorld == null) {
             Panorama.render(width, height);
             g.fill(0, 0, width, height, 0x80000000);
         } else if (mode.equals("Unschärfe")) {
@@ -199,7 +204,8 @@ public class ModMenuScreen extends MyticScreen {
     }
 
     /** Unschärfe im Spiel über den Blur-Shader von Minecraft. */
-    private void blur(boolean on) {
+    static void blur(boolean on) {
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getMinecraft();
         if (!OpenGlHelperCheck.shaders()) return;
         ShaderGroup current = mc.entityRenderer.getShaderGroup();
         boolean active = current != null && current.getShaderGroupName().endsWith("mytic_blur.json");

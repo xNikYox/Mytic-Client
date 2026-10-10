@@ -3,6 +3,7 @@ const { app, BrowserWindow, ipcMain, shell, safeStorage, session, dialog } = req
 const importer = require("./core/importer");
 const { ModUpdater } = require("./core/modupdates");
 const autofix = require("./core/autofix");
+const { FriendsClient } = require("./core/friends");
 const fs = require("node:fs");
 const fsp = require("node:fs/promises");
 const path = require("node:path");
@@ -20,6 +21,8 @@ const DIRS = makeDirs();
 /** Offline-Konten nur für Entwickler-Tests: im Quellcode-Start (npm start) oder mit MYTIC_DEV=1, nie in der veröffentlichten EXE. */
 const DEV_BUILD = Boolean(readJsonSync(path.join(app.isPackaged ? path.join(process.resourcesPath, "resources") : path.join(__dirname, "..", "resources"), "config.json")).devBuild);
 const DEV_UPDATE_SITE = readJsonSync(path.join(app.isPackaged ? path.join(process.resourcesPath, "resources") : path.join(__dirname, "..", "resources"), "config.json")).updateSite || process.env.MYTIC_UPDATE_SITE || "";
+/** Friends-Server: in der Entwicklerversion die eigene Seite, sonst der öffentliche Server (falls eingerichtet). */
+const FRIENDS_SERVER = process.env.MYTIC_FRIENDS_SERVER || readJsonSync(path.join(app.isPackaged ? path.join(process.resourcesPath, "resources") : path.join(__dirname, "..", "resources"), "config.json")).friendsServer || "";
 const OFFLINE_ALLOWED = DEV_BUILD || process.env.MYTIC_DEV === "1" || (!app.isPackaged && process.env.MYTIC_RELEASE !== "1");
 
 function readJsonSync(file) {
@@ -40,6 +43,7 @@ const modUpdater = new ModUpdater({
   source: DEV_BUILD ? { type: "site", base: DEV_UPDATE_SITE } : { type: "github", repo: updater.REPO },
   log: (line) => emit("log", line),
 });
+const friends = new FriendsClient({ base: FRIENDS_SERVER, log: (line) => emit("log", line) });
 const BUNDLED_CONFIG = app.isPackaged ? path.join(process.resourcesPath, "resources", "config.json") : path.join(__dirname, "..", "resources", "config.json");
 
 /** In-Game-Module der Mytic-Mod (gleiche IDs und Standardwerte wie im Mod-Code). */
@@ -552,6 +556,7 @@ ipcMain.handle("state", () => ({
   running: Boolean(game),
   offlineAllowed: OFFLINE_ALLOWED,
   devBuild: DEV_BUILD,
+  friends: Boolean(FRIENDS_SERVER),
   gameDir: DIRS.game,
 }));
 
@@ -644,6 +649,36 @@ ipcMain.handle("autofix:apply", async () => {
   return { results, profiles: await profileList() };
 });
 
+// ------------------------------------------------------------------------------ Freunde
+
+/** Freundesliste holen; ohne laufendes Spiel meldet sich dabei der Launcher als online ("im Launcher"). */
+ipcMain.handle("friends:get", async () => {
+  if (!friends.configured) return { configured: false };
+  const account = await activeAccount();
+  const data = game ? await friends.call(account, "GET", "api/friends") : await friends.call(account, "POST", "api/presence", { place: "launcher" });
+  return { configured: true, ...data };
+});
+
+for (const action of ["request", "accept", "deny", "remove"]) {
+  ipcMain.handle(`friends:${action}`, async (e, value) => {
+    const account = await activeAccount();
+    const data = await friends.call(account, "POST", `api/friends/${action}`, action === "request" ? { name: String(value || "").trim() } : { uuid: String(value || "") });
+    return { configured: true, ...data };
+  });
+}
+
+/** JVM-Argumente, mit denen die Mod im Spiel die Freundesliste nutzt (leer, wenn nicht erreichbar). */
+async function friendsJvm(account) {
+  if (!friends.configured) return [];
+  try {
+    const token = await friends.login(account);
+    return [`-Dmytic.friends.url=${friends.base}`, `-Dmytic.friends.token=${token}`];
+  } catch (error) {
+    emit("log", `[Freunde] Im Spiel nicht verfügbar: ${error.message}`);
+    return [];
+  }
+}
+
 ipcMain.handle("game:launch", async () => {
   if (busy || game) throw new Error("Das Spiel läuft bereits.");
   busy = true;
@@ -666,7 +701,7 @@ ipcMain.handle("game:launch", async () => {
       const { clientId, ...stored } = current;
       await writeJson(SETTINGS_FILE, { ...stored, verifyNext: false });
     }
-    const command = buildCommand(install, DIRS, account, { ...current, modsDir: profileMods });
+    const command = buildCommand(install, DIRS, account, { ...current, modsDir: profileMods, extraJvm: await friendsJvm(account) });
     emit("status", "Minecraft startet …");
     emit("log", `[Launcher] Starte Minecraft ${profile.mcVersion} (Fabric) als ${account.name} – Profil „${profile.name}“`);
     // letzte Log-Zeilen für den Auto-Fix merken

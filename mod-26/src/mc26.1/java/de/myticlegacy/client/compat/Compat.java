@@ -92,4 +92,14 @@ public final class Compat {
     private static Identifier id(String path) {
         return Identifier.fromNamespaceAndPath("myticclient", path);
     }
+
+    /** Nachricht nur für dich in den Chat schreiben. */
+    public static void chat(Minecraft mc, String text) {
+        mc.gui.getChat().addClientSystemMessage(Component.literal(text));
+    }
+
+    /** Ob Strg gedrückt ist. */
+    public static boolean ctrlDown() {
+        return Minecraft.getInstance().hasControlDown();
+    }
 }

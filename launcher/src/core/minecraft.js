@@ -15,7 +15,7 @@ const VERSION_MANIFEST = "https://piston-meta.mojang.com/mc/game/version_manifes
 const FABRIC_META = "https://meta.fabricmc.net/v2";
 const MODRINTH = "https://api.modrinth.com/v2";
 const LAUNCHER_NAME = "MyticClient";
-const LAUNCHER_VERSION = "2.20.0";
+const LAUNCHER_VERSION = "2.21.0";
 
 /** Mods, die der Launcher verwaltet. required = immer installiert, sonst über die Einstellungen schaltbar. */
 /** Alte Versionen laufen mit Forge statt Fabric (Version → Forge-Version). */
@@ -471,6 +471,7 @@ function buildCommand(install, dirs, account, settings = {}, { platform = proces
     // Mods des gewählten Profils (Fabric lädt alle JARs aus diesem Ordner zusätzlich)
     ...(settings.modsDir ? [`-Dfabric.addMods=${settings.modsDir}`] : []),
     ...(settings.jvmArgs ? settings.jvmArgs.split(/\s+/).filter(Boolean) : []),
+    ...(settings.extraJvm || []),
   ];
   if (logConfig) jvm.push(substitute(logConfig.argument, { path: logConfig.file }));
   const game = [
@@ -513,6 +514,7 @@ function buildLegacyCommand(install, dirs, account, settings, platform) {
     // Mytic-Einstellungen (Module, HUD-Positionen) teilen sich alle Versionen
     `-Dmytic.config=${path.join(dirs.game, "config", "myticclient.json")}`,
     ...(settings.jvmArgs ? settings.jvmArgs.split(/\s+/).filter(Boolean) : []),
+    ...(settings.extraJvm || []),
   ];
   if (logConfig) jvm.push(substitute(logConfig.argument, { path: logConfig.file }));
   jvm.push("-cp", [...libraries.map((l) => l.file), clientJar].join(separator));

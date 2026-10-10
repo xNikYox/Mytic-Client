@@ -19,7 +19,7 @@ let logLevel = "all";
 const logLines = [];
 
 const avatar = (uuid) => `https://mc-heads.net/avatar/${uuid}/64`;
-const PAGE_TITLES = { home: "Start", mods: "Mods", browser: "Mod-Browser", settings: "Einstellungen", console: "Konsole" };
+const PAGE_TITLES = { home: "Start", friends: "Freunde", mods: "Mods", browser: "Mod-Browser", settings: "Einstellungen", console: "Konsole" };
 
 // Einfache Linien-Icons pro Kategorie
 const ICONS = {
@@ -155,6 +155,7 @@ function showPage(name) {
   $("page-title").textContent = PAGE_TITLES[name];
   if (name === "console") renderLog(true);
   if (name === "browser" && !browserLoaded) loadBrowser(true);
+  if (name === "friends") loadFriends();
 }
 document.querySelectorAll(".rail-item").forEach((b) => b.addEventListener("click", () => showPage(b.dataset.page)));
 document.querySelectorAll("[data-goto]").forEach((b) => b.addEventListener("click", () => showPage(b.dataset.goto)));
@@ -168,6 +169,10 @@ function selectedAccount() {
 
 function renderAccounts() {
   const account = selectedAccount();
+  if (friendsData && friendsData.me && (!account || friendsData.me.name !== account.name)) {
+    friendsData = null;
+    setTimeout(loadFriends, 0);
+  }
   $("account-name").textContent = account ? account.name : "Anmelden";
   $("account-type").textContent = account ? (account.type === "microsoft" ? "Microsoft-Konto" : "Offline-Konto") : "Kein Konto";
   $("launch-name").textContent = account ? account.name : "kein Konto";
@@ -1145,4 +1150,174 @@ $("update-install").addEventListener("click", async () => {
   updateInstalledCount();
   applyProfiles(profileState, false);
   setRunning(state.running);
+  loadFriends();
 })();
+
+// ---------------------------------------------------------------------------------------------- Freunde
+
+let friendsData = null;
+let friendsTimer = null;
+const removeArmed = new Set();
+
+/** Kopf aus 64 Pixeln "AARRGGBB" (vom Friends-Server) als Bild. */
+function headImage(hex, name, size = 32) {
+  if (!hex || hex.length !== 512) {
+    const fallback = document.createElement("span");
+    fallback.className = "friend-head fallback";
+    fallback.textContent = (name || "?")[0].toUpperCase();
+    return fallback;
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 8;
+  canvas.className = "friend-head";
+  canvas.style.width = canvas.style.height = `${size}px`;
+  const ctx = canvas.getContext("2d");
+  const img = ctx.createImageData(8, 8);
+  for (let i = 0; i < 64; i++) {
+    const px = hex.slice(i * 8, i * 8 + 8);
+    img.data.set([parseInt(px.slice(2, 4), 16), parseInt(px.slice(4, 6), 16), parseInt(px.slice(6, 8), 16), 255], i * 4);
+  }
+  ctx.putImageData(img, 0, 0);
+  return canvas;
+}
+
+function ago(time) {
+  if (!time) return "noch nie online";
+  const s = Math.max(0, Math.round((Date.now() - time) / 1000));
+  if (s < 3600) return `zuletzt online vor ${Math.max(1, Math.round(s / 60))} Min.`;
+  if (s < 86400) return `zuletzt online vor ${Math.round(s / 3600)} Std.`;
+  const d = Math.round(s / 86400);
+  return `zuletzt online vor ${d} ${d === 1 ? "Tag" : "Tagen"}`;
+}
+
+function friendStatus(f) {
+  if (!f.online) return { text: ago(f.lastSeen), cls: "off" };
+  if (f.place === "game") {
+    const where = f.server ? (f.server === "Einzelspieler" ? "Einzelspieler" : `auf ${f.server}`) : "im Spiel";
+    return { text: `Spielt ${where}${f.version ? ` · ${f.version}` : ""}`, cls: "game" };
+  }
+  return { text: "Im Launcher", cls: "on" };
+}
+
+function friendRow(user, status, actions) {
+  const row = document.createElement("div");
+  row.className = "friend";
+  const head = headImage(user.head, user.name);
+  const body = document.createElement("div");
+  body.className = "friend-body";
+  const name = document.createElement("b");
+  name.textContent = user.name;
+  body.append(name);
+  if (status) {
+    const line = document.createElement("small");
+    line.className = `friend-status ${status.cls}`;
+    line.textContent = status.text;
+    body.append(line);
+  }
+  const buttons = document.createElement("div");
+  buttons.className = "friend-actions";
+  for (const action of actions) {
+    const button = document.createElement("button");
+    button.className = `ghost small${action.danger ? " danger" : ""}`;
+    button.textContent = action.label;
+    button.title = action.title || "";
+    button.addEventListener("click", action.run);
+    buttons.append(button);
+  }
+  row.append(head, body, buttons);
+  return row;
+}
+
+async function friendAction(call) {
+  try {
+    const data = await call();
+    if (data.message) toast(data.message);
+    renderFriends(data);
+  } catch (error) {
+    toast(errorText(error), true);
+  }
+}
+
+function renderFriends(data) {
+  friendsData = data;
+  const notice = $("friends-notice");
+  if (!data || !data.configured) {
+    notice.hidden = false;
+    notice.textContent = "Freunde sind in dieser Version noch nicht verfügbar – der Friends-Server wird gerade eingerichtet.";
+    $("friends-list").replaceChildren();
+    return;
+  }
+  notice.hidden = true;
+  const online = data.friends.filter((f) => f.online).length;
+  $("friends-count").textContent = data.friends.length ? `${online} / ${data.friends.length} online` : "";
+  const list = $("friends-list");
+  if (!data.friends.length) {
+    const empty = document.createElement("p");
+    empty.className = "sub friends-empty";
+    empty.textContent = "Noch keine Freunde – gib oben einen Spielernamen ein. Dein Freund muss den Mytic Client einmal gestartet haben.";
+    list.replaceChildren(empty);
+  } else {
+    list.replaceChildren(...data.friends.map((f) => friendRow(f, friendStatus(f), [{
+      label: removeArmed.has(f.uuid) ? "Wirklich entfernen?" : "Entfernen",
+      danger: true,
+      run: () => {
+        if (!removeArmed.has(f.uuid)) {
+          removeArmed.add(f.uuid);
+          renderFriends(friendsData);
+          setTimeout(() => removeArmed.delete(f.uuid), 4000);
+          return;
+        }
+        removeArmed.delete(f.uuid);
+        friendAction(() => api.friendRemove(f.uuid));
+      },
+    }])));
+  }
+  const empty = (text) => {
+    const p = document.createElement("p");
+    p.className = "sub";
+    p.textContent = text;
+    return p;
+  };
+  $("friends-incoming").replaceChildren(...(data.incoming.length ? data.incoming.map((r) => friendRow(r, null, [
+    { label: "✓", title: "Annehmen", run: () => friendAction(() => api.friendAccept(r.uuid)) },
+    { label: "✕", title: "Ablehnen", danger: true, run: () => friendAction(() => api.friendDeny(r.uuid)) },
+  ])) : [empty("Keine offenen Anfragen")]));
+  $("friends-outgoing").replaceChildren(...(data.outgoing.length ? data.outgoing.map((r) => friendRow(r, null, [
+    { label: "Zurückziehen", danger: true, run: () => friendAction(() => api.friendRemove(r.uuid)) },
+  ])) : [empty("Keine gesendeten Anfragen")]));
+  const badge = $("friends-badge");
+  badge.hidden = !data.incoming.length;
+  badge.textContent = data.incoming.length;
+}
+
+async function loadFriends() {
+  clearTimeout(friendsTimer);
+  friendsTimer = setTimeout(loadFriends, 60000);
+  if (!selectedAccount()) return;
+  try {
+    const before = friendsData && friendsData.incoming ? friendsData.incoming.map((r) => r.uuid) : null;
+    const data = await api.friends();
+    if (before && data.incoming) {
+      const fresh = data.incoming.find((r) => !before.includes(r.uuid));
+      if (fresh) toast(`${fresh.name} möchte mit dir befreundet sein`);
+    }
+    renderFriends(data);
+  } catch (error) {
+    if (document.querySelector("#page-friends.active")) {
+      const notice = $("friends-notice");
+      notice.hidden = false;
+      notice.textContent = errorText(error);
+    }
+  }
+}
+
+$("friend-add").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const name = $("friend-name").value.trim();
+  if (!name) return;
+  friendAction(async () => {
+    const data = await api.friendRequest(name);
+    $("friend-name").value = "";
+    return data;
+  });
+});

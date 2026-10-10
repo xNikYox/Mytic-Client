@@ -4,6 +4,8 @@ import de.myticlegacy.client.compat.Compat;
 import de.myticlegacy.client.compat.Gfx;
 import de.myticlegacy.client.compat.GuiGraphics;
 import de.myticlegacy.client.compat.InputConstants;
+import de.myticlegacy.client.friends.Friends;
+import de.myticlegacy.client.gui.HubScreen;
 import de.myticlegacy.client.gui.HudEditScreen;
 import de.myticlegacy.client.gui.ModMenuScreen;
 import de.myticlegacy.client.gui.MyticTitleScreen;
@@ -21,6 +23,7 @@ import de.myticlegacy.client.module.AutoTextModule;
 import de.myticlegacy.client.module.CrosshairModule;
 import de.myticlegacy.client.module.LightOverlayModule;
 import de.myticlegacy.client.module.FreelookModule;
+import de.myticlegacy.client.module.FriendsModule;
 import de.myticlegacy.client.module.Module;
 import de.myticlegacy.client.module.SimpleModules;
 import de.myticlegacy.client.module.SnaplookModule;
@@ -70,7 +73,7 @@ import java.util.List;
 public final class MyticClient {
     public static final String ID = "myticclient";
     public static final String NAME = "Mytic Client";
-    public static final String VERSION = "2.10";
+    public static final String VERSION = "2.11";
     public static final Logger LOG = LogManager.getLogger(NAME);
 
     public static final List<Module> MODULES = new ArrayList<Module>();
@@ -98,6 +101,7 @@ public final class MyticClient {
     public static final KeyBinding[] autoTextKeys = new KeyBinding[AutoTextModule.SLOTS];
     public static AutoTextModule autoText;
     public static LightOverlayModule lightOverlay;
+    public static FriendsModule friends;
 
     private static Config config;
     private static boolean fullbrightApplied;
@@ -208,6 +212,7 @@ public final class MyticClient {
         hideBossbar = module(SimpleModules.hideBossbar());
         autoText = module(new AutoTextModule());
         lightOverlay = module(new LightOverlayModule());
+        friends = module(new FriendsModule());
         theme = module(new SimpleModules.Theme());
 
         menuKey = Compat.registerKey("key.myticclient.menu", InputConstants.KEY_RSHIFT);
@@ -220,6 +225,7 @@ public final class MyticClient {
         MinecraftForge.EVENT_BUS.register(this);
         FMLCommonHandler.instance().bus().register(this);
         Display.setTitle(NAME + " " + Compat.versionName());
+        Friends.start();
         LOG.info("{} {} geladen: {} Mods", NAME, VERSION, MODULES.size());
     }
 
@@ -366,6 +372,23 @@ public final class MyticClient {
         }
     }
 
+    /** Status für die Freundesliste weitergeben und Benachrichtigungen im Chat zeigen. */
+    private static void tickFriends(Minecraft mc) {
+        if (!Friends.available()) return;
+        Friends.visible = friends.enabled();
+        Friends.showServer = friends.showServer.get();
+        Friends.notify = friends.notify.get();
+        Friends.mcVersion = "1.8.9";
+        if (mc.theWorld == null) Friends.currentServer = null;
+        else if (mc.getCurrentServerData() != null) Friends.currentServer = mc.getCurrentServerData().serverIP;
+        else Friends.currentServer = mc.isSingleplayer() ? "Einzelspieler" : null;
+        if (mc.thePlayer == null) return;
+        String notice;
+        while ((notice = Friends.pollNotice()) != null) {
+            mc.ingameGUI.getChatGUI().printChatMessage(new net.minecraft.util.ChatComponentText("§8[§dMytic§8] " + notice));
+        }
+    }
+
     @SubscribeEvent
     public void onClientTick(TickEvent.ClientTickEvent event) {
         Minecraft mc = Minecraft.getMinecraft();
@@ -373,9 +396,12 @@ public final class MyticClient {
             applyMovementKeys(mc);
             return;
         }
+        // Rechts-Shift: Übersicht (Freunde, Mods, Cosmetics); Strg + Rechts-Shift: direkt die Mods
         while (menuKey.isPressed()) {
-            if (Compat.screen(mc) == null) Compat.setScreen(new ModMenuScreen(null));
+            boolean ctrl = org.lwjgl.input.Keyboard.isKeyDown(org.lwjgl.input.Keyboard.KEY_LCONTROL) || org.lwjgl.input.Keyboard.isKeyDown(org.lwjgl.input.Keyboard.KEY_RCONTROL);
+            if (Compat.screen(mc) == null) Compat.setScreen(ctrl ? new ModMenuScreen(null) : new HubScreen());
         }
+        tickFriends(mc);
         if (mc.theWorld == null) sessionStart = 0;
         else if (sessionStart == 0) sessionStart = System.currentTimeMillis();
         if (!toggleSneak.enabled() && sneakToggled) {
