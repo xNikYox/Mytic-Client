@@ -170,17 +170,34 @@ public class ModMenuScreen extends MyticScreen {
 
         // Panel: Schatten, Fläche, Kopf mit Akzent-Verlauf
         Ui.rect(g, px - 3, py + 3, pw + 6, ph + 3, 10, 0x50000000);
-        Ui.neonPanel(g, px, py, pw, ph, 8, 1f);
-        g.fillGradient(px + 4, py + 2, px + pw - 4, py + HEADER, Ui.withAlpha(Ui.accent(), 42), Ui.withAlpha(Ui.accent(), 0));
+        boolean lunar = Ui.lunar();
+        if (lunar) {
+            Ui.lunarPanel(g, px, py, pw, ph, 6);
+        } else {
+            Ui.neonPanel(g, px, py, pw, ph, 8, 1f);
+            g.fillGradient(px + 4, py + 2, px + pw - 4, py + HEADER, Ui.withAlpha(Ui.accent(), 42), Ui.withAlpha(Ui.accent(), 0));
+        }
 
-        Ui.glowText(g, "MYTIC", px + 14, py + 13, Ui.accent(), 1f);
-        Ui.glowText(g, "CLIENT", px + 14 + font.width("MYTIC "), py + 13, Ui.accent2(), 0.8f);
+        if (lunar) {
+            Ui.text(g, "MYTIC", px + 14, py + 13, 0xFFFFFFFF, true);
+            Ui.text(g, "CLIENT", px + 14 + font.width("MYTIC "), py + 13, 0xFFB4B4B4, true);
+        } else {
+            Ui.glowText(g, "MYTIC", px + 14, py + 13, Ui.accent(), 1f);
+            Ui.glowText(g, "CLIENT", px + 14 + font.width("MYTIC "), py + 13, Ui.accent2(), 0.8f);
+        }
 
         for (Tab tab : tabs()) {
             boolean active = selected == null && tab.category == category;
             boolean hover = Ui.inside(mouseX, mouseY, tab.x - 4, py + 8, tab.w + 8, 18);
             float t = Ui.animate("tab:" + tab.label, active, 14f);
             float h = Ui.animate("tabh:" + tab.label, hover, 18f);
+            if (lunar) {
+                // Lunar: Kategorien als Pillen, die aktive hell hinterlegt
+                float fillT = Math.max(t, h * 0.4f);
+                if (fillT > 0.01f) Ui.rect(g, tab.x - 5, py + 9, tab.w + 10, 15, 4, Ui.withAlpha(0xFFFFFF, Math.round(fillT * 40)));
+                Ui.text(g, tab.label, tab.x, py + 13, Ui.mix(0xFF9A9A9A, 0xFFFFFFFF, Math.max(t, h * 0.7f)), false);
+                continue;
+            }
             Ui.text(g, tab.label, tab.x, py + 13, Ui.mix(Ui.MUTED, Ui.TEXT, Math.max(t, h * 0.7f)), false);
             int line = Math.round(tab.w * t);
             if (line > 0) {
@@ -192,7 +209,8 @@ public class ModMenuScreen extends MyticScreen {
 
         int[] sb = searchBox();
         boolean sHover = Ui.inside(mouseX, mouseY, sb[0], sb[1], sb[2], sb[3]);
-        Ui.outline(g, sb[0], sb[1], sb[2], sb[3], 8, searchFocused ? Ui.accent2() : sHover ? Ui.withAlpha(Ui.accent2(), 120) : Ui.LINE, Ui.SURFACE);
+        if (lunar) Ui.outline(g, sb[0], sb[1], sb[2], sb[3], 4, searchFocused ? 0x90FFFFFF : sHover ? 0x50FFFFFF : Ui.L_LINE, 0xFF1C1C1C);
+        else Ui.outline(g, sb[0], sb[1], sb[2], sb[3], 8, searchFocused ? Ui.accent2() : sHover ? Ui.withAlpha(Ui.accent2(), 120) : Ui.LINE, Ui.SURFACE);
         String shown = query.isEmpty() ? (searchFocused ? "" : "Suchen …") : query;
         String clipped = font.plainSubstrByWidth(shown, sb[2] - 16);
         if (query.length() > 0 && font.width(query) > sb[2] - 16) clipped = tail(query, sb[2] - 16);
@@ -201,7 +219,7 @@ public class ModMenuScreen extends MyticScreen {
             int caret = sb[0] + 8 + font.width(query.isEmpty() ? "" : clipped);
             g.fill(caret, sb[1] + 3, caret + 1, sb[1] + 13, Ui.TEXT);
         }
-        Ui.rect(g, px + 10, py + HEADER, pw - 20, 1, 0, Ui.LINE);
+        Ui.rect(g, px + 10, py + HEADER, pw - 20, 1, 0, lunar ? Ui.L_LINE : Ui.LINE);
 
         Gfx.scissor(g, cx(), cy() - 3, cx() + cw(), cy() + ch());
         Object hover = selected == null ? drawGrid(g, mouseX, mouseY) : drawSettings(g, mouseX, mouseY);
@@ -210,14 +228,18 @@ public class ModMenuScreen extends MyticScreen {
 
         // Fußzeile
         int fy = py + ph - FOOTER + 6;
-        Ui.rect(g, px + 10, fy - 6, pw - 20, 1, 0, Ui.LINE);
+        Ui.rect(g, px + 10, fy - 6, pw - 20, 1, 0, lunar ? Ui.L_LINE : Ui.LINE);
         int bw = font.width("HUD bearbeiten") + 20;
         boolean editHover = Ui.inside(mouseX, mouseY, px + 10, fy, bw, 16);
         float eh = Ui.animate("btn:edit", editHover, 16f);
-        Ui.glow(g, px + 10, fy, bw, 16, 8, Ui.accent(), 3, 0.4f + eh * 0.6f);
-        Ui.rect(g, px + 10, fy, bw, 16, 8, Ui.accent());
-        Ui.rect(g, px + 10 + bw - 16, fy, 16, 16, 8, Ui.PINK);
-        Ui.hGradient(g, px + 18, fy, bw - 26, 16, Ui.mix(Ui.accent(), 0xFFFFFFFF, eh * 0.15f), Ui.mix(Ui.PINK, 0xFFFFFFFF, eh * 0.15f));
+        if (lunar) {
+            Ui.outline(g, px + 10, fy, bw, 16, 4, Ui.mix(0x40FFFFFF, 0xB0FFFFFF, eh), Ui.mix(0xFF262626, 0xFF333333, eh));
+        } else {
+            Ui.glow(g, px + 10, fy, bw, 16, 8, Ui.accent(), 3, 0.4f + eh * 0.6f);
+            Ui.rect(g, px + 10, fy, bw, 16, 8, Ui.accent());
+            Ui.rect(g, px + 10 + bw - 16, fy, 16, 16, 8, Ui.PINK);
+            Ui.hGradient(g, px + 18, fy, bw - 26, 16, Ui.mix(Ui.accent(), 0xFFFFFFFF, eh * 0.15f), Ui.mix(Ui.PINK, 0xFFFFFFFF, eh * 0.15f));
+        }
         Ui.text(g, "HUD bearbeiten", px + 20, fy + 4, 0xFFFFFFFF, true);
         String info = MyticClient.MODULES.stream().filter(Module::enabled).count() + " von " + MyticClient.MODULES.size() + " aktiv";
         Ui.text(g, info, px + pw - 12 - font.width(info), fy + 4, Ui.MUTED, false);
@@ -259,9 +281,11 @@ public class ModMenuScreen extends MyticScreen {
             float hv = Ui.animate("card:" + m.id, over, 16f);
             float onT = Ui.animate("on:" + m.id, on, 12f);
 
+            boolean lunar = Ui.lunar();
             float lit = Math.max(onT * 0.75f, hv);
-            if (lit > 0.02f) Ui.glow(g, c[0], c[1], w, CARD_H, 6, hv > onT ? Ui.accent2() : Ui.accent(), 4, lit * 0.7f);
-            Ui.outline(g, c[0], c[1], w, CARD_H, 6, Ui.mix(Ui.LINE, Ui.withAlpha(hv > onT ? Ui.accent2() : Ui.accent(), 230), Math.max(onT * 0.7f, hv * 0.95f)),
+            if (lunar) Ui.outline(g, c[0], c[1], w, CARD_H, 4, Ui.mix(0x18FFFFFF, 0x50FFFFFF, hv), Ui.mix(Ui.L_CARD, Ui.L_CARD_HOVER, hv));
+            else if (lit > 0.02f) Ui.glow(g, c[0], c[1], w, CARD_H, 6, hv > onT ? Ui.accent2() : Ui.accent(), 4, lit * 0.7f);
+            if (!lunar) Ui.outline(g, c[0], c[1], w, CARD_H, 6, Ui.mix(Ui.LINE, Ui.withAlpha(hv > onT ? Ui.accent2() : Ui.accent(), 230), Math.max(onT * 0.7f, hv * 0.95f)),
                     Ui.mix(Ui.SURFACE, Ui.SURFACE_HOVER, hv));
 
             Gfx.push(g);
@@ -274,17 +298,23 @@ public class ModMenuScreen extends MyticScreen {
             Ui.centered(g, name, c[0] + w / 2, c[1] + 45, Ui.TEXT, false);
 
             int barY = c[1] + CARD_H - 20;
+            if (lunar) {
+                // Lunar: grüner bzw. roter Balken über die ganze Breite
+                int state = Ui.mix(Ui.L_RED, Ui.L_GREEN, onT);
+                Ui.rect(g, c[0] + 5, barY, w - 10, 13, 3, over ? Ui.mix(state, 0xFFFFFFFF, 0.12f) : state);
+                Ui.centered(g, on ? "AKTIV" : "INAKTIV", c[0] + w / 2, barY + 3, 0xFFFFFFFF, false);
+            }
             int barColor = Ui.mix(0xFF2B2440, Ui.accent(), onT);
-            Ui.rect(g, c[0] + 7, barY, w - 14, 13, 6, over ? Ui.mix(barColor, 0xFFFFFFFF, 0.1f) : barColor);
-            if (onT > 0.02f) {
+            if (!lunar) Ui.rect(g, c[0] + 7, barY, w - 14, 13, 6, over ? Ui.mix(barColor, 0xFFFFFFFF, 0.1f) : barColor);
+            if (!lunar && onT > 0.02f) {
                 Ui.hGradient(g, c[0] + 13, barY, w - 26, 13, Ui.alpha(barColor, onT), Ui.alpha(Ui.mix(Ui.accent(), Ui.PINK, 0.55f), onT));
                 Ui.rect(g, c[0] + w - 19, barY, 12, 13, 6, Ui.alpha(Ui.mix(Ui.accent(), Ui.PINK, 0.55f), onT));
             }
-            Ui.centered(g, on ? "AN" : "AUS", c[0] + w / 2, barY + 3, on ? 0xFFFFFFFF : Ui.MUTED, false);
+            if (!lunar) Ui.centered(g, on ? "AN" : "AUS", c[0] + w / 2, barY + 3, on ? 0xFFFFFFFF : Ui.MUTED, false);
 
             if (!m.settings.isEmpty()) {
                 boolean gearHover = over && Ui.inside(mouseX, mouseY, c[0] + w - 16, c[1] + 3, 13, 13);
-                int gearColor = gearHover ? Ui.accent() : Ui.withAlpha(Ui.MUTED, over ? 255 : 110);
+                int gearColor = gearHover ? (lunar ? 0xFFFFFFFF : Ui.accent()) : Ui.withAlpha(Ui.MUTED, over ? 255 : 110);
                 Ui.text(g, "⚙", c[0] + w - 13, c[1] + 5, gearColor, false);
             }
         }
@@ -310,7 +340,7 @@ public class ModMenuScreen extends MyticScreen {
         for (Setting<?> setting : m.settings) {
             boolean over = Ui.inside(mouseX, mouseY, x, row, w, ROW_H);
             Ui.rect(g, x, row, w, ROW_H, 5, over ? Ui.SURFACE_HOVER : Ui.SURFACE);
-            if (over) Ui.rect(g, x, row + 4, 2, ROW_H - 8, 1, Ui.accent2());
+            if (over && !Ui.lunar()) Ui.rect(g, x, row + 4, 2, ROW_H - 8, 1, Ui.accent2());
             Ui.text(g, setting.label, x + 8, row + 7, Ui.TEXT, false);
             int right = x + w - 8;
             if (setting instanceof BoolSetting b) {
@@ -321,9 +351,13 @@ public class ModMenuScreen extends MyticScreen {
                 int ty = row + 10;
                 Ui.rect(g, tx, ty, trackW, 3, 1, 0xFF3A3352);
                 int fill = (int) Math.round(trackW * sl.fraction());
-                Ui.glow(g, tx, ty, Math.max(3, fill), 3, 1, Ui.accent(), 2, 0.8f);
-                Ui.hGradient(g, tx, ty, Math.max(3, fill), 3, Ui.accent2(), Ui.accent());
-                Ui.glow(g, tx + fill - 4, ty - 3, 9, 9, 4, Ui.accent2(), 2, 0.9f);
+                if (Ui.lunar()) {
+                    Ui.rect(g, tx, ty, Math.max(3, fill), 3, 1, 0xFFE6E6E6);
+                } else {
+                    Ui.glow(g, tx, ty, Math.max(3, fill), 3, 1, Ui.accent(), 2, 0.8f);
+                    Ui.hGradient(g, tx, ty, Math.max(3, fill), 3, Ui.accent2(), Ui.accent());
+                    Ui.glow(g, tx + fill - 4, ty - 3, 9, 9, 4, Ui.accent2(), 2, 0.9f);
+                }
                 Ui.rect(g, tx + fill - 4, ty - 3, 9, 9, 4, 0xFFFFFFFF);
                 String value = sl.display();
                 Ui.text(g, value, tx - 8 - font.width(value), row + 7, Ui.MUTED, false);
@@ -334,16 +368,17 @@ public class ModMenuScreen extends MyticScreen {
                     int color = ColorSetting.PALETTE[i];
                     int px2 = sx + i * (size + 2);
                     if (color == c.get()) {
-                        Ui.glow(g, px2 - 1, row + 6, size + 2, size + 2, 3, color == 0xFF000000 ? 0xFFFFFFFF : color, 3, 0.9f);
+                        if (!Ui.lunar()) Ui.glow(g, px2 - 1, row + 6, size + 2, size + 2, 3, color == 0xFF000000 ? 0xFFFFFFFF : color, 3, 0.9f);
                         Ui.rect(g, px2 - 1, row + 6, size + 2, size + 2, 3, 0xFFFFFFFF);
                     }
                     Ui.rect(g, px2, row + 7, size, size, 2, color == 0xFF000000 ? 0xFF101010 : color);
                 }
             } else if (setting instanceof ModeSetting mode) {
                 int bw = Math.max(80, font.width(mode.get()) + 30);
-                Ui.outline(g, right - bw, row + 3, bw, 16, 8, Ui.withAlpha(Ui.accent(), 150), 0xFF1C1433);
-                Ui.text(g, "‹", right - bw + 6, row + 7, Ui.accent2(), false);
-                Ui.text(g, "›", right - 10, row + 7, Ui.accent2(), false);
+                boolean ls = Ui.lunar();
+                Ui.outline(g, right - bw, row + 3, bw, 16, ls ? 4 : 8, ls ? 0x30FFFFFF : Ui.withAlpha(Ui.accent(), 150), ls ? 0xFF2A2A2A : 0xFF1C1433);
+                Ui.text(g, "‹", right - bw + 6, row + 7, ls ? 0xFFB4B4B4 : Ui.accent2(), false);
+                Ui.text(g, "›", right - 10, row + 7, ls ? 0xFFB4B4B4 : Ui.accent2(), false);
                 Ui.centered(g, mode.get(), right - bw / 2, row + 7, Ui.TEXT, false);
             }
             row += ROW_H + 3;
@@ -366,8 +401,12 @@ public class ModMenuScreen extends MyticScreen {
         if (total <= ch()) return;
         int barH = Math.max(18, ch() * ch() / total);
         int barY = cy() + (int) ((ch() - barH) * (scrollPos / (total - ch())));
-        Ui.glow(g, px + pw - 6, barY, 3, barH, 1, Ui.accent(), 2, 0.7f);
-        g.fillGradient(px + pw - 6, barY, px + pw - 3, barY + barH, Ui.accent2(), Ui.PINK);
+        if (Ui.lunar()) {
+            Ui.rect(g, px + pw - 6, barY, 3, barH, 1, 0x60FFFFFF);
+        } else {
+            Ui.glow(g, px + pw - 6, barY, 3, barH, 1, Ui.accent(), 2, 0.7f);
+            g.fillGradient(px + pw - 6, barY, px + pw - 3, barY + barH, Ui.accent2(), Ui.PINK);
+        }
     }
 
     // ------------------------------------------------------------------------------------------ Eingaben

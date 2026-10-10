@@ -129,8 +129,34 @@ public final class Ui {
     }
 
     /** Schalter wie bei Lunar: Pille mit Knopf, animiert. */
+    // ------------------------------------------------------------------ Lunar-Stil
+
+    public static final int L_PANEL = 0xF2141414;
+    public static final int L_CARD = 0xFF222222;
+    public static final int L_CARD_HOVER = 0xFF2C2C2C;
+    public static final int L_LINE = 0x22FFFFFF;
+    public static final int L_GREEN = 0xFF33B45A;
+    public static final int L_RED = 0xFFD8434B;
+
+    /** Menü im Lunar-Stil (Design → Menü-Stil, Standard) statt Neon. */
+    public static boolean lunar() {
+        return MyticClient.theme == null || MyticClient.theme.menuStyle.is("Lunar");
+    }
+
+    /** Schlichtes Panel wie bei Lunar: dunkelgrau, feiner heller Rand, keine Leuchteffekte. */
+    public static void lunarPanel(GuiGraphics g, int x, int y, int w, int h, int r) {
+        rect(g, x - 2, y + 2, w + 4, h + 2, r + 2, 0x45000000);
+        rect(g, x, y, w, h, r, 0x2EFFFFFF);
+        rect(g, x + 1, y + 1, w - 2, h - 2, Math.max(0, r - 1), L_PANEL);
+    }
+
     public static void toggle(GuiGraphics g, Object key, int x, int y, boolean on) {
         float t = animate(key, on, 14f);
+        if (lunar()) {
+            rect(g, x, y, 20, 10, 5, mix(0xFF4A4A4A, L_GREEN, t));
+            rect(g, x + 1 + Math.round(10 * t), y + 1, 8, 8, 4, 0xFFFFFFFF);
+            return;
+        }
         if (t > 0.01f) glow(g, x, y, 20, 10, 5, withAlpha(accent2(), Math.round(200 * t)), 3, 0.8f);
         rect(g, x, y, 20, 10, 5, 0xFF2A2240);
         if (t > 0.01f) {

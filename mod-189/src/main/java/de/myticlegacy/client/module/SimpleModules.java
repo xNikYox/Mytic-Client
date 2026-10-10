@@ -44,6 +44,7 @@ public final class SimpleModules {
         public final ModeSetting menuBackground;
         public final ModeSetting menuSize;
         public final ModeSetting hudStyle;
+        public final ModeSetting menuStyle;
 
         public Theme() {
             super("theme", "Design", "Akzentfarbe, Mytic-Hauptmenü und Menü-Hintergrund", Category.CLIENT, () -> Items.nether_star, true);
@@ -52,6 +53,7 @@ public final class SimpleModules {
             menuBackground = new ModeSetting(this, "menuBackground", "Menü-Hintergrund", "Unschärfe", "Unschärfe", "Abdunkeln", "Aus");
             menuSize = new ModeSetting(this, "menuSize", "Menügröße", "Kompakt", "Kompakt", "Groß");
             hudStyle = new ModeSetting(this, "hudStyle", "HUD-Stil", "Lunar", "Lunar", "Neon", "Klassisch");
+            menuStyle = new ModeSetting(this, "menuStyle", "Menü-Stil", "Lunar", "Lunar", "Neon");
         }
     }
 

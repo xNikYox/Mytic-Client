@@ -84,8 +84,13 @@ public class HudEditScreen extends InputScreen {
             m.draw(g, true);
             float t = Ui.animate("edit:" + m.id, m == hover, 16f);
             int color = Ui.mix(0x50FFFFFF, Ui.accent(), t);
-            if (t > 0.01f) Ui.glow(g, m.x() - 1, m.y() - 1, m.width() + 2, m.height() + 2, 0, Ui.accent2(), 3, t * 0.8f);
-            g.renderOutline(m.x() - 1, m.y() - 1, m.width() + 2, m.height() + 2, Ui.mix(Ui.withAlpha(Ui.accent2(), 90), Ui.accent2(), t));
+            if (Ui.lunar()) {
+                // Lunar: weißer Rahmen, beim Überfahren deutlicher
+                g.renderOutline(m.x() - 1, m.y() - 1, m.width() + 2, m.height() + 2, Ui.mix(0x50FFFFFF, 0xF0FFFFFF, t));
+            } else {
+                if (t > 0.01f) Ui.glow(g, m.x() - 1, m.y() - 1, m.width() + 2, m.height() + 2, 0, Ui.accent2(), 3, t * 0.8f);
+                g.renderOutline(m.x() - 1, m.y() - 1, m.width() + 2, m.height() + 2, Ui.mix(Ui.withAlpha(Ui.accent2(), 90), Ui.accent2(), t));
+            }
         }
         for (int[] guide : guides) {
             if (guide[0] == 0) g.fill(guide[1], 0, guide[1] + 1, height, Ui.withAlpha(Ui.accent(), 200));
@@ -96,10 +101,14 @@ public class HudEditScreen extends InputScreen {
             int lw = font.width(label) + 10;
             int lx = Math.max(2, Math.min(width - lw - 2, hover.x() + hover.width() / 2 - lw / 2));
             int ly = hover.y() > 16 ? hover.y() - 15 : hover.y() + hover.height() + 3;
-            Ui.glow(g, lx, ly, lw, 12, 6, Ui.accent(), 3, 0.8f);
-            Ui.rect(g, lx, ly, lw, 12, 6, Ui.accent());
-            Ui.hGradient(g, lx + 6, ly, lw - 12, 12, Ui.accent(), Ui.mix(Ui.accent(), Ui.PINK, 0.6f));
-            Ui.rect(g, lx + lw - 12, ly, 12, 12, 6, Ui.mix(Ui.accent(), Ui.PINK, 0.6f));
+            if (Ui.lunar()) {
+                Ui.rect(g, lx, ly, lw, 12, 3, 0xE0181818);
+            } else {
+                Ui.glow(g, lx, ly, lw, 12, 6, Ui.accent(), 3, 0.8f);
+                Ui.rect(g, lx, ly, lw, 12, 6, Ui.accent());
+                Ui.hGradient(g, lx + 6, ly, lw - 12, 12, Ui.accent(), Ui.mix(Ui.accent(), Ui.PINK, 0.6f));
+                Ui.rect(g, lx + lw - 12, ly, 12, 12, 6, Ui.mix(Ui.accent(), Ui.PINK, 0.6f));
+            }
             Ui.text(g, label, lx + 5, ly + 2, 0xFFFFFFFF, false);
         }
 
@@ -113,14 +122,15 @@ public class HudEditScreen extends InputScreen {
         int hw = font.width(hint) + 16;
         Ui.rect(g, bar[0] + bar[2] / 2 - hw / 2, bar[1] - 17, hw, 13, 6, 0xB0000000);
         Ui.centered(g, hint, bar[0] + bar[2] / 2, bar[1] - 14, 0xFFD9D2EA, false);
-        Ui.neonPanel(g, bar[0], bar[1], bar[2], bar[3], 9, 1f);
+        if (Ui.lunar()) Ui.lunarPanel(g, bar[0], bar[1], bar[2], bar[3], 5);
+        else Ui.neonPanel(g, bar[0], bar[1], bar[2], bar[3], 9, 1f);
         String[] labels = {"Mods", "Zurücksetzen", "Fertig"};
         int bw = (bar[2] - 8 - 8) / 3;
         for (int i = 0; i < labels.length; i++) {
             int bx = bar[0] + 4 + i * (bw + 4);
             boolean h = Ui.inside(mx, my, bx, bar[1] + 2, bw, 14);
-            if (i == 2 || h) Ui.glow(g, bx, bar[1] + 2, bw, 14, 7, i == 2 ? Ui.accent() : Ui.accent2(), 2, h ? 1f : 0.5f);
-            int bg = i == 2 ? Ui.accent() : Ui.SURFACE;
+            if (!Ui.lunar() && (i == 2 || h)) Ui.glow(g, bx, bar[1] + 2, bw, 14, 7, i == 2 ? Ui.accent() : Ui.accent2(), 2, h ? 1f : 0.5f);
+            int bg = Ui.lunar() ? (i == 2 ? Ui.L_GREEN : 0xFF2A2A2A) : (i == 2 ? Ui.accent() : Ui.SURFACE);
             Ui.rect(g, bx, bar[1] + 2, bw, 14, 7, h ? Ui.mix(bg, 0xFFFFFFFF, 0.15f) : bg);
             Ui.centered(g, labels[i], bx + bw / 2, bar[1] + 5, 0xFFFFFFFF, false);
         }
