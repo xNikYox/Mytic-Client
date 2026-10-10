@@ -15,7 +15,7 @@ const VERSION_MANIFEST = "https://piston-meta.mojang.com/mc/game/version_manifes
 const FABRIC_META = "https://meta.fabricmc.net/v2";
 const MODRINTH = "https://api.modrinth.com/v2";
 const LAUNCHER_NAME = "MyticClient";
-const LAUNCHER_VERSION = "2.18.1";
+const LAUNCHER_VERSION = "2.18.2";
 
 /** Mods, die der Launcher verwaltet. required = immer installiert, sonst über die Einstellungen schaltbar. */
 /** Alte Versionen laufen mit Forge statt Fabric (Version → Forge-Version). */
@@ -27,6 +27,15 @@ function loaderFor(mcVersion) {
 }
 
 /** Spielordner: alte Versionen (andere Optionen-/Weltformate) bekommen einen eigenen, z. B. game-1.8.9. */
+/**
+ * Neueste vorhandene Modrinth-Version: nach Veröffentlichungsdatum, Release oder Beta.
+ * Alpha-Versionen nur, wenn es nichts anderes gibt.
+ */
+function newestVersion(versions) {
+  const sorted = [...(versions || [])].sort((a, b) => String(b.date_published).localeCompare(String(a.date_published)));
+  return sorted.find((v) => v.version_type === "release" || v.version_type === "beta") || sorted[0] || null;
+}
+
 function gameDirFor(dirs, mcVersion) {
   return loaderFor(mcVersion) === "forge" ? path.join(dirs.base, `game-${mcVersion}`) : dirs.game;
 }
@@ -226,12 +235,16 @@ class Installer {
     }
   }
 
-  async modrinthFile(slug) {
+  /** Alle Versionen eines Projekts für diese Minecraft-Version und diesen Loader. */
+  async modrinthVersions(slug) {
     const params = `loaders=${encodeURIComponent(`["${this.loader}"]`)}&game_versions=${encodeURIComponent(`["${this.mcVersion}"]`)}`;
-    const versions = await getJson(`${MODRINTH}/project/${slug}/version?${params}`);
-    const version = versions.find((v) => v.version_type === "release") || versions[0];
-    if (!version) return null;
+    return getJson(`${MODRINTH}/project/${slug}/version?${params}`);
+  }
+
+  /** Download-Daten einer Modrinth-Version (nur von cdn.modrinth.com). */
+  static fileOf(version) {
     const file = version.files.find((f) => f.primary) || version.files[0];
+    if (!file || new URL(file.url).hostname !== "cdn.modrinth.com") return null;
     return { url: file.url, filename: file.filename, sha1: file.hashes.sha1, size: file.size, version: version.version_number };
   }
 
@@ -251,19 +264,53 @@ class Installer {
       slugs.add(mod.slug);
       for (const dep of mod.requires || []) slugs.add(dep);
     }
+    const nameOf = (slug) => MANAGED_MODS.find((m) => m.slug === slug)?.name || slug;
+    // 1. neueste vorhandene Version jeder integrierten Mod (parallel abgefragt)
+    this.step("Integrierte Mods prüfen", 0, slugs.size);
+    const picked = {};
+    await Promise.all([...slugs].map(async (slug) => {
+      try {
+        picked[slug] = newestVersion(await this.modrinthVersions(slug));
+      } catch (error) {
+        picked[slug] = { error };
+      }
+    }));
+    // 2. feste Abhängigkeiten beachten (z. B. Iris braucht genau eine bestimmte Sodium-Version)
+    const slugOfProject = {};
+    for (const [slug, v] of Object.entries(picked)) if (v && !v.error) slugOfProject[v.project_id] = slug;
+    for (const [slug, v] of Object.entries(picked)) {
+      if (!v || v.error) continue;
+      for (const dep of v.dependencies || []) {
+        const target = slugOfProject[dep.project_id];
+        if (dep.dependency_type !== "required" || !dep.version_id || !target || picked[target].id === dep.version_id) continue;
+        try {
+          picked[target] = await getJson(`${MODRINTH}/version/${dep.version_id}`);
+          this.log(`[Mods] ${nameOf(target)} ${picked[target].version_number} – passend zu ${nameOf(slug)}`);
+        } catch {
+          // dann bleibt die neueste Version
+        }
+      }
+    }
+    // 3. laden (nur wenn sich die Datei geändert hat)
     const files = [];
     let done = 0;
     for (const slug of slugs) {
-      this.step(`Mods: ${MANAGED_MODS.find((m) => m.slug === slug)?.name || slug}`, done++, slugs.size);
+      this.step(`Mods: ${nameOf(slug)}`, done++, slugs.size);
+      const version = picked[slug];
       try {
-        const info = await this.modrinthFile(slug);
-        if (!info) {
+        if (!version) {
           this.log(`[Mods] ${slug}: keine Version für ${this.mcVersion}, übersprungen`);
           continue;
         }
+        if (version.error) throw version.error;
+        const info = Installer.fileOf(version);
+        if (!info) throw new Error("keine gültige Datei");
         const target = path.join(modsDir, info.filename);
-        if (!(await isValid(target, info))) await downloadFile(info.url, target, info);
-        files.push({ slug, file: info.filename });
+        if (!(await isValid(target, info))) {
+          await downloadFile(info.url, target, info);
+          this.log(`[Mods] ${nameOf(slug)} ${info.version} geladen`);
+        }
+        files.push({ slug, file: info.filename, version: info.version });
       } catch (error) {
         // ohne Internet: vorhandene Datei weiterverwenden
         const old = previous.find((f) => f.slug === slug);
@@ -529,4 +576,4 @@ function defaultMemoryMb() {
   return Math.max(2048, Math.min(4096, Math.floor(total / 2 / 512) * 512));
 }
 
-module.exports = { loaderFor, gameDirFor, FORGE_VERSIONS, Log4jParser, Installer, buildCommand, launch, rulesAllow, collectArguments, mavenPath, MANAGED_MODS, MC_VERSION, defaultMemoryMb, availableVersions, bundledMytic };
+module.exports = { newestVersion, loaderFor, gameDirFor, FORGE_VERSIONS, Log4jParser, Installer, buildCommand, launch, rulesAllow, collectArguments, mavenPath, MANAGED_MODS, MC_VERSION, defaultMemoryMb, availableVersions, bundledMytic };

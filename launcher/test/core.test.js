@@ -418,3 +418,16 @@ test("Mod-Updates wie bei Lunar: einzelne Jar laden, sonst mitgelieferte Mod", a
   }
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test("Integrierte Mods: immer die neueste vorhandene Version", () => {
+  const { newestVersion } = require("../src/core/minecraft");
+  const v = (id, type, date) => ({ id, version_type: type, date_published: date });
+  // neuere Beta schlägt ältere Release
+  assert.equal(newestVersion([v("r", "release", "2026-08-28"), v("b", "beta", "2026-09-20")]).id, "b");
+  // unabhängig von der Reihenfolge der API
+  assert.equal(newestVersion([v("alt", "release", "2026-01-01"), v("neu", "release", "2026-09-01")]).id, "neu");
+  // Alpha nur, wenn es nichts anderes gibt
+  assert.equal(newestVersion([v("a", "alpha", "2026-10-01"), v("r", "release", "2026-09-01")]).id, "r");
+  assert.equal(newestVersion([v("a", "alpha", "2026-10-01")]).id, "a");
+  assert.equal(newestVersion([]), null);
+});

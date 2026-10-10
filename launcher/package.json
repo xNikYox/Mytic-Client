@@ -1,7 +1,7 @@
 {
   "name": "mytic-client",
   "productName": "Mytic Client",
-  "version": "2.18.1",
+  "version": "2.18.2",
   "description": "Mytic Client Launcher - Minecraft 1.21.11 mit Fabric und In-Game-Mods",
   "author": "MyticLegacy",
   "license": "UNLICENSED",
