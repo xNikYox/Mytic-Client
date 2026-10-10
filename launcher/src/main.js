@@ -1,6 +1,7 @@
 // Electron-Hauptprozess des Mytic Client Launchers.
 const { app, BrowserWindow, ipcMain, shell, safeStorage, session, dialog } = require("electron");
 const importer = require("./core/importer");
+const { ModUpdater } = require("./core/modupdates");
 const fs = require("node:fs");
 const fsp = require("node:fs/promises");
 const path = require("node:path");
@@ -31,6 +32,13 @@ const SETTINGS_FILE = path.join(DIRS.base, "settings.json");
 const ACCOUNTS_FILE = path.join(DIRS.base, "accounts.json");
 const GAME_CONFIG = path.join(DIRS.game, "config", "myticclient.json");
 const BUNDLED_MODS = app.isPackaged ? path.join(process.resourcesPath, "resources", "mods") : path.join(__dirname, "..", "resources", "mods");
+/** Mytic-Mod-Updates wie bei Lunar: einzeln beim Spielstart, ohne neuen Launcher. */
+const modUpdater = new ModUpdater({
+  cacheDir: path.join(DIRS.base, "mytic-mods"),
+  bundledDir: BUNDLED_MODS,
+  source: DEV_BUILD ? { type: "site", base: DEV_UPDATE_SITE } : { type: "github", repo: updater.REPO },
+  log: (line) => emit("log", line),
+});
 const BUNDLED_CONFIG = app.isPackaged ? path.join(process.resourcesPath, "resources", "config.json") : path.join(__dirname, "..", "resources", "config.json");
 
 /** In-Game-Module der Mytic-Mod (gleiche IDs und Standardwerte wie im Mod-Code). */
@@ -112,7 +120,7 @@ async function profileList() {
     active: profiles.active(current).id,
     list: await Promise.all(current.profiles.map(async (p) => {
       const mcVersion = p.mcVersion || profiles.DEFAULT_VERSION;
-      return { ...p, mcVersion, mytic: Boolean(bundledMytic(BUNDLED_MODS, mcVersion)), modCount: await profiles.countMods(DIRS.base, p.id) };
+      return { ...p, mcVersion, mytic: modUpdater.has(mcVersion), modCount: await profiles.countMods(DIRS.base, p.id) };
     })),
   };
 }
@@ -407,12 +415,17 @@ ipcMain.handle("profiles:perf", async (e, slug, on) => {
 // Neue Versionen werden still im Hintergrund geladen und beim nächsten Start eingespielt.
 // Installierte Version: Installer im Hintergrund (/S). Portable Version: neue EXE ersetzt die alte.
 
-const INSTALL_MODE = updater.installMode({ packaged: app.isPackaged, portableFile: PORTABLE_FILE, execPath: process.execPath });
+const INSTALL_MODE = updater.installMode({ packaged: app.isPackaged || process.env.MYTIC_UPDATE_TEST === "1", portableFile: PORTABLE_FILE, execPath: process.execPath });
 const UPDATE_DIR = path.join(DIRS.base, "updates");
 const MIGRATE_FILE = path.join(DIRS.base, "migrate-portable.json");
 /** Gesetzt, wenn eine portable Version aus einer älteren (vor dem Installer) aktualisiert wurde → einmalig umziehen. */
 const MIGRATE_MARKER = path.join(DIRS.base, "move-to-installer");
 let readyUpdate = null;
+
+/** Laufende Version (im Update-Test eine vorgetäuschte ältere). */
+function currentVersion() {
+  return process.env.MYTIC_UPDATE_TEST === "1" ? process.env.MYTIC_FAKE_VERSION || "0.0.0" : PACKAGE_VERSION;
+}
 
 function spawnDetached(file, args) {
   return new Promise((resolve, reject) => {
@@ -428,7 +441,7 @@ function spawnDetached(file, args) {
 /** Bereitliegendes Update einspielen. true = der Launcher beendet sich dafür. */
 async function applyReadyUpdate() {
   if (INSTALL_MODE === "zip") return false;
-  const ready = await updater.readReady(UPDATE_DIR, PACKAGE_VERSION);
+  const ready = await updater.readReady(UPDATE_DIR, currentVersion());
   if (!ready) return false;
   try {
     if (ready.kind === "setup") {
@@ -476,7 +489,7 @@ async function checkUpdate() {
   if (!app.isPackaged && !test) return;
   if (checking || readyUpdate) return;
   checking = true;
-  const current = test ? process.env.MYTIC_FAKE_VERSION || "0.0.0" : PACKAGE_VERSION;
+  const current = currentVersion();
   try {
     const migrate = INSTALL_MODE === "portable" && !DEV_BUILD && fs.existsSync(MIGRATE_MARKER);
     const kind = INSTALL_MODE === "installed" || migrate ? "setup" : "portable";
@@ -515,7 +528,7 @@ ipcMain.handle("update:install", async () => {
   updating = true;
   try {
     const quitting = await applyReadyUpdate();
-    if (!quitting) throw new Error("Update konnte nicht gestartet werden – es wird beim nächsten Start erneut versucht.");
+    if (!quitting) throw new Error("Update konnte nicht gestartet werden – bitte den Launcher neu starten, dann wird es erneut geladen.");
     return { restarting: true };
   } finally {
     updating = false;
@@ -598,9 +611,11 @@ ipcMain.handle("game:launch", async () => {
       log: (line) => emit("log", line),
       progress: (p) => emit("progress", p),
     });
+    emit("status", "Mytic-Mod prüfen …");
+    const myticMods = await modUpdater.prepare(profile.mcVersion);
     emit("status", "Eigene Mods prüfen …");
     await browserFor(profile).updateAll((line) => emit("log", line));
-    const install = await installer.install({ enabledMods: profile.perf || {}, bundledModsDir: BUNDLED_MODS, modsDir: profileMods, verify: current.verifyNext });
+    const install = await installer.install({ enabledMods: profile.perf || {}, bundledModsDir: myticMods, modsDir: profileMods, verify: current.verifyNext });
     if (current.verifyNext) {
       const { clientId, ...stored } = current;
       await writeJson(SETTINGS_FILE, { ...stored, verifyNext: false });

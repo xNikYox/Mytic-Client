@@ -88,16 +88,23 @@ async function checkSiteUpdate(currentVersion, base, project) {
 async function downloadUpdate(update, targetDir, onProgress = () => {}) {
   const target = path.join(targetDir, update.name);
   const part = `${target}.part`;
+  await fsp.mkdir(targetDir, { recursive: true });
   const response = await fetchRetry(update.url, { headers: { "User-Agent": USER_AGENT } });
   if (!response.ok || !response.body) throw new Error(`Download fehlgeschlagen (HTTP ${response.status})`);
   const hash = crypto.createHash("sha256");
   const out = fs.createWriteStream(part);
+  // Schreibfehler (z. B. voller Datenträger) als normalen Fehler melden statt den Launcher abstürzen zu lassen
+  let writeError = null;
+  out.on("error", (error) => {
+    writeError = error;
+  });
   let received = 0;
   const reader = response.body.getReader();
   try {
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
+      if (writeError) throw new Error(`Update konnte nicht gespeichert werden: ${writeError.message}`);
       hash.update(value);
       received += value.length;
       if (!out.write(value)) await new Promise((r) => out.once("drain", r));
@@ -105,6 +112,10 @@ async function downloadUpdate(update, targetDir, onProgress = () => {}) {
     }
   } finally {
     await new Promise((r) => out.end(r));
+  }
+  if (writeError) {
+    await fsp.rm(part, { force: true });
+    throw new Error(`Update konnte nicht gespeichert werden: ${writeError.message}`);
   }
   if (update.size && received !== update.size) {
     await fsp.rm(part, { force: true });

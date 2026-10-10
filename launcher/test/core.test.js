@@ -339,3 +339,80 @@ test("Updates wie bei Lunar: Modus, bereitliegendes Update, Umzug", async () => 
   assert.equal(fs.existsSync(other), true);
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test("Mod-Updates wie bei Lunar: einzelne Jar laden, sonst mitgelieferte Mod", async () => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const http = require("node:http");
+  const crypto = require("node:crypto");
+  const AdmZip = require("adm-zip");
+  const { ModUpdater, jarVersion } = require("../src/core/modupdates");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "mytic-modupd-"));
+  const bundled = path.join(root, "bundled");
+  fs.mkdirSync(path.join(bundled, "1.21.4"), { recursive: true });
+  fs.writeFileSync(path.join(bundled, "1.21.4", "mytic-client-2.5.0+1.21.4.jar"), "alt");
+  fs.mkdirSync(path.join(bundled, "1.21.11"), { recursive: true });
+  fs.writeFileSync(path.join(bundled, "1.21.11", "mytic-client-2.5.0.jar"), "alt");
+  assert.equal(jarVersion("mytic-client-2.5.0.jar", "1.21.11"), "2.5.0");
+  assert.equal(jarVersion("mytic-client-2.5.0+1.21.4.jar", "1.21.4"), "2.5.0");
+  assert.equal(jarVersion("mytic-client-2.5.0+1.21.4.jar", "1.21.5"), null);
+
+  // Download-Seite (Entwicklerversion): ZIP mit allen Versionen
+  const zip = new AdmZip();
+  zip.addFile("1.21.4/mytic-client-2.6.0+1.21.4.jar", Buffer.from("neu-1.21.4"));
+  zip.addFile("1.21.11/mytic-client-2.6.0+1.21.11.jar", Buffer.from("neu-1.21.11"));
+  const zipData = zip.toBuffer();
+  const sha = crypto.createHash("sha256").update(zipData).digest("hex");
+  const server = http.createServer((req, res) => {
+    if (req.url === "/api/latest/mytic-mods") {
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ version: "2.6.0", name: "MyticMods-2.6.0.zip", size: zipData.length, sha256: sha, url: "files/MyticMods-2.6.0.zip" }));
+    } else if (req.url === "/files/MyticMods-2.6.0.zip") res.end(zipData);
+    else res.writeHead(404).end();
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const base = `http://127.0.0.1:${server.address().port}/`;
+  const site = new ModUpdater({ cacheDir: path.join(root, "cache"), bundledDir: bundled, source: { type: "site", base } });
+  const dir = await site.prepare("1.21.4");
+  assert.equal(dir, path.join(root, "cache"));
+  assert.equal(fs.readFileSync(path.join(root, "cache", "1.21.4", "mytic-client-2.6.0+1.21.4.jar"), "utf8"), "neu-1.21.4");
+  assert.equal(await site.prepare("1.21.11"), path.join(root, "cache"));
+  server.close();
+
+  // ohne Netz: Cache bleibt nutzbar, für andere Versionen die mitgelieferte Mod
+  const offline = new ModUpdater({ cacheDir: path.join(root, "cache"), bundledDir: bundled, source: { type: "site", base: "http://127.0.0.1:1/" } });
+  assert.equal(await offline.prepare("1.21.4"), path.join(root, "cache"));
+  const fresh = new ModUpdater({ cacheDir: path.join(root, "leer"), bundledDir: bundled, source: { type: "site", base: "http://127.0.0.1:1/" } });
+  assert.equal(await fresh.prepare("1.21.4"), bundled);
+
+  // GitHub: Release "mods-x.y.z" mit einzelnen Jars, Prüfsumme aus "digest"
+  const jar = Buffer.from("github-jar");
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/releases?")) {
+      return new Response(JSON.stringify([
+        { tag_name: "v2.18.0", assets: [] },
+        { tag_name: "mods-2.7.0", draft: false, assets: [
+          { name: "mytic-client-2.7.0+1.21.4.jar", size: jar.length, browser_download_url: "https://example.test/a.jar", digest: `sha256:${crypto.createHash("sha256").update(jar).digest("hex")}` },
+          { name: "mytic-client-2.7.0+1.21.5.jar", size: 1, browser_download_url: "https://example.test/b.jar", digest: "sha256:00" },
+        ] },
+      ]), { status: 200 });
+    }
+    if (String(url) === "https://example.test/a.jar") return new Response(jar, { status: 200 });
+    return new Response("", { status: 404 });
+  };
+  try {
+    const gh = new ModUpdater({ cacheDir: path.join(root, "gh"), bundledDir: bundled, source: { type: "github", repo: "x/y" } });
+    assert.equal(await gh.prepare("1.21.4"), path.join(root, "gh"));
+    assert.deepEqual(fs.readdirSync(path.join(root, "gh", "1.21.4")), ["mytic-client-2.7.0+1.21.4.jar"]);
+    // falsche Prüfsumme → mitgelieferte Mod
+    const bad = new ModUpdater({ cacheDir: path.join(root, "gh2"), bundledDir: bundled, source: { type: "github", repo: "x/y" } });
+    fs.mkdirSync(path.join(bundled, "1.21.5"));
+    fs.writeFileSync(path.join(bundled, "1.21.5", "mytic-client-2.5.0+1.21.5.jar"), "alt");
+    assert.equal(await bad.prepare("1.21.5"), bundled);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  fs.rmSync(root, { recursive: true, force: true });
+});
