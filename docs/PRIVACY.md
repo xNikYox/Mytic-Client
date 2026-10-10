@@ -20,6 +20,7 @@ Der Mytic Client ist ein kostenloser Launcher für Minecraft: Java Edition. Er l
 - **Fabric** (`meta.fabricmc.net`, `maven.fabricmc.net`): Download des Fabric Loaders.
 - **Modrinth** (`api.modrinth.com`, `cdn.modrinth.com`): Download der Performance-Mods und der Mods aus dem Mod-Browser. Beim Import werden die SHA-1-Prüfsummen der Mod-Dateien an Modrinth geschickt, um die Mods wiederzuerkennen (keine Dateien, keine persönlichen Daten).
 - **Fabric**, **Forge** (`maven.minecraftforge.net`): Loader für die gewählte Version.
+- **GitHub** (`api.github.com`, `github.com`): Prüfung auf neue Versionen des Launchers und der Mytic-Mods sowie deren Download. Dabei werden keine persönlichen Daten übertragen.
 - **mc-heads.net**: Anzeige deines Spieler-Kopfes im Launcher. Dabei wird nur deine öffentliche Minecraft-UUID übertragen.
 
 Deine Anmeldedaten werden nur an Microsoft und Mojang gesendet und an niemanden sonst. Es gibt keine Werbung, kein Tracking und keine Analyse-Tools.

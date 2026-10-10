@@ -74,13 +74,14 @@ Diese Mods kommen automatisch von [Modrinth](https://modrinth.com): **Sodium**, 
 
 ## Download und Start
 
-1. Lade unter [Releases](https://github.com/xNikYox/Mytic-Client/releases/latest) die neueste `MyticClient-<version>.exe` herunter.
-2. Starte sie mit einem Doppelklick. Eine Installation ist nicht nötig.
+1. Lade unter [Releases](https://github.com/xNikYox/Mytic-Client/releases/latest) die neueste `MyticClient-Setup-<version>.exe` herunter.
+2. Starte sie mit einem Doppelklick. Der Mytic Client wird ohne Admin-Rechte für deinen Benutzer installiert und erscheint im Startmenü und auf dem Desktop.
    - Windows SmartScreen warnt bei unsignierten Dateien. Klicke dann auf **„Weitere Informationen“** → **„Trotzdem ausführen“**.
+   - Ohne Installation: `MyticClient-<version>.exe` (portabel) oder die ZIP-Datei.
 3. Klicke oben rechts auf **Anmelden** und melde dich mit Microsoft an.
 4. Klicke auf **SPIELEN**. Der erste Start lädt etwa 1 GB herunter, danach geht es in Sekunden.
 
-Neue Versionen musst du nicht selbst herunterladen. Der Launcher meldet sie und aktualisiert sich mit einem Klick.
+Updates laufen wie bei Lunar von selbst: Neue Launcher-Versionen werden im Hintergrund geladen und beim nächsten Start installiert. Die Mytic-Mods aktualisieren sich beim Spielstart einzeln (nur wenige KB), ganz ohne neuen Launcher.
 
 **Systemvoraussetzungen:** Windows 10 oder 11 (64 Bit), Minecraft: Java Edition und etwa 1,5 GB freier Speicher.
 
