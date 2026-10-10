@@ -25,8 +25,11 @@ import java.util.Locale;
  * Mod-Karten mit großem Icon und An/Aus-Leiste, Einstellungen pro Mod.
  */
 public class ModMenuScreen extends MyticScreen {
-    private static final int CARD_H = 80;
-    private static final int GAP = 6;
+    private static final int CARD_H = 60;
+    /** Balken unten in der Karte (AKTIV/INAKTIV): Abstand vom unteren Rand und Höhe. */
+    private static final int BAR_OFF = 14;
+    private static final int BAR_H = 10;
+    private static final int GAP = 5;
     private static final int ROW_H = 22;
     private static final int HEADER = 34;
     private static final int FOOTER = 28;
@@ -72,7 +75,7 @@ public class ModMenuScreen extends MyticScreen {
     @Override
     protected void layout() {
         Compat.textInput(this, true);
-        pw = Math.min(560, Math.max(300, (int) (vw * shareW())));
+        pw = Math.min(600, Math.max(340, (int) (vw * shareW())));
         ph = Math.min(340, Math.max(200, (int) (vh * shareH())));
         pw = Math.min(pw, vw - 8);
         ph = Math.min(ph, vh - 8);
@@ -111,7 +114,7 @@ public class ModMenuScreen extends MyticScreen {
     }
 
     private int columns() {
-        return Math.max(2, (cw() + GAP) / (98 + GAP));
+        return Math.max(3, Math.min(5, (cw() + GAP) / (58 + GAP)));
     }
 
     private int cardW() {
@@ -289,33 +292,38 @@ public class ModMenuScreen extends MyticScreen {
                     Ui.mix(Ui.SURFACE, Ui.SURFACE_HOVER, hv));
 
             Gfx.push(g);
-            Gfx.translate(g, c[0] + w / 2f - 16, c[1] + 8 - Math.round(hv * 2));
-            Gfx.scale(g, 2f, 2f);
+            Gfx.translate(g, c[0] + w / 2f - 12, c[1] + 6 - Math.round(hv * 2));
+            Gfx.scale(g, 1.5f, 1.5f);
             g.renderItem(m.icon(), 0, 0);
             Gfx.pop(g);
 
-            String name = font.plainSubstrByWidth(m.name, w - 10);
-            Ui.centered(g, name, c[0] + w / 2, c[1] + 45, Ui.TEXT, false);
+            // Name etwas kleiner, damit er in die schmalen Karten passt
+            String name = font.plainSubstrByWidth(m.name, Math.round((w - 6) / 0.8f));
+            Ui.scaled(g, name, c[0] + w / 2f - font.width(name) * 0.4f, c[1] + 33, 0.8f, Ui.TEXT, false);
 
-            int barY = c[1] + CARD_H - 20;
+            int barY = c[1] + CARD_H - BAR_OFF;
             if (lunar) {
                 // Lunar: grüner bzw. roter Balken über die ganze Breite
                 int state = Ui.mix(Ui.L_RED, Ui.L_GREEN, onT);
-                Ui.rect(g, c[0] + 5, barY, w - 10, 13, 3, over ? Ui.mix(state, 0xFFFFFFFF, 0.12f) : state);
-                Ui.centered(g, on ? "AKTIV" : "INAKTIV", c[0] + w / 2, barY + 3, 0xFFFFFFFF, false);
+                Ui.rect(g, c[0] + 4, barY, w - 8, BAR_H, 2, over ? Ui.mix(state, 0xFFFFFFFF, 0.12f) : state);
+                String label = on ? "AKTIV" : "INAKTIV";
+                Ui.scaled(g, label, c[0] + w / 2f - font.width(label) * 0.375f, barY + 2, 0.75f, 0xFFFFFFFF, false);
             }
             int barColor = Ui.mix(0xFF2B2440, Ui.accent(), onT);
-            if (!lunar) Ui.rect(g, c[0] + 7, barY, w - 14, 13, 6, over ? Ui.mix(barColor, 0xFFFFFFFF, 0.1f) : barColor);
+            if (!lunar) Ui.rect(g, c[0] + 5, barY, w - 10, BAR_H, 5, over ? Ui.mix(barColor, 0xFFFFFFFF, 0.1f) : barColor);
             if (!lunar && onT > 0.02f) {
-                Ui.hGradient(g, c[0] + 13, barY, w - 26, 13, Ui.alpha(barColor, onT), Ui.alpha(Ui.mix(Ui.accent(), Ui.PINK, 0.55f), onT));
-                Ui.rect(g, c[0] + w - 19, barY, 12, 13, 6, Ui.alpha(Ui.mix(Ui.accent(), Ui.PINK, 0.55f), onT));
+                Ui.hGradient(g, c[0] + 10, barY, w - 20, BAR_H, Ui.alpha(barColor, onT), Ui.alpha(Ui.mix(Ui.accent(), Ui.PINK, 0.55f), onT));
+                Ui.rect(g, c[0] + w - 15, barY, 10, BAR_H, 5, Ui.alpha(Ui.mix(Ui.accent(), Ui.PINK, 0.55f), onT));
             }
-            if (!lunar) Ui.centered(g, on ? "AN" : "AUS", c[0] + w / 2, barY + 3, on ? 0xFFFFFFFF : Ui.MUTED, false);
+            if (!lunar) {
+                String label = on ? "AN" : "AUS";
+                Ui.scaled(g, label, c[0] + w / 2f - font.width(label) * 0.375f, barY + 2, 0.75f, on ? 0xFFFFFFFF : Ui.MUTED, false);
+            }
 
             if (!m.settings.isEmpty()) {
-                boolean gearHover = over && Ui.inside(mouseX, mouseY, c[0] + w - 16, c[1] + 3, 13, 13);
+                boolean gearHover = over && Ui.inside(mouseX, mouseY, c[0] + w - 13, c[1] + 2, 11, 11);
                 int gearColor = gearHover ? (lunar ? 0xFFFFFFFF : Ui.accent()) : Ui.withAlpha(Ui.MUTED, over ? 255 : 110);
-                Ui.text(g, "⚙", c[0] + w - 13, c[1] + 5, gearColor, false);
+                Ui.scaled(g, "⚙", c[0] + w - 11, c[1] + 3, 0.85f, gearColor, false);
             }
         }
         return hover;
@@ -455,8 +463,8 @@ public class ModMenuScreen extends MyticScreen {
             int[] c = card(i);
             int w = cardW();
             if (!Ui.inside(mx, my, c[0], c[1], w, CARD_H)) continue;
-            boolean gear = Ui.inside(mx, my, c[0] + w - 16, c[1] + 3, 13, 13);
-            boolean bar = Ui.inside(mx, my, c[0] + 7, c[1] + CARD_H - 20, w - 14, 13);
+            boolean gear = Ui.inside(mx, my, c[0] + w - 13, c[1] + 2, 11, 11);
+            boolean bar = Ui.inside(mx, my, c[0] + 4, c[1] + CARD_H - BAR_OFF, w - 8, BAR_H);
             if (!m.settings.isEmpty() && (gear || !bar)) {
                 selected = m;
                 scrollPos = scrollTarget = 0;
