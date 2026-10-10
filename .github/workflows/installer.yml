@@ -34,7 +34,8 @@ jobs:
         run: npm ci
       - name: Installer bauen
         working-directory: launcher
-        run: npx electron-builder --win nsis --x64 --publish never -c.win.signAndEditExecutable=true
+        shell: bash
+        run: npx electron-builder --win nsis --x64 --publish never --config.win.signAndEditExecutable=true
       - name: An das Release hängen
         working-directory: launcher
         shell: bash
