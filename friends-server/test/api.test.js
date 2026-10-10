@@ -86,6 +86,10 @@ function setup(opts = {}) {
     const u = new URL(url);
     if (u.hostname === "textures.minecraft.net") return new Response(skinPng());
     if (u.hostname === "api.mojang.com") return new Response(null, { status: 404 });
+    if (u.hostname === "playerdb.co") {
+      if (u.pathname.toLowerCase().endsWith("/carol")) return Response.json({ data: { player: { username: "Carol", raw_id: "d".repeat(32), skin_texture: "http://textures.minecraft.net/texture/abc" } } });
+      return Response.json({ code: "player.not_found" }, { status: 400 });
+    }
     throw new Error(`unerwartet: ${url}`);
   };
   const api = createApi(openDb(":memory:"), { fetch: fakeFetch, now: () => clock, allowOffline: opts.allowOffline, mojangKeys: MOJANG_KEYS });
@@ -140,6 +144,13 @@ test("Anfrage, annehmen, Status mit Server, entfernen", async () => {
   const a = await s.login("Alice");
   const b = await s.login("Bob");
   assert.equal((await s.call("POST", "/api/friends/request", { name: "Nobody" }, a)).status, 404);
+  // Spieler ohne Mytic Client: Anfrage wird vorgemerkt
+  const carol = await s.call("POST", "/api/friends/request", { name: "carol" }, a);
+  assert.equal(carol.status, 200);
+  assert.match(carol.data.message, /sobald/);
+  assert.equal(carol.data.outgoing[0].name, "Carol");
+  assert.ok(carol.data.outgoing[0].head);
+  await s.call("POST", "/api/friends/remove", { uuid: "d".repeat(32) }, a);
   assert.equal((await s.call("POST", "/api/friends/request", { name: "alice" }, a)).status, 400);
   const sent = await s.call("POST", "/api/friends/request", { name: "bob" }, a);
   assert.equal(sent.data.outgoing[0].name, "Bob");

@@ -182,6 +182,35 @@ export function createApi(db, options = {}) {
     return db.get("SELECT * FROM users WHERE name_lower = ? ORDER BY offline ASC, last_seen DESC LIMIT 1", [value]);
   }
 
+  /**
+   * Spieler, der den Mytic Client noch nie gestartet hat: Namen nachschlagen und vormerken, damit die Anfrage
+   * wartet, bis er sich das erste Mal anmeldet. Öffentlicher Server: Minecraft-Konto über playerdb.co
+   * (Mojang selbst sperrt Cloudflare); mit Offline-Konten (Entwicklerversion): Offline-UUID des Namens.
+   */
+  async function placeholder(input) {
+    const name = typeof input === "string" ? input.trim() : "";
+    if (!NAME.test(name)) return null;
+    if (allowOffline) {
+      await upsertUser(await offlineUuid(name), name, true, null);
+      return db.get("SELECT * FROM users WHERE uuid = ?", [await offlineUuid(name)]);
+    }
+    let player;
+    try {
+      const response = await fetchImpl(`https://playerdb.co/api/player/minecraft/${encodeURIComponent(name)}`, { headers: { "user-agent": "MyticClient-Friends/1.0" } });
+      if (!response.ok) return null;
+      player = ((await response.json()).data || {}).player;
+    } catch (error) {
+      log(`Namenssuche fehlgeschlagen: ${error.message}`);
+      throw new HttpError(502, "Spielersuche gerade nicht möglich – bitte später erneut versuchen");
+    }
+    const uuid = String((player && player.raw_id) || "").toLowerCase();
+    if (!UUID.test(uuid) || !NAME.test(String(player.username || ""))) return null;
+    const existing = await db.get("SELECT * FROM users WHERE uuid = ?", [uuid]);
+    if (existing) return existing;
+    await upsertUser(uuid, player.username, false, await headFromUrl(player.skin_texture));
+    return db.get("SELECT * FROM users WHERE uuid = ?", [uuid]);
+  }
+
   function pair(x, y) {
     return x < y ? [x, y] : [y, x];
   }
@@ -282,8 +311,8 @@ export function createApi(db, options = {}) {
     "POST /api/friends/request": async (request) => {
       const me = await auth(request);
       const { name } = await body(request);
-      const target = await findUser(name);
-      if (!target) throw new HttpError(404, "Spieler nicht gefunden – er muss den Mytic Client mindestens einmal gestartet haben");
+      const target = (await findUser(name)) || (await placeholder(name));
+      if (!target) throw new HttpError(404, "Diesen Minecraft-Namen gibt es nicht");
       if (target.uuid === me.uuid) throw new HttpError(400, "Du kannst dich nicht selbst hinzufügen");
       if (await areFriends(me.uuid, target.uuid)) throw new HttpError(409, `${target.name} ist schon dein Freund`);
       // hat der andere schon angefragt? Dann gleich befreunden
@@ -295,7 +324,8 @@ export function createApi(db, options = {}) {
       if ((await count("SELECT COUNT(*) AS n FROM requests WHERE sender = ?", [me.uuid])) >= MAX_PENDING) throw new HttpError(429, "Zu viele offene Anfragen");
       if ((await count("SELECT COUNT(*) AS n FROM requests WHERE target = ?", [target.uuid])) >= MAX_PENDING) throw new HttpError(429, `${target.name} hat zu viele offene Anfragen`);
       await db.run("INSERT OR IGNORE INTO requests (sender, target, created) VALUES (?, ?, ?)", [me.uuid, target.uuid, now()]);
-      return { ...(await overview(me)), message: `Anfrage an ${target.name} gesendet` };
+      const waiting = !(await db.get("SELECT 1 AS ok FROM sessions WHERE uuid = ? LIMIT 1", [target.uuid]));
+      return { ...(await overview(me)), message: waiting ? `Anfrage an ${target.name} gesendet – sichtbar, sobald er den Mytic Client startet` : `Anfrage an ${target.name} gesendet` };
     },
 
     "POST /api/friends/accept": async (request) => {
