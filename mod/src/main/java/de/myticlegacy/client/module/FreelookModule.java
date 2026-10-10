@@ -3,6 +3,7 @@ package de.myticlegacy.client.module;
 import de.myticlegacy.client.compat.Compat;
 import de.myticlegacy.client.MyticClient;
 import de.myticlegacy.client.setting.BoolSetting;
+import de.myticlegacy.client.setting.ModeSetting;
 import net.minecraft.client.CameraType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.item.Items;
@@ -10,6 +11,10 @@ import net.minecraft.world.item.Items;
 /** Freelook: Taste halten und dich umsehen, ohne die Laufrichtung zu ändern (Kamera in der dritten Person). */
 public class FreelookModule extends Module {
     private final BoolSetting invert;
+    private final ModeSetting mode;
+    /** Umschalten-Modus: an/aus per Tastendruck. */
+    private boolean toggled;
+    private boolean wasDown;
     private boolean active;
     private float yaw;
     private float pitch;
@@ -18,6 +23,7 @@ public class FreelookModule extends Module {
     public FreelookModule() {
         super("freelook", "Freelook", "Umsehen mit gedrückter Alt-Taste, ohne dich zu drehen (auf manchen Servern verboten)",
                 Category.MECHANIK, () -> Items.ENDER_EYE, false);
+        mode = new ModeSetting(this, "mode", "Modus", "Halten", "Halten", "Umschalten");
         invert = new BoolSetting(this, "invert", "Maus umkehren", false);
     }
 
@@ -34,7 +40,12 @@ public class FreelookModule extends Module {
     }
 
     public void tick(Minecraft mc) {
-        boolean want = enabled() && Compat.held(MyticClient.freelookKey) && Compat.screen(mc) == null && mc.player != null;
+        // wie bei Lunar: Halten (nur solange gedrückt) oder Umschalten (einmal drücken an, nochmal aus)
+        boolean down = enabled() && Compat.held(MyticClient.freelookKey) && Compat.screen(mc) == null;
+        if (!enabled() || mc.player == null) toggled = false;
+        else if (down && !wasDown) toggled = !toggled;
+        wasDown = down;
+        boolean want = enabled() && mc.player != null && Compat.screen(mc) == null && (mode.is("Umschalten") ? toggled : down);
         if (want && !active) {
             yaw = mc.player.getYRot();
             pitch = mc.player.getXRot();

@@ -17,7 +17,9 @@ import de.myticlegacy.client.hud.KeystrokesModule;
 import de.myticlegacy.client.hud.PotionModule;
 import de.myticlegacy.client.hud.TargetHudModule;
 import de.myticlegacy.client.hud.TextModule;
+import de.myticlegacy.client.module.AutoTextModule;
 import de.myticlegacy.client.module.CrosshairModule;
+import de.myticlegacy.client.module.LightOverlayModule;
 import de.myticlegacy.client.module.FreelookModule;
 import de.myticlegacy.client.module.Module;
 import de.myticlegacy.client.module.SimpleModules;
@@ -67,7 +69,7 @@ import java.util.List;
 public final class MyticClient {
     public static final String ID = "myticclient";
     public static final String NAME = "Mytic Client";
-    public static final String VERSION = "2.8";
+    public static final String VERSION = "2.9";
     public static final Logger LOG = LogManager.getLogger(NAME);
 
     public static final List<Module> MODULES = new ArrayList<Module>();
@@ -89,6 +91,10 @@ public final class MyticClient {
     public static KeyBinding menuKey;
     public static KeyBinding zoomKey;
     public static KeyBinding freelookKey;
+    /** Tasten für Auto Text (anfangs unbelegt). */
+    public static final KeyBinding[] autoTextKeys = new KeyBinding[AutoTextModule.SLOTS];
+    public static AutoTextModule autoText;
+    public static LightOverlayModule lightOverlay;
 
     private static Config config;
     private static boolean fullbrightApplied;
@@ -196,11 +202,14 @@ public final class MyticClient {
         noHurtCam = module(SimpleModules.noHurtCam());
         scoreboard = module(new SimpleModules.ScoreboardTweaks());
         hideBossbar = module(SimpleModules.hideBossbar());
+        autoText = module(new AutoTextModule());
+        lightOverlay = module(new LightOverlayModule());
         theme = module(new SimpleModules.Theme());
 
         menuKey = Compat.registerKey("key.myticclient.menu", InputConstants.KEY_RSHIFT);
         zoomKey = Compat.registerKey("key.myticclient.zoom", InputConstants.KEY_C);
         freelookKey = Compat.registerKey("key.myticclient.freelook", InputConstants.KEY_LALT);
+        for (int i = 0; i < AutoTextModule.SLOTS; i++) autoTextKeys[i] = Compat.registerKey("key.myticclient.autotext" + (i + 1), 0);
 
         CombatTracker.register();
         MinecraftForge.EVENT_BUS.register(this);
@@ -286,6 +295,11 @@ public final class MyticClient {
     // ---------------------------------------------------------------------------------------------- Kamera
 
     @SubscribeEvent
+    public void onWorldLast(net.minecraftforge.client.event.RenderWorldLastEvent event) {
+        lightOverlay.draw(event.partialTicks);
+    }
+
+    @SubscribeEvent
     public void onFov(EntityViewRenderEvent.FOVModifier event) {
         event.setFOV(zoom.apply(event.getFOV()));
     }
@@ -366,6 +380,8 @@ public final class MyticClient {
 
         zoom.tick(mc);
         freelook.tick(mc);
+        autoText.tick(mc);
+        lightOverlay.tick(mc);
         CombatTracker.tick(mc);
 
         float gamma = mc.gameSettings.gammaSetting;

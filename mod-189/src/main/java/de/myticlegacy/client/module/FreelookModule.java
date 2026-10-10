@@ -3,6 +3,7 @@ package de.myticlegacy.client.module;
 import de.myticlegacy.client.MyticClient;
 import de.myticlegacy.client.compat.Compat;
 import de.myticlegacy.client.setting.BoolSetting;
+import de.myticlegacy.client.setting.ModeSetting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.entity.Entity;
 import net.minecraft.init.Items;
@@ -13,6 +14,10 @@ import net.minecraft.init.Items;
  */
 public class FreelookModule extends Module {
     private final BoolSetting invert;
+    private final ModeSetting mode;
+    /** Umschalten-Modus: an/aus per Tastendruck. */
+    private boolean toggled;
+    private boolean wasDown;
     private boolean active;
     private float yaw;
     private float pitch;
@@ -23,6 +28,7 @@ public class FreelookModule extends Module {
     public FreelookModule() {
         super("freelook", "Freelook", "Umsehen mit gedrückter Alt-Taste, ohne dich zu drehen (auf manchen Servern verboten)",
                 Category.MECHANIK, () -> Items.ender_eye, false);
+        mode = new ModeSetting(this, "mode", "Modus", "Halten", "Halten", "Umschalten");
         invert = new BoolSetting(this, "invert", "Maus umkehren", false);
     }
 
@@ -31,7 +37,12 @@ public class FreelookModule extends Module {
     }
 
     public void tick(Minecraft mc) {
-        boolean want = enabled() && Compat.held(MyticClient.freelookKey) && Compat.screen(mc) == null && mc.thePlayer != null;
+        // wie bei Lunar: Halten (nur solange gedrückt) oder Umschalten (einmal drücken an, nochmal aus)
+        boolean down = enabled() && Compat.held(MyticClient.freelookKey) && Compat.screen(mc) == null;
+        if (!enabled() || mc.thePlayer == null) toggled = false;
+        else if (down && !wasDown) toggled = !toggled;
+        wasDown = down;
+        boolean want = enabled() && mc.thePlayer != null && Compat.screen(mc) == null && (mode.is("Umschalten") ? toggled : down);
         if (want && !active) {
             yaw = mc.thePlayer.rotationYaw;
             pitch = mc.thePlayer.rotationPitch;

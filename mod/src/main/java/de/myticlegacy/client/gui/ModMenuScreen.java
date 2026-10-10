@@ -12,6 +12,7 @@ import de.myticlegacy.client.setting.ColorSetting;
 import de.myticlegacy.client.setting.ModeSetting;
 import de.myticlegacy.client.setting.Setting;
 import de.myticlegacy.client.setting.SliderSetting;
+import de.myticlegacy.client.setting.TextSetting;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -25,6 +26,9 @@ import java.util.Locale;
  * Mod-Karten mit großem Icon und An/Aus-Leiste, Einstellungen pro Mod.
  */
 public class ModMenuScreen extends MyticScreen {
+    /** Textfeld, das gerade bearbeitet wird (Auto Text). */
+    private TextSetting editingText;
+
     /** Farbwähler, der sich unter einer Farb-Einstellung öffnet. */
     private final ColorPicker picker = new ColorPicker();
 
@@ -390,6 +394,23 @@ public class ModMenuScreen extends MyticScreen {
                 Ui.rect(g, right - 20, row + 5, 20, 12, 3, open ? 0xFFFFFFFF : 0x60FFFFFF);
                 Ui.rect(g, right - 19, row + 6, 18, 10, 2, col == 0xFF000000 ? 0xFF101010 : col | 0xFF000000);
                 if (open) picker.draw(g, x + 8, row + ROW_H + 2);
+            } else if (setting instanceof TextSetting) {
+                // Textfeld (z. B. Auto Text): Klick zum Bearbeiten, Taste steht neben der Bezeichnung
+                TextSetting ts = (TextSetting) setting;
+                boolean edit = editingText == ts;
+                String hint = ts.hint();
+                if (!hint.isEmpty()) Ui.text(g, hint, x + 14 + font.width(setting.label), row + 7, Ui.MUTED, false);
+                int bw = Math.min(160, w / 2);
+                Ui.outline(g, right - bw, row + 3, bw, 16, 4, edit ? 0xB0FFFFFF : 0x30FFFFFF, Ui.lunar() ? 0xFF1C1C1C : 0xFF140F24);
+                String value = ts.get();
+                String shownText = value.isEmpty() && !edit ? "leer" : value;
+                String clippedText = font.plainSubstrByWidth(shownText, bw - 12);
+                if (edit && font.width(shownText) > bw - 12) clippedText = tail(shownText, bw - 12);
+                Ui.text(g, clippedText, right - bw + 6, row + 7, value.isEmpty() ? Ui.MUTED : Ui.TEXT, false);
+                if (edit && (System.currentTimeMillis() / 500) % 2 == 0) {
+                    int caretX = right - bw + 6 + font.width(clippedText);
+                    g.fill(caretX, row + 6, caretX + 1, row + 16, Ui.TEXT);
+                }
             } else if (setting instanceof ModeSetting mode) {
                 int bw = Math.max(80, font.width(mode.get()) + 30);
                 boolean ls = Ui.lunar();
@@ -486,6 +507,7 @@ public class ModMenuScreen extends MyticScreen {
     }
 
     private boolean clickSettings(double mx, double my) {
+        editingText = null;
         Module m = selected;
         int x = cx();
         int y = cy() - (int) Math.round(scrollPos);
@@ -518,7 +540,10 @@ public class ModMenuScreen extends MyticScreen {
                 } else if (setting instanceof ColorSetting c) {
                     if (picker.setting() == c) picker.close();
                     else picker.open(c);
-                } else if (setting instanceof ModeSetting mode) {
+                } else if (setting instanceof TextSetting) {
+                    editingText = (TextSetting) setting;
+                    Compat.textInput(this, true);
+            } else if (setting instanceof ModeSetting mode) {
                     int bw = Math.max(80, font.width(mode.get()) + 30);
                     if (mx >= right - bw) mode.cycle(mx < right - bw / 2.0 ? -1 : 1);
                 }
@@ -563,6 +588,13 @@ public class ModMenuScreen extends MyticScreen {
 
     @Override
     protected boolean onChar(Input.Typed event) {
+        if (editingText != null) {
+            if (!event.isAllowedChatCharacter()) return true;
+            String now = editingText.get();
+            if (now.length() < TextSetting.MAX) editingText.set(now + event.codepointAsString());
+            MyticClient.config().save();
+            return true;
+        }
         if (selected != null || !event.isAllowedChatCharacter()) return false;
         searchFocused = true;
         if (query.length() < 30) {
@@ -575,6 +607,16 @@ public class ModMenuScreen extends MyticScreen {
     @Override
     protected boolean onKey(Input.Key event) {
         int key = event.key();
+        if (editingText != null) {
+            if (key == InputConstants.KEY_BACKSPACE) {
+                String now = editingText.get();
+                if (!now.isEmpty()) editingText.set(event.hasControlDown() ? "" : now.substring(0, now.length() - 1));
+                MyticClient.config().save();
+            } else if (key == InputConstants.KEY_ESCAPE || key == InputConstants.KEY_RETURN || key == InputConstants.KEY_NUMPADENTER) {
+                editingText = null;
+            }
+            return true;
+        }
         if (key == InputConstants.KEY_ESCAPE) {
             if (selected != null) {
                 selected = null;

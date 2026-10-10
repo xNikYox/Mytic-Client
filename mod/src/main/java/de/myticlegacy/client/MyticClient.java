@@ -17,7 +17,9 @@ import de.myticlegacy.client.hud.PotionModule;
 import de.myticlegacy.client.hud.TargetHudModule;
 import de.myticlegacy.client.hud.TextModule;
 import de.myticlegacy.client.mixin.OptionInstanceAccessor;
+import de.myticlegacy.client.module.AutoTextModule;
 import de.myticlegacy.client.module.CrosshairModule;
+import de.myticlegacy.client.module.LightOverlayModule;
 import de.myticlegacy.client.module.FreelookModule;
 import de.myticlegacy.client.module.Module;
 import de.myticlegacy.client.module.SimpleModules;
@@ -42,7 +44,7 @@ import java.util.List;
 public final class MyticClient implements ClientModInitializer {
     public static final String ID = "myticclient";
     public static final String NAME = "Mytic Client";
-    public static final String VERSION = "2.8";
+    public static final String VERSION = "2.9";
     public static final Logger LOG = LoggerFactory.getLogger(NAME);
 
     public static final List<Module> MODULES = new ArrayList<>();
@@ -64,6 +66,10 @@ public final class MyticClient implements ClientModInitializer {
     public static KeyMapping menuKey;
     public static KeyMapping zoomKey;
     public static KeyMapping freelookKey;
+    /** Tasten für Auto Text (anfangs unbelegt). */
+    public static final KeyMapping[] autoTextKeys = new KeyMapping[AutoTextModule.SLOTS];
+    public static AutoTextModule autoText;
+    public static LightOverlayModule lightOverlay;
 
     private static Config config;
     private static boolean fullbrightApplied;
@@ -167,13 +173,17 @@ public final class MyticClient implements ClientModInitializer {
         noHurtCam = module(SimpleModules.noHurtCam());
         scoreboard = module(new SimpleModules.ScoreboardTweaks());
         hideBossbar = module(SimpleModules.hideBossbar());
+        autoText = module(new AutoTextModule());
+        lightOverlay = module(new LightOverlayModule());
         theme = module(new SimpleModules.Theme());
 
         menuKey = Compat.registerKey("key.myticclient.menu", InputConstants.KEY_RSHIFT);
         zoomKey = Compat.registerKey("key.myticclient.zoom", InputConstants.KEY_C);
         freelookKey = Compat.registerKey("key.myticclient.freelook", InputConstants.KEY_LALT);
+        for (int i = 0; i < AutoTextModule.SLOTS; i++) autoTextKeys[i] = Compat.registerKey("key.myticclient.autotext" + (i + 1), -1);
 
         Compat.registerHud();
+        de.myticlegacy.client.render.WorldRender.register(sink -> lightOverlay.draw(sink));
 
         CombatTracker.register();
         ClientTickEvents.END_CLIENT_TICK.register(MyticClient::tick);
@@ -240,6 +250,8 @@ public final class MyticClient implements ClientModInitializer {
 
         zoom.tick(mc);
         freelook.tick(mc);
+        autoText.tick(mc);
+        lightOverlay.tick(mc);
         CombatTracker.tick(mc);
 
         if (toggleSprint.enabled() && mc.player != null && Compat.screen(mc) == null
