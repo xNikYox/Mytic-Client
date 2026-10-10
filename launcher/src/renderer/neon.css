@@ -353,6 +353,16 @@ html[data-theme="mono"] {
   --text: #f6f4fb; --muted: #919395; --faint: #606366;
 }
 
+/* Absturz / Auto-Fix */
+.crash-card { top: 50%; left: 50%; right: auto; transform: translate(-50%, -50%); width: min(580px, calc(100vw - 120px)); animation: none; }
+.crash-body { display: grid; gap: 8px; max-height: calc(100vh - 320px); overflow: auto; }
+.crash-body h4 { margin: 4px 0 0; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.crash-body ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13px; }
+.crash-body li.ok { color: #9ff2c3; } .crash-body li.err { color: #ffb3bf; }
+.crash-body .detail { font: 11.5px/1.45 "Cascadia Mono", Consolas, monospace; color: var(--faint); white-space: pre-wrap; word-break: break-word; }
+.crash-actions { display: flex; gap: 8px; }
+#crash-fix { min-width: 120px; height: 38px; }
+
 /* Design-Auswahl in den Einstellungen */
 .theme-sub { margin: -2px 0 10px; font-size: 12.5px; }
 .theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 10px; padding-bottom: 14px; }

@@ -19,6 +19,7 @@ Minecraft 1.8.9, 1.21 – 1.21.11 und 26.x · Fabric & Forge · Windows
 ### Launcher
 
 - **Profile importieren und hochladen:** Profile aus Modrinth App, NoRiskClient (NRC) und Lunar Client automatisch übernehmen – oder selbst vom PC hochladen: Profil-Ordner (Modrinth, NRC, CurseForge, Prism/MultiMC, .minecraft), .mrpack, .zip oder einzelne .jar, auch per Drag & Drop. Version und Mods werden übernommen. Die Mods werden über Modrinth erkannt und später automatisch aktualisiert.
+- **Auto-Fix:** Meldet der Fabric Loader einen Mod-Fehler (falsche Version, fehlende Abhängigkeit, Konflikt, doppelte Mod) oder stürzt das Spiel ab, zeigt der Launcher, was los ist, und repariert es mit einem Klick auf „Auto-Fix“: passende Version laden, Abhängigkeit installieren oder die Mod deaktivieren.
 - **11 Designs:** unter Einstellungen → Design wählbar – Sonnenuntergang, Mitternacht, Ozean, Wald, Nether, End, Eis, Kirschblüte, Gold, Matrix und Mono. Farben, Startszene (Sonne oder Mond), Leuchtrahmen und Partikel passen sich an.
 - **Ein Klick zum Spielen:** Java, Minecraft 1.21.11, Fabric und alle Mods werden automatisch heruntergeladen und aktuell gehalten. Spieler müssen nichts extra installieren.
 - **Microsoft-Login:** Anmeldung mit dem echten Minecraft-Konto. Der Launcher prüft, ob das Konto Minecraft: Java Edition besitzt.

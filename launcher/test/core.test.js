@@ -431,3 +431,51 @@ test("Integrierte Mods: immer die neueste vorhandene Version", () => {
   assert.equal(newestVersion([v("a", "alpha", "2026-10-01")]).id, "a");
   assert.equal(newestVersion([]), null);
 });
+
+test("Auto-Fix: Fabric-Fehler erkennen und Plan erstellen", () => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const AdmZip = require("adm-zip");
+  const autofix = require("../src/core/autofix");
+  // echte Meldung des Fabric Loaders (gekürzt)
+  const log = `net.fabricmc.loader.impl.FormattedException: Some of your mods are incompatible with the game or each other!
+A potential solution has been determined, this may resolve your problem:
+	 - Install fabric-language-kotlin, version 1.13.8+kotlin.2.3.0 or later.
+	 - Replace mod 'Sodium' (sodium) 0.8.15-beta.1+mc1.21.11 with any 0.6.x version.
+More details:
+	 - Mod 'Iris' (iris) 1.8.8+mc1.21.4 requires any 0.6.x version of mod 'Sodium' (sodium), but only the wrong version is present: 0.8.15-beta.1+mc1.21.11!
+	 - Mod 'Sodium' (sodium) 0.8.15-beta.1+mc1.21.11 is incompatible with version 1.10.7 or earlier of mod 'Iris' (iris), yet a conflicting version is present: 1.8.8+mc1.21.4!
+	 - Mod 'Zoomify' (zoomify) 2.15.2+1.21.11 requires version 1.13.8+kotlin.2.3.0 or later of fabric-language-kotlin, which is missing!
+	 - Mod 'Old' (oldmod) 1.0 requires version 1.20.1 of minecraft, but only the wrong version is present: 1.21.11!
+Suspected Mods: Crashy (crashy), Minecraft (minecraft)`;
+  const problems = autofix.parse(log);
+  const kinds = problems.map((p) => `${p.kind}:${p.id}`);
+  assert.ok(kinds.includes("conflict:iris"));
+  assert.ok(kinds.includes("missing:fabric-language-kotlin"));
+  assert.ok(kinds.includes("wrong-game:oldmod"));
+  assert.ok(kinds.includes("suspect:crashy"));
+  assert.ok(!kinds.some((k) => k.endsWith(":minecraft")));
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mytic-autofix-"));
+  const jar = (file, id) => {
+    const zip = new AdmZip();
+    zip.addFile("fabric.mod.json", Buffer.from(JSON.stringify({ id, name: id, version: "1" })));
+    zip.writeZip(path.join(dir, file));
+  };
+  jar("sodium.jar", "sodium");
+  jar("iris-old.jar", "iris");
+  jar("zoomify.jar", "zoomify");
+  jar("old.jar", "oldmod");
+  jar("crashy.jar", "crashy");
+  // Sodium gehört dem Launcher (integriert)
+  fs.writeFileSync(path.join(dir, ".mytic-managed.json"), JSON.stringify([{ slug: "sodium", file: "sodium.jar" }]));
+  const steps = autofix.plan(problems, dir);
+  const actions = steps.map((s) => `${s.action}:${s.id}`);
+  assert.ok(actions.includes("update:iris"), "eigene Iris statt integriertem Sodium");
+  assert.ok(!actions.some((a) => a.endsWith(":sodium")), "integrierte Mods nie anfassen");
+  assert.ok(actions.includes("install:fabric-language-kotlin"));
+  assert.ok(actions.includes("update:oldmod"));
+  assert.ok(actions.includes("disable:crashy"));
+  fs.rmSync(dir, { recursive: true, force: true });
+});

@@ -536,7 +536,10 @@ api.onGame(({ running: isRunning, code }) => {
   setRunning(isRunning);
   if (isRunning) $("status").textContent = "Minecraft läuft – viel Spaß!";
   else $("status").textContent = code === 0 ? "Bereit" : `Beendet (Code ${code}) – Details in der Konsole`;
-  if (!isRunning && code !== 0) toast("Minecraft wurde unerwartet beendet. Sieh dir die Konsole an.", true);
+  // Absturz: normalerweise erscheint das Auto-Fix-Fenster – nur falls nicht, kurzer Hinweis
+  if (!isRunning && code !== 0) setTimeout(() => {
+    if ($("crash").hidden) toast("Minecraft wurde unerwartet beendet. Sieh dir die Konsole an.", true);
+  }, 2000);
 });
 
 // ---------------------------------------------------------------------------------------------- Mod-Browser
@@ -1038,6 +1041,66 @@ api.onUpdate((info) => {
   }
   $("update-banner").hidden = false;
 });
+// ---------------------------------------------------------------------------------------------- Absturz / Auto-Fix
+
+let crashFixed = false;
+api.onCrash((info) => {
+  crashFixed = false;
+  $("crash-title").textContent = info.steps.length ? "Problem erkannt – Auto-Fix verfügbar" : "Minecraft ist abgestürzt";
+  $("crash-reason").textContent = info.reason;
+  const body = $("crash-body");
+  body.replaceChildren();
+  if (info.steps.length) {
+    body.append(el("h4", null, "Auto-Fix wird"));
+    const ul = el("ul");
+    for (const step of info.steps) ul.append(el("li", null, step));
+    body.append(ul);
+  } else {
+    body.append(el("p", "sub", "Für diesen Fehler gibt es keinen automatischen Fix. Im Log steht, welche Mod beteiligt ist – oft hilft es, zuletzt hinzugefügte Mods auszuschalten."));
+  }
+  if (info.details.length) {
+    body.append(el("h4", null, "Details"));
+    body.append(el("div", "detail", info.details.join("\n")));
+  }
+  $("crash-fix").hidden = !info.steps.length;
+  $("crash-fix").disabled = false;
+  $("crash-fix").textContent = "Auto-Fix";
+  $("crash").hidden = false;
+});
+$("crash-close").addEventListener("click", () => ($("crash").hidden = true));
+$("crash-log").addEventListener("click", () => {
+  $("crash").hidden = true;
+  document.querySelector("[data-page=console]").click();
+});
+$("crash-fix").addEventListener("click", async () => {
+  if (crashFixed) {
+    // nach dem Fix: direkt erneut starten
+    $("crash").hidden = true;
+    $("launch").click();
+    return;
+  }
+  $("crash-fix").disabled = true;
+  $("crash-fix").textContent = "Repariere …";
+  try {
+    const { results, profiles } = await api.applyAutofix();
+    await applyProfiles(profiles, true);
+    const body = $("crash-body");
+    body.replaceChildren(el("h4", null, "Erledigt"));
+    const ul = el("ul");
+    for (const r of results) ul.append(el("li", r.startsWith("✗") ? "err" : "ok", r));
+    body.append(ul);
+    $("crash-title").textContent = "Auto-Fix abgeschlossen";
+    $("crash-reason").textContent = "Starte Minecraft erneut, um es auszuprobieren.";
+    crashFixed = true;
+    $("crash-fix").textContent = "Erneut starten";
+  } catch (error) {
+    toast(errorText(error), true);
+    $("crash-fix").textContent = "Auto-Fix";
+  } finally {
+    $("crash-fix").disabled = false;
+  }
+});
+
 api.onInstalledNow(() => toast("Mytic Client ist jetzt installiert – du findest ihn im Startmenü und auf dem Desktop."));
 api.onUpdateProgress(({ done, total }) => {
   $("update-progress").hidden = false;

@@ -44,6 +44,8 @@ contextBridge.exposeInMainWorld("mytic", {
   onUpdateProgress: on("update-progress"),
   onUpdated: on("updated"),
   onInstalledNow: on("installed-now"),
+  onCrash: on("crash"),
+  applyAutofix: () => ipcRenderer.invoke("autofix:apply"),
   onProgress: on("progress"),
   onLog: on("log"),
   onStatus: on("status"),

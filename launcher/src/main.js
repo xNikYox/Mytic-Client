@@ -2,6 +2,7 @@
 const { app, BrowserWindow, ipcMain, shell, safeStorage, session, dialog } = require("electron");
 const importer = require("./core/importer");
 const { ModUpdater } = require("./core/modupdates");
+const autofix = require("./core/autofix");
 const fs = require("node:fs");
 const fsp = require("node:fs/promises");
 const path = require("node:path");
@@ -598,6 +599,51 @@ ipcMain.handle("account:remove", async (e, uuid) => {
   return publicAccounts();
 });
 
+// ---------------------------------------------------------------------------------------------- Auto-Fix
+
+let lastCrash = null;
+
+/** Nach dem Beenden: Fehlermeldung des Fabric Loaders bzw. Absturzbericht auswerten und Auto-Fix anbieten. */
+async function detectCrash({ code, log, crashReport, profile, modsDir, gameDir, startedAt }) {
+  let text = log;
+  // Absturzbericht dazunehmen (aus dem Log oder der neueste seit dem Start)
+  try {
+    let file = crashReport;
+    if (!file) {
+      const dir = path.join(gameDir, "crash-reports");
+      const newest = (await fsp.readdir(dir)).map((f) => path.join(dir, f)).filter((f) => fs.statSync(f).mtimeMs >= startedAt).sort().pop();
+      file = newest || null;
+    }
+    if (file) text += `\n${await fsp.readFile(file, "utf8")}`;
+  } catch {
+    // kein Absturzbericht
+  }
+  const crashed = (code !== null && code !== 0) || /FormattedException|Game crashed|Crash report saved/.test(text);
+  if (!crashed) return;
+  const problems = autofix.parse(text);
+  const steps = profile.mcVersion && loaderFor(profile.mcVersion) === "fabric" ? autofix.plan(problems, modsDir) : [];
+  lastCrash = { steps, modsDir, profile };
+  const reason = (text.match(/FormattedException: (.+)/) || text.match(/Description: (.+)/) || text.match(/Exception[^:\n]*: (.+)/) || [])[1] || `Minecraft wurde mit Code ${code} beendet.`;
+  emit("crash", { code, reason: reason.trim().slice(0, 300), steps: steps.map((s) => s.label), details: problems.map((p) => p.text).slice(0, 8) });
+}
+
+ipcMain.handle("autofix:apply", async () => {
+  // hängt das Spiel noch am Fehlerfenster von Fabric: beenden
+  if (game) {
+    const running = game;
+    await new Promise((resolve) => {
+      running.once("exit", resolve);
+      running.kill();
+      setTimeout(resolve, 5000);
+    });
+  }
+  if (!lastCrash || !lastCrash.steps.length) throw new Error("Nichts zu reparieren.");
+  const { steps, modsDir, profile } = lastCrash;
+  const results = await autofix.apply(steps, { modsDir, browser: browserFor(profile), log: (line) => emit("log", line) });
+  lastCrash = null;
+  return { results, profiles: await profileList() };
+});
+
 ipcMain.handle("game:launch", async () => {
   if (busy || game) throw new Error("Das Spiel läuft bereits.");
   busy = true;
@@ -623,11 +669,30 @@ ipcMain.handle("game:launch", async () => {
     const command = buildCommand(install, DIRS, account, { ...current, modsDir: profileMods });
     emit("status", "Minecraft startet …");
     emit("log", `[Launcher] Starte Minecraft ${profile.mcVersion} (Fabric) als ${account.name} – Profil „${profile.name}“`);
+    // letzte Log-Zeilen für den Auto-Fix merken
+    const recent = [];
+    let crashReport = null;
+    let reported = false;
+    const startedAt = Date.now();
+    const report = (code) => {
+      if (reported) return;
+      reported = true;
+      detectCrash({ code, log: recent.join("\n"), crashReport, profile, modsDir: profileMods, gameDir: install.gameDir || DIRS.game, startedAt });
+    };
     game = launch(command, DIRS, {
-      onLog: (line) => emit("log", line),
+      onLog: (line) => {
+        emit("log", line);
+        recent.push(line);
+        if (recent.length > 800) recent.shift();
+        const m = /Crash report saved to:\s*(?:#@!@#\s*)?(.+?\.txt)/.exec(line);
+        if (m) crashReport = m[1].trim();
+        // Fabric zeigt bei Mod-Fehlern ein eigenes Fenster und wartet – Auto-Fix schon jetzt anbieten
+        if (/FormattedException|Incompatible mods found|Some of your mods are incompatible/.test(line)) setTimeout(() => report(null), 1500);
+      },
       onExit: (code) => {
         game = null;
         emit("game", { running: false, code });
+        report(code);
         if (win && !win.isDestroyed()) {
           if (win.isMinimized()) win.restore();
           win.show();

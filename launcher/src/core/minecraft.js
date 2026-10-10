@@ -15,7 +15,7 @@ const VERSION_MANIFEST = "https://piston-meta.mojang.com/mc/game/version_manifes
 const FABRIC_META = "https://meta.fabricmc.net/v2";
 const MODRINTH = "https://api.modrinth.com/v2";
 const LAUNCHER_NAME = "MyticClient";
-const LAUNCHER_VERSION = "2.19.0";
+const LAUNCHER_VERSION = "2.20.0";
 
 /** Mods, die der Launcher verwaltet. required = immer installiert, sonst über die Einstellungen schaltbar. */
 /** Alte Versionen laufen mit Forge statt Fabric (Version → Forge-Version). */
@@ -27,6 +27,24 @@ function loaderFor(mcVersion) {
 }
 
 /** Spielordner: alte Versionen (andere Optionen-/Weltformate) bekommen einen eigenen, z. B. game-1.8.9. */
+/**
+ * Der Ladebildschirm von Forge 1.8.9 (weiß mit Fortschrittsbalken) hängt mit manchen Grafiktreibern unter Windows –
+ * das Fenster bleibt dann weiß. Abschalten (bekannte Lösung, auch von Patcher empfohlen); das Spiel lädt trotzdem normal.
+ */
+async function disableForgeSplash(gameDir) {
+  const file = path.join(gameDir, "config", "splash.properties");
+  let text = "";
+  try {
+    text = await fsp.readFile(file, "utf8");
+  } catch {
+    // noch nicht vorhanden
+  }
+  if (/^enabled=false\s*$/m.test(text)) return;
+  text = /^enabled=/m.test(text) ? text.replace(/^enabled=.*$/m, "enabled=false") : `${text}${text && !text.endsWith("\n") ? "\n" : ""}enabled=false\n`;
+  await fsp.mkdir(path.dirname(file), { recursive: true });
+  await fsp.writeFile(file, text);
+}
+
 /**
  * Neueste vorhandene Modrinth-Version: nach Veröffentlichungsdatum, Release oder Beta.
  * Alpha-Versionen nur, wenn es nichts anderes gibt.
@@ -369,6 +387,7 @@ class Installer {
 
     const gameDir = gameDirFor(this.dirs, this.mcVersion);
     await fsp.mkdir(gameDir, { recursive: true });
+    if (this.loader === "forge") await disableForgeSplash(gameDir);
     if (!modsDir && this.loader === "forge") modsDir = path.join(gameDir, "mods");
     const mods = bundledModsDir ? await this.mods(enabledMods, bundledModsDir, modsDir) : [];
     this.step("Fertig", 1, 1);
@@ -576,4 +595,4 @@ function defaultMemoryMb() {
   return Math.max(2048, Math.min(4096, Math.floor(total / 2 / 512) * 512));
 }
 
-module.exports = { newestVersion, loaderFor, gameDirFor, FORGE_VERSIONS, Log4jParser, Installer, buildCommand, launch, rulesAllow, collectArguments, mavenPath, MANAGED_MODS, MC_VERSION, defaultMemoryMb, availableVersions, bundledMytic };
+module.exports = { disableForgeSplash, newestVersion, loaderFor, gameDirFor, FORGE_VERSIONS, Log4jParser, Installer, buildCommand, launch, rulesAllow, collectArguments, mavenPath, MANAGED_MODS, MC_VERSION, defaultMemoryMb, availableVersions, bundledMytic };

@@ -126,10 +126,11 @@
 
       <div class="cards">
         <article class="glass card">
-          <header><h3>Neu in 2.19</h3><span class="badge">Update</span></header>
+          <header><h3>Neu in 2.20</h3><span class="badge">Update</span></header>
           <ul class="news">
+            <li><b>Auto-Fix:</b> Mod-Fehler beim Start werden erkannt und mit einem Klick repariert</li>
+            <li><b>1.8.9:</b> kein weißes Fenster mehr beim Laden</li>
             <li><b>11 Designs:</b> unter Einstellungen → Design, z. B. Mitternacht, Nether, Kirschblüte, Matrix</li>
-            <li><b>Updates wie bei Lunar:</b> laden still im Hintergrund, Mytic-Mods aktualisieren sich beim Spielstart</li>
             <li><b>Profile hochladen:</b> Ordner, .mrpack, .zip oder .jar von deinem PC – auch per Drag &amp; Drop</li>
             <li><b>HUD neu:</b> eckige dunkle Boxen, „120 FPS“ – Neon und Klassisch bleiben wählbar</li>
             <li><b>Minecraft 1.8.9:</b> die PvP-Version mit Forge, pro Profil wählbar</li>
@@ -261,6 +262,21 @@
         <svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19h14"/></svg>Aus anderem Launcher importieren
       </button>
       <p class="error" id="profile-error" hidden></p>
+    </div>
+  </div>
+
+  <!-- Absturz / Auto-Fix -->
+  <div class="popover modal" id="crash" hidden>
+    <div class="popover-card glass crash-card" role="dialog" aria-label="Minecraft ist abgestürzt">
+      <div class="pop-head"><b id="crash-title">Minecraft konnte nicht starten</b><small id="crash-reason"></small></div>
+      <div class="crash-body" id="crash-body"></div>
+      <div class="import-foot">
+        <button class="ghost" id="crash-log" type="button">Log ansehen</button>
+        <span class="crash-actions">
+          <button class="ghost" id="crash-close" type="button">Schließen</button>
+          <button class="mr-btn install" id="crash-fix" type="button">Auto-Fix</button>
+        </span>
+      </div>
     </div>
   </div>
 
