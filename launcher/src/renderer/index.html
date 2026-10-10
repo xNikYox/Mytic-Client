@@ -63,12 +63,13 @@
           <div class="hero-floor"><div class="hero-grid"></div></div>
           <svg viewBox="0 0 900 420" preserveAspectRatio="xMaxYMid slice">
             <defs>
-              <linearGradient id="sun" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe66b"/><stop offset=".45" stop-color="#ff7a59"/><stop offset="1" stop-color="#ff2bd6"/></linearGradient>
-              <linearGradient id="ridge" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1a0f33"/><stop offset="1" stop-color="#07050f"/></linearGradient>
-              <linearGradient id="cubeTop" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7df9ff"/><stop offset="1" stop-color="#22b8ff"/></linearGradient>
-              <linearGradient id="cubeLeft" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b56bff"/><stop offset="1" stop-color="#5b1fd1"/></linearGradient>
-              <linearGradient id="cubeRight" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff4fd8"/><stop offset="1" stop-color="#8f1a9e"/></linearGradient>
-              <radialGradient id="sunGlow"><stop offset="0" stop-color="#ff4fd8" stop-opacity=".55"/><stop offset="1" stop-color="#ff4fd8" stop-opacity="0"/></radialGradient>
+              <linearGradient id="sun" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color: var(--sun-1)"/><stop offset=".45" style="stop-color: var(--sun-2)"/><stop offset="1" style="stop-color: var(--sun-3)"/></linearGradient>
+              <radialGradient id="moonFill" cx=".38" cy=".35" r=".75"><stop offset="0" style="stop-color: var(--sun-1)"/><stop offset=".7" style="stop-color: var(--sun-2)"/><stop offset="1" style="stop-color: var(--sun-3)"/></radialGradient>
+              <linearGradient id="ridge" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color: var(--ridge-top)"/><stop offset="1" style="stop-color: var(--ridge-bottom)"/></linearGradient>
+              <linearGradient id="cubeTop" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color: var(--cube-top-1)"/><stop offset="1" style="stop-color: var(--cube-top-2)"/></linearGradient>
+              <linearGradient id="cubeLeft" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color: var(--cube-left-1)"/><stop offset="1" style="stop-color: var(--cube-left-2)"/></linearGradient>
+              <linearGradient id="cubeRight" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color: var(--cube-right-1)"/><stop offset="1" style="stop-color: var(--cube-right-2)"/></linearGradient>
+              <radialGradient id="sunGlow"><stop offset="0" style="stop-color: var(--sun-3); stop-opacity: .55"/><stop offset="1" style="stop-color: var(--sun-3); stop-opacity: 0"/></radialGradient>
               <mask id="sunCut">
                 <rect x="0" y="0" width="900" height="420" fill="#fff"/>
                 <rect x="400" y="214" width="500" height="5" fill="#000"/><rect x="400" y="232" width="500" height="7" fill="#000"/>
@@ -79,11 +80,17 @@
             <g class="layer far" data-depth="6">
               <circle class="sun-glow" cx="640" cy="190" r="230" fill="url(#sunGlow)"/>
               <circle class="sun" cx="640" cy="200" r="118" fill="url(#sun)" mask="url(#sunCut)"/>
+              <g class="moon">
+                <circle cx="640" cy="196" r="96" fill="url(#moonFill)"/>
+                <circle cx="610" cy="170" r="16" style="fill: var(--sun-3); opacity: .35"/>
+                <circle cx="672" cy="214" r="11" style="fill: var(--sun-3); opacity: .3"/>
+                <circle cx="648" cy="150" r="7" style="fill: var(--sun-3); opacity: .3"/>
+              </g>
             </g>
             <g class="layer mid" data-depth="14">
               <path fill="url(#ridge)" d="M380 300 L470 222 L520 258 L600 176 L660 240 L720 196 L790 262 L850 214 L900 250 L900 330 L380 330 Z"/>
-              <path fill="none" stroke="#22e5ff" stroke-width="2" filter="url(#neon)" d="M380 300 L470 222 L520 258 L600 176 L660 240 L720 196 L790 262 L850 214 L900 250"/>
-              <path fill="none" stroke="#ff2bd6" stroke-width="1.5" opacity=".7" d="M470 222 L500 300 M600 176 L590 300 M720 196 L740 300 M850 214 L830 300"/>
+              <path fill="none" style="stroke: var(--c1)" stroke-width="2" filter="url(#neon)" d="M380 300 L470 222 L520 258 L600 176 L660 240 L720 196 L790 262 L850 214 L900 250"/>
+              <path fill="none" style="stroke: var(--c3)" stroke-width="1.5" opacity=".7" d="M470 222 L500 300 M600 176 L590 300 M720 196 L740 300 M850 214 L830 300"/>
             </g>
             <g class="layer near" data-depth="28">
               <g class="float cube">
@@ -91,8 +98,8 @@
                 <path d="M780 96 l46 26 l0 54 l-46 -26 z" fill="url(#cubeLeft)"/>
                 <path d="M872 96 l-46 26 l0 54 l46 -26 z" fill="url(#cubeRight)"/>
               </g>
-              <path class="float slow" d="M470 92 l9 18 l-9 18 l-9-18z" fill="#22e5ff"/>
-              <path class="float" d="M560 330 l7 14 l-7 14 l-7-14z" fill="#ff2bd6"/>
+              <path class="float slow" d="M470 92 l9 18 l-9 18 l-9-18z" style="fill: var(--c1)"/>
+              <path class="float" d="M560 330 l7 14 l-7 14 l-7-14z" style="fill: var(--c3)"/>
             </g>
           </svg>
           <div class="scanlines"></div>
@@ -119,10 +126,10 @@
 
       <div class="cards">
         <article class="glass card">
-          <header><h3>Neu in 2.18</h3><span class="badge">Update</span></header>
+          <header><h3>Neu in 2.19</h3><span class="badge">Update</span></header>
           <ul class="news">
+            <li><b>11 Designs:</b> unter Einstellungen → Design, z. B. Mitternacht, Nether, Kirschblüte, Matrix</li>
             <li><b>Updates wie bei Lunar:</b> laden still im Hintergrund, Mytic-Mods aktualisieren sich beim Spielstart</li>
-            <li><b>Installer:</b> Startmenü, Desktop-Verknüpfung und Deinstallation</li>
             <li><b>Profile hochladen:</b> Ordner, .mrpack, .zip oder .jar von deinem PC – auch per Drag &amp; Drop</li>
             <li><b>HUD neu:</b> eckige dunkle Boxen, „120 FPS“ – Neon und Klassisch bleiben wählbar</li>
             <li><b>Minecraft 1.8.9:</b> die PvP-Version mit Forge, pro Profil wählbar</li>
@@ -182,6 +189,11 @@
     <!-- Einstellungen -->
     <section class="page" id="page-settings">
       <div class="settings-grid">
+        <section class="glass group">
+          <h3>Design</h3>
+          <p class="sub theme-sub">Farben und Startszene des Launchers. Wird sofort übernommen.</p>
+          <div class="theme-grid" id="theme-grid"></div>
+        </section>
         <section class="glass group">
           <h3>Spiel</h3>
           <div class="row"><div><b>Arbeitsspeicher</b><small>Wie viel RAM Minecraft nutzen darf</small></div>

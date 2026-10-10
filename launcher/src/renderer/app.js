@@ -1,6 +1,17 @@
 // Oberfläche des Mytic Client Launchers.
 const api = window.mytic;
 const $ = (id) => document.getElementById(id);
+
+// zuletzt gewähltes Design sofort setzen (vermeidet kurzes Aufblitzen des Standard-Designs)
+try {
+  const saved = localStorage.getItem("mytic-theme");
+  if (saved) {
+    document.documentElement.dataset.theme = saved;
+    document.documentElement.dataset.scene = ["midnight", "end", "matrix", "mono"].includes(saved) ? "moon" : "sun";
+  }
+} catch {
+  // ohne Speicher: Standard-Design
+}
 let state = null;
 let running = false;
 let modFilter = "Alle";
@@ -84,6 +95,13 @@ function el(tag, className, text) {
   const canvas = $("stars");
   const ctx = canvas.getContext("2d");
   let points = [];
+  let palette = [];
+  const readPalette = () => {
+    const css = getComputedStyle(document.documentElement);
+    palette = ["--c1-rgb", "--c2-rgb", "--c3-rgb"].map((v) => css.getPropertyValue(v).trim() || "235, 225, 255").concat("235, 225, 255");
+  };
+  readPalette();
+  addEventListener("themechange", readPalette);
   const resize = () => {
     canvas.width = innerWidth * devicePixelRatio;
     canvas.height = innerHeight * devicePixelRatio;
@@ -93,8 +111,8 @@ function el(tag, className, text) {
       r: (Math.random() * 1.3 + 0.3) * devicePixelRatio,
       s: Math.random() * 0.15 + 0.03,
       p: Math.random() * Math.PI * 2,
-      // Neon-Partikel: Cyan, Violett, Pink, ab und zu weiß
-      c: ["34, 229, 255", "162, 89, 255", "255, 43, 214", "235, 225, 255"][Math.floor(Math.random() * 4)],
+      // Partikel in den drei Farben des Designs, ab und zu weiß
+      c: Math.floor(Math.random() * 4),
     }));
   };
   const draw = (t) => {
@@ -103,8 +121,9 @@ function el(tag, className, text) {
       p.y -= p.s * devicePixelRatio;
       if (p.y < -4) p.y = canvas.height + 4;
       const a = 0.25 + 0.45 * (0.5 + 0.5 * Math.sin(t / 900 + p.p));
-      ctx.fillStyle = `rgba(${p.c}, ${a})`;
-      ctx.shadowColor = `rgba(${p.c}, ${a})`;
+      const rgb = palette[p.c];
+      ctx.fillStyle = `rgba(${rgb}, ${a})`;
+      ctx.shadowColor = `rgba(${rgb}, ${a})`;
       ctx.shadowBlur = 6 * devicePixelRatio;
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
@@ -320,6 +339,65 @@ function renderSummary() {
 }
 
 // ---------------------------------------------------------------------------------------------- Einstellungen
+
+// ---------------------------------------------------------------------------------------------- Designs
+
+const THEMES = {
+  sunset: { name: "Sonnenuntergang", colors: ["#22e5ff", "#a259ff", "#ff2bd6"], bg: "#07040f", scene: "sun" },
+  midnight: { name: "Mitternacht", colors: ["#7dd3fc", "#6366f1", "#a5b4fc"], bg: "#050914", scene: "moon" },
+  ocean: { name: "Ozean", colors: ["#2dd4bf", "#0ea5e9", "#22d3ee"], bg: "#031520", scene: "sun" },
+  forest: { name: "Wald", colors: ["#86efac", "#22c55e", "#facc15"], bg: "#06140a", scene: "sun" },
+  nether: { name: "Nether", colors: ["#fb923c", "#ef4444", "#facc15"], bg: "#180404", scene: "sun" },
+  end: { name: "End", colors: ["#fde68a", "#a855f7", "#d946ef"], bg: "#0c0418", scene: "moon" },
+  ice: { name: "Eis", colors: ["#e0f2fe", "#7dd3fc", "#a5f3fc"], bg: "#061826", scene: "sun" },
+  sakura: { name: "Kirschblüte", colors: ["#fbcfe8", "#f472b6", "#fda4af"], bg: "#1a0612", scene: "sun" },
+  gold: { name: "Gold", colors: ["#fde68a", "#eab308", "#f59e0b"], bg: "#120d03", scene: "sun" },
+  matrix: { name: "Matrix", colors: ["#4ade80", "#22c55e", "#86efac"], bg: "#02120a", scene: "moon" },
+  mono: { name: "Mono", colors: ["#e5e7eb", "#9ca3af", "#f9fafb"], bg: "#0b0f14", scene: "moon" }
+};
+
+/** Design anwenden: Farben (CSS-Variablen), Szene (Sonne/Mond) und Partikelfarben. */
+function applyTheme(id) {
+  const theme = THEMES[id] ? id : "sunset";
+  try {
+    localStorage.setItem("mytic-theme", theme);
+  } catch {
+    // ohne Speicher: kein Problem
+  }
+  document.documentElement.dataset.theme = theme;
+  document.documentElement.dataset.scene = THEMES[theme].scene;
+  window.dispatchEvent(new Event("themechange"));
+  document.querySelectorAll(".theme").forEach((b) => b.classList.toggle("active", b.dataset.theme === theme));
+}
+
+function renderThemes() {
+  const grid = $("theme-grid");
+  grid.replaceChildren(...Object.entries(THEMES).map(([id, t]) => {
+    const b = el("button", "theme");
+    b.type = "button";
+    b.dataset.theme = id;
+    const preview = el("span", "theme-preview");
+    preview.style.background = `radial-gradient(circle at 70% 30%, ${t.colors[2]}55, transparent 55%), linear-gradient(135deg, ${t.bg}, ${t.bg})`;
+    const orb = el("i", t.scene === "moon" ? "orb orb-moon" : "orb");
+    orb.style.background = t.scene === "moon" ? `radial-gradient(circle at 35% 35%, #fff, ${t.colors[0]})` : `linear-gradient(${t.colors[0]}, ${t.colors[2]})`;
+    const line = el("i", "ridge");
+    line.style.borderColor = t.colors[0];
+    preview.append(orb, line);
+    const dots = el("span", "theme-dots");
+    for (const c of t.colors) {
+      const d = el("i");
+      d.style.background = c;
+      dots.append(d);
+    }
+    b.append(preview, el("b", null, t.name), dots);
+    b.addEventListener("click", async () => {
+      applyTheme(id);
+      state.settings = await api.setSettings({ launcherTheme: id });
+    });
+    return b;
+  }));
+  applyTheme(state.settings.launcherTheme);
+}
 
 function renderSettings() {
   const s = state.settings;
@@ -998,6 +1076,7 @@ $("update-install").addEventListener("click", async () => {
   renderMods();
   renderSummary();
   renderSettings();
+  renderThemes();
   renderCategories();
   installedMods = await api.listMods();
   updateInstalledCount();

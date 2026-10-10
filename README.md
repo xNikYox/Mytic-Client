@@ -19,7 +19,7 @@ Minecraft 1.8.9, 1.21 – 1.21.11 und 26.x · Fabric & Forge · Windows
 ### Launcher
 
 - **Profile importieren und hochladen:** Profile aus Modrinth App, NoRiskClient (NRC) und Lunar Client automatisch übernehmen – oder selbst vom PC hochladen: Profil-Ordner (Modrinth, NRC, CurseForge, Prism/MultiMC, .minecraft), .mrpack, .zip oder einzelne .jar, auch per Drag & Drop. Version und Mods werden übernommen. Die Mods werden über Modrinth erkannt und später automatisch aktualisiert.
-- **Neon-Design:** dunkler Gaming-Look mit Synthwave-Szene, Leuchtrahmen und Neon-Akzenten in Pink, Violett und Cyan.
+- **11 Designs:** unter Einstellungen → Design wählbar – Sonnenuntergang, Mitternacht, Ozean, Wald, Nether, End, Eis, Kirschblüte, Gold, Matrix und Mono. Farben, Startszene (Sonne oder Mond), Leuchtrahmen und Partikel passen sich an.
 - **Ein Klick zum Spielen:** Java, Minecraft 1.21.11, Fabric und alle Mods werden automatisch heruntergeladen und aktuell gehalten. Spieler müssen nichts extra installieren.
 - **Microsoft-Login:** Anmeldung mit dem echten Minecraft-Konto. Der Launcher prüft, ob das Konto Minecraft: Java Edition besitzt.
 - **Mehrere Konten:** schnell zwischen Konten wechseln. Die Anmeldedaten werden mit der Verschlüsselung des Betriebssystems gespeichert.
@@ -71,6 +71,8 @@ Diese Mods kommen automatisch von [Modrinth](https://modrinth.com): **Sodium**, 
 | Mod-Browser | Mods |
 |---|---|
 | ![Mod-Browser](docs/images/launcher-browser.png) | ![Mods](docs/images/launcher-mods.png) |
+
+![Die 11 Launcher-Designs](docs/images/launcher-themes.png)
 
 ## Download und Start
 
