@@ -66,18 +66,30 @@ class ModUpdater {
     if (this.latestInfo && Date.now() - this.latestAt < 10 * 60 * 1000) return this.latestInfo;
     let info = null;
     if (this.source.type === "github") {
-      const releases = await getJson(`https://api.github.com/repos/${this.source.repo}/releases?per_page=30`, { headers: { Accept: "application/vnd.github+json" } });
-      const release = releases.find((r) => /^mods-\d+\.\d+\.\d+$/.test(r.tag_name) && !r.draft);
-      if (release) {
-        info = {
-          version: release.tag_name.slice(5),
-          files: (release.assets || []).map((a) => ({
-            name: a.name,
-            url: a.browser_download_url,
-            size: a.size,
-            sha256: typeof a.digest === "string" && a.digest.startsWith("sha256:") ? a.digest.slice(7) : null,
-          })),
-        };
+      const headers = { Accept: "application/vnd.github+json" };
+      const files = (release) => (release.assets || []).map((a) => ({
+        name: a.name,
+        url: a.browser_download_url,
+        size: a.size,
+        sha256: typeof a.digest === "string" && a.digest.startsWith("sha256:") ? a.digest.slice(7) : null,
+      }));
+      // 1. festes Release "mods-latest" (immer das aktuelle Paket, eine Abfrage)
+      try {
+        const release = await getJson(`https://api.github.com/repos/${this.source.repo}/releases/tags/mods-latest`, { headers });
+        const list = files(release);
+        const versions = list.map((f) => MOD_PATTERN.exec(f.name)).filter(Boolean).map((m) => m[1]);
+        if (versions.length) info = { version: versions.sort(compareVersions).pop(), files: list };
+      } catch {
+        // noch nicht vorhanden: Liste durchsuchen
+      }
+      // 2. sonst die höchste Version unter den Releases "mods-x.y.z"
+      if (!info) {
+        const releases = await getJson(`https://api.github.com/repos/${this.source.repo}/releases?per_page=100`, { headers });
+        const release = releases
+          .filter((r) => /^mods-\d+\.\d+\.\d+$/.test(r.tag_name) && !r.draft)
+          .sort((x, y) => compareVersions(x.tag_name.slice(5), y.tag_name.slice(5)))
+          .pop();
+        if (release) info = { version: release.tag_name.slice(5), files: files(release) };
       }
     } else if (this.source.type === "site" && this.source.base) {
       const root = this.source.base.endsWith("/") ? this.source.base : `${this.source.base}/`;

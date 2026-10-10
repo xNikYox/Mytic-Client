@@ -390,9 +390,11 @@ test("Mod-Updates wie bei Lunar: einzelne Jar laden, sonst mitgelieferte Mod", a
   const jar = Buffer.from("github-jar");
   const realFetch = globalThis.fetch;
   globalThis.fetch = async (url) => {
+    if (String(url).includes("/releases/tags/mods-latest")) return new Response("{}", { status: 404 });
     if (String(url).includes("/releases?")) {
       return new Response(JSON.stringify([
         { tag_name: "v2.18.0", assets: [] },
+        { tag_name: "mods-2.6.0", draft: false, assets: [] },
         { tag_name: "mods-2.7.0", draft: false, assets: [
           { name: "mytic-client-2.7.0+1.21.4.jar", size: jar.length, browser_download_url: "https://example.test/a.jar", digest: `sha256:${crypto.createHash("sha256").update(jar).digest("hex")}` },
           { name: "mytic-client-2.7.0+1.21.5.jar", size: 1, browser_download_url: "https://example.test/b.jar", digest: "sha256:00" },
