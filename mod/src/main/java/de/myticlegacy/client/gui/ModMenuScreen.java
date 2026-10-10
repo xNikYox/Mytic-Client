@@ -25,6 +25,13 @@ import java.util.Locale;
  * Mod-Karten mit großem Icon und An/Aus-Leiste, Einstellungen pro Mod.
  */
 public class ModMenuScreen extends MyticScreen {
+    /** Farbwähler, der sich unter einer Farb-Einstellung öffnet. */
+    private final ColorPicker picker = new ColorPicker();
+
+    private int rowH(Setting<?> setting) {
+        return ROW_H + (picker.setting() == setting ? ColorPicker.HEIGHT + 4 : 0);
+    }
+
     private static final int CARD_H = 60;
     /** Balken unten in der Karte (AKTIV/INAKTIV): Abstand vom unteren Rand und Höhe. */
     private static final int BAR_OFF = 14;
@@ -128,7 +135,11 @@ public class ModMenuScreen extends MyticScreen {
     }
 
     private int contentHeight() {
-        if (selected != null) return 40 + selected.settings.size() * (ROW_H + 3) + 26;
+        if (selected != null) {
+            int rows = 0;
+            for (Setting<?> setting : selected.settings) rows += rowH(setting) + 3;
+            return 40 + rows + 26;
+        }
         int rows = (visibleModules().size() + columns() - 1) / columns();
         return Math.max(0, rows * (CARD_H + GAP) - GAP);
     }
@@ -336,18 +347,19 @@ public class ModMenuScreen extends MyticScreen {
         int w = cw();
 
         boolean backHover = Ui.inside(mouseX, mouseY, x, y + 2, 16, 16);
-        Ui.rect(g, x, y + 2, 16, 16, 8, backHover ? Ui.SURFACE_HOVER : Ui.SURFACE);
+        Ui.rect(g, x, y + 2, 16, 16, 8, Ui.lunar() ? (backHover ? Ui.L_CARD_HOVER : Ui.L_CARD) : (backHover ? Ui.SURFACE_HOVER : Ui.SURFACE));
         Ui.centered(g, "‹", x + 8, y + 6, Ui.TEXT, false);
         g.renderItem(m.icon(), x + 24, y + 2);
         Ui.text(g, m.name, x + 44, y + 2, Ui.TEXT, true);
         Ui.text(g, font.plainSubstrByWidth(m.description, w - 80), x + 44, y + 12, Ui.MUTED, false);
         Ui.toggle(g, "set:on:" + m.id, x + w - 22, y + 6, m.enabled());
 
+        if (picker.setting() != null && !m.settings.contains(picker.setting())) picker.close();
         int row = y + 32;
         Object hover = null;
         for (Setting<?> setting : m.settings) {
             boolean over = Ui.inside(mouseX, mouseY, x, row, w, ROW_H);
-            Ui.rect(g, x, row, w, ROW_H, 5, over ? Ui.SURFACE_HOVER : Ui.SURFACE);
+            Ui.rect(g, x, row, w, rowH(setting), Ui.lunar() ? 4 : 5, Ui.lunar() ? (over ? Ui.L_CARD_HOVER : Ui.L_CARD) : (over ? Ui.SURFACE_HOVER : Ui.SURFACE));
             if (over && !Ui.lunar()) Ui.rect(g, x, row + 4, 2, ROW_H - 8, 1, Ui.accent2());
             Ui.text(g, setting.label, x + 8, row + 7, Ui.TEXT, false);
             int right = x + w - 8;
@@ -370,17 +382,14 @@ public class ModMenuScreen extends MyticScreen {
                 String value = sl.display();
                 Ui.text(g, value, tx - 8 - font.width(value), row + 7, Ui.MUTED, false);
             } else if (setting instanceof ColorSetting c) {
-                int size = 8;
-                int sx = right - ColorSetting.PALETTE.length * (size + 2) + 2;
-                for (int i = 0; i < ColorSetting.PALETTE.length; i++) {
-                    int color = ColorSetting.PALETTE[i];
-                    int px2 = sx + i * (size + 2);
-                    if (color == c.get()) {
-                        if (!Ui.lunar()) Ui.glow(g, px2 - 1, row + 6, size + 2, size + 2, 3, color == 0xFF000000 ? 0xFFFFFFFF : color, 3, 0.9f);
-                        Ui.rect(g, px2 - 1, row + 6, size + 2, size + 2, 3, 0xFFFFFFFF);
-                    }
-                    Ui.rect(g, px2, row + 7, size, size, 2, color == 0xFF000000 ? 0xFF101010 : color);
-                }
+                // Farbe als Feld mit Hex-Wert – Klick öffnet die Farbpalette
+                int col = c.get();
+                boolean open = picker.setting() == c;
+                String hexText = String.format("#%06X", col & 0xFFFFFF);
+                Ui.text(g, hexText, right - 26 - font.width(hexText), row + 7, Ui.MUTED, false);
+                Ui.rect(g, right - 20, row + 5, 20, 12, 3, open ? 0xFFFFFFFF : 0x60FFFFFF);
+                Ui.rect(g, right - 19, row + 6, 18, 10, 2, col == 0xFF000000 ? 0xFF101010 : col | 0xFF000000);
+                if (open) picker.draw(g, x + 8, row + ROW_H + 2);
             } else if (setting instanceof ModeSetting mode) {
                 int bw = Math.max(80, font.width(mode.get()) + 30);
                 boolean ls = Ui.lunar();
@@ -389,7 +398,7 @@ public class ModMenuScreen extends MyticScreen {
                 Ui.text(g, "›", right - 10, row + 7, ls ? 0xFFB4B4B4 : Ui.accent2(), false);
                 Ui.centered(g, mode.get(), right - bw / 2, row + 7, Ui.TEXT, false);
             }
-            row += ROW_H + 3;
+            row += rowH(setting) + 3;
         }
         int bw1 = font.width("Zurücksetzen") + 20;
         boolean resetHover = Ui.inside(mouseX, mouseY, x, row + 4, bw1, 16);
@@ -492,6 +501,10 @@ public class ModMenuScreen extends MyticScreen {
         }
         int row = y + 32;
         for (Setting<?> setting : m.settings) {
+            if (picker.setting() == setting && picker.click(mx, my)) {
+                MyticClient.config().save();
+                return true;
+            }
             if (Ui.inside(mx, my, x, row, w, ROW_H)) {
                 int right = x + w - 8;
                 if (setting instanceof BoolSetting b) {
@@ -503,9 +516,8 @@ public class ModMenuScreen extends MyticScreen {
                         sl.setFraction((mx - tx) / 100.0);
                     }
                 } else if (setting instanceof ColorSetting c) {
-                    int sx = right - ColorSetting.PALETTE.length * 10 + 2;
-                    int i = (int) Math.floor((mx - sx) / 10);
-                    if (i >= 0 && i < ColorSetting.PALETTE.length) c.set(ColorSetting.PALETTE[i]);
+                    if (picker.setting() == c) picker.close();
+                    else picker.open(c);
                 } else if (setting instanceof ModeSetting mode) {
                     int bw = Math.max(80, font.width(mode.get()) + 30);
                     if (mx >= right - bw) mode.cycle(mx < right - bw / 2.0 ? -1 : 1);
@@ -513,7 +525,7 @@ public class ModMenuScreen extends MyticScreen {
                 MyticClient.config().save();
                 return true;
             }
-            row += ROW_H + 3;
+            row += rowH(setting) + 3;
         }
         int bw1 = font.width("Zurücksetzen") + 20;
         if (Ui.inside(mx, my, x, row + 4, bw1, 16)) {
@@ -530,6 +542,7 @@ public class ModMenuScreen extends MyticScreen {
 
     @Override
     protected boolean drag(Input.Click event, double dx, double dy) {
+        if (picker.drag(event.x(), event.y())) return true;
         if (dragging == null) return false;
         int tx = cx() + cw() - 8 - 100;
         dragging.setFraction((event.x() - tx) / 100.0);
@@ -538,6 +551,10 @@ public class ModMenuScreen extends MyticScreen {
 
     @Override
     protected boolean release(Input.Click event) {
+        if (picker.release()) {
+            MyticClient.config().save();
+            return true;
+        }
         if (dragging == null) return false;
         dragging = null;
         MyticClient.config().save();

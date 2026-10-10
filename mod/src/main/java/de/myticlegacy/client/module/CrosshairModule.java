@@ -6,6 +6,9 @@ import de.myticlegacy.client.setting.ColorSetting;
 import de.myticlegacy.client.setting.ModeSetting;
 import de.myticlegacy.client.setting.SliderSetting;
 import net.minecraft.client.Minecraft;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.world.item.Items;
 
@@ -18,6 +21,9 @@ public class CrosshairModule extends Module {
     private final ColorSetting color;
     private final BoolSetting outline;
     private final BoolSetting dot;
+    private final BoolSetting targetColor;
+    private final ColorSetting targetColorValue;
+    private final BoolSetting mobs;
 
     public CrosshairModule() {
         super("crosshair", "Crosshair", "Eigenes Fadenkreuz in Form und Farbe", Category.VISUELL, () -> Items.TARGET, false);
@@ -28,6 +34,9 @@ public class CrosshairModule extends Module {
         color = new ColorSetting(this, "color", "Farbe", 0xFFFFFFFF);
         outline = new BoolSetting(this, "outline", "Umrandung", true);
         dot = new BoolSetting(this, "dot", "Punkt in der Mitte", false);
+        targetColor = new BoolSetting(this, "targetColor", "Andere Farbe auf Spielern", true);
+        targetColorValue = new ColorSetting(this, "targetColorValue", "Farbe auf Spielern", 0xFFFF5C72);
+        mobs = new BoolSetting(this, "targetMobs", "Auch bei Mobs", false);
     }
 
     /** true = eigenes Fadenkreuz gezeichnet, false = das normale verwenden. */
@@ -41,7 +50,7 @@ public class CrosshairModule extends Module {
         int gp = gap.intValue();
         int t = thickness.intValue();
         int half = t / 2;
-        int c = color.get();
+        int c = targetColor.get() && onTarget(mc) ? targetColorValue.get() : color.get();
         switch (style.get()) {
             case "Punkt" -> bar(g, cx - half - 1, cy - half - 1, t + 2, t + 2, c);
             case "Kreis" -> {
@@ -67,5 +76,11 @@ public class CrosshairModule extends Module {
     private void bar(GuiGraphics g, int x, int y, int w, int h, int c) {
         if (outline.get()) g.fill(x - 1, y - 1, x + w + 1, y + h + 1, 0xC0000000);
         g.fill(x, y, x + w, y + h, c);
+    }
+
+    /** Zielt das Fadenkreuz gerade auf einen Spieler (bzw. Mob)? */
+    private boolean onTarget(Minecraft mc) {
+        Entity e = mc.crosshairPickEntity;
+        return e instanceof Player || (mobs.get() && e instanceof LivingEntity);
     }
 }
