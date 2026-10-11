@@ -18,6 +18,7 @@ abstract class AvatarRendererMixin {
     @Inject(method = "extractCapeState", at = @At("TAIL"))
     private void mytic$wind(@org.spongepowered.asm.mixin.injection.Coerce Object entity, AvatarRenderState state, float partialTick, CallbackInfo ci) {
         ((MiniMeState) state).mytic$setMiniMe(MiniMe.skinFor(entity));
+        ((de.myticlegacy.client.cosmetics.WingsState) state).mytic$setWings(Cosmetics.wingsFor(entity));
         if (state.skin == null || !Cosmetics.isMytic(state.skin.cape())) return;
         float[] wind = Cosmetics.wind(entity.hashCode());
         state.capeLean += wind[0];
@@ -29,5 +30,6 @@ abstract class AvatarRendererMixin {
     @Inject(method = "<init>", at = @At("TAIL"))
     private void mytic$miniMeLayer(EntityRendererProvider.Context context, boolean slim, CallbackInfo ci) {
         ((LivingEntityRendererInvoker) this).mytic$addLayer(new MiniMeLayer((AvatarRenderer) (Object) this, context.getModelSet()));
+        ((LivingEntityRendererInvoker) this).mytic$addLayer(new de.myticlegacy.client.render.WingsLayer((AvatarRenderer) (Object) this));
     }
 }

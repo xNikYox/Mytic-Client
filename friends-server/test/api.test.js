@@ -203,6 +203,7 @@ test("Cosmetics: wählen und für andere abfragen", async () => {
   assert.equal((await s.call("POST", "/api/cosmetics", { cape: "../böse" }, b)).data.cape, null);
   const res = await s.call("POST", "/api/cosmetics/lookup", { uuids: [ALICE, BOB, "kaputt"] }, b);
   assert.deepEqual(res.data.capes, { [ALICE]: "galaxie" });
+  assert.deepEqual(res.data.wings, {});
   assert.equal((await s.call("POST", "/api/cosmetics/lookup", { uuids: [ALICE] })).status, 401);
 });
 
@@ -212,12 +213,14 @@ test("Cosmetics: MiniMe wählen, Umhang bleibt; alte Mods ohne Felder löschen n
   const b = await s.login("Bob");
   await s.call("POST", "/api/cosmetics", { cape: "inferno" }, a);
   let res = await s.call("POST", "/api/cosmetics", { minime: "Technoblade" }, a);
-  assert.deepEqual(res.data, { cape: "inferno", minime: "Technoblade" });
+  assert.deepEqual(res.data, { cape: "inferno", minime: "Technoblade", wings: null });
   res = await s.call("POST", "/api/cosmetics", { cape: null, minime: "x y" }, a);
-  assert.deepEqual(res.data, { cape: null, minime: null });
+  assert.deepEqual(res.data, { cape: null, minime: null, wings: null });
   await s.call("POST", "/api/cosmetics", { cape: "galaxie", minime: "Dream" }, a);
   res = await s.call("POST", "/api/cosmetics", {}, a);
-  assert.deepEqual(res.data, { cape: null, minime: "Dream" });
+  assert.deepEqual(res.data, { cape: null, minime: "Dream", wings: null });
+  res = await s.call("POST", "/api/cosmetics", { wings: "neon" }, a);
+  assert.deepEqual(res.data, { cape: null, minime: "Dream", wings: "neon" });
   const look = await s.call("POST", "/api/cosmetics/lookup", { uuids: [ALICE] }, b);
-  assert.deepEqual(look.data, { capes: {}, minimes: { [ALICE]: "Dream" } });
+  assert.deepEqual(look.data, { capes: {}, minimes: { [ALICE]: "Dream" }, wings: { [ALICE]: "neon" } });
 });

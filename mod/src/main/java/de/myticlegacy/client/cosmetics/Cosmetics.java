@@ -41,6 +41,20 @@ public final class Cosmetics {
         return cape == null ? null : texture(cape);
     }
 
+    /** Flügel dieser Figur oder null. */
+    public static String wingsFor(Object entity) {
+        Minecraft mc = Minecraft.getInstance();
+        if (!(entity instanceof net.minecraft.world.entity.Entity e) || mc.player == null) return null;
+        return CosmeticsCore.wingsOf(e.getUUID().toString().replace("-", ""), e.getUUID().equals(mc.player.getUUID()));
+    }
+
+    /** Vorschau eines Flügelpaars im Cosmetics-Menü (eigenes kleines Vorschaubild aus dem Paket) mit animiertem Glanz. */
+    public static void drawWingPreview(GuiGraphics g, String id, int x, int y, int w, int h) {
+        Blit.region(g, Identifier.fromNamespaceAndPath("myticclient", "textures/wings/" + id + "_icon.png"), x, y, w, h, 0, 0, 240, 144, 240, 144);
+        long frame = System.currentTimeMillis() / CosmeticsCore.WING_FX_MS % CosmeticsCore.WING_FX_FRAMES;
+        Blit.region(g, Identifier.fromNamespaceAndPath("myticclient", "textures/wings/" + id + "_icon_fx_" + frame + ".png"), x, y, w, h, 0, 0, 240, 144, 240, 144);
+    }
+
     /** Trägt dieser Umhang ein Mytic-Cosmetic? (für die Wind-Animation) */
     public static boolean isMytic(ClientAsset.Texture cape) {
         return cape != null && "myticclient".equals(cape.id().getNamespace());

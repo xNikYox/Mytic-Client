@@ -20,11 +20,23 @@ CAPES = [
     ("kirschbluete", "Kirschblüte"), ("eiskristall", "Eiskristall"), ("galaxie", "Galaxie"),
 ]
 
+WINGS = [("engel", "Engel"), ("inferno", "Inferno"), ("eis", "Eis"), ("neon", "Mytic Neon"), ("smaragd", "Smaragd")]
+
+
 def main():
     os.makedirs(FRAMES, exist_ok=True)
     if "--skip-render" not in sys.argv:
         subprocess.run([sys.executable, os.path.join(HERE, "capes.py"), FRAMES], check=True)
-    catalog = {"version": VERSION, "scale": 8, "capes": [{"id": i, "name": n, "frames": 24, "frameMs": 70} for i, n in CAPES]}
+    catalog = {"version": VERSION, "scale": 8, "capes": [{"id": i, "name": n, "frames": 24, "frameMs": 70} for i, n in CAPES],
+               "wings": [{"id": i, "name": n, "fxFrames": 16, "fxMs": 90} for i, n in WINGS]}
+    subprocess.run([sys.executable, os.path.join(HERE, "wings.py"), os.path.join(BUILD, "wings")], check=True)
+    # kleine, weich verkleinerte Bilder für die Vorschau im Cosmetics-Menü (große Texturen flimmern dort)
+    wdir = os.path.join(BUILD, "wings")
+    for wid, _ in WINGS:
+        names = [(f"{wid}.png", f"{wid}_icon.png")] + [(f"{wid}_fx_{f}.png", f"{wid}_icon_fx_{f}.png") for f in range(16)]
+        for src, dst in names:
+            subprocess.run(["convert", os.path.join(wdir, src), "-filter", "Lanczos", "-resize", "240x144!", "-depth", "8",
+                            f"PNG32:{os.path.join(wdir, dst)}"], check=True)
     mod = {"schemaVersion": 1, "id": "myticcosmetics", "version": VERSION, "name": "Mytic Cosmetics",
            "description": "Umhänge des Mytic Clients (nur Texturen)", "environment": "client"}
     # Maske aus der Form der Original-Elytra (Bereich 22,0–46,22), auf 12-fache Größe ohne Glätten vergrößert,
@@ -89,6 +101,12 @@ def main():
             for f in range(24):
                 name = f"{cid}_{f}.png"
                 z.write(os.path.join(small, name), f"assets/myticclient/textures/cape/{name}")
+        for wid, _ in WINGS:
+            z.write(os.path.join(BUILD, "wings", f"{wid}.png"), f"assets/myticclient/textures/wings/{wid}.png")
+            z.write(os.path.join(BUILD, "wings", f"{wid}_icon.png"), f"assets/myticclient/textures/wings/{wid}_icon.png")
+            for f in range(16):
+                for name in (f"{wid}_fx_{f}.png", f"{wid}_icon_fx_{f}.png"):
+                    z.write(os.path.join(BUILD, "wings", name), f"assets/myticclient/textures/wings/{name}")
     print(f"{jar} ({os.path.getsize(jar) // 1024} KB)")
 
 main()

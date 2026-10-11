@@ -421,6 +421,7 @@ public final class MyticClient {
         fpsBoost.tick(mc);
         de.myticlegacy.client.cosmetics.Cosmetics.tick(mc);
         de.myticlegacy.client.cosmetics.MiniMe.register(mc);
+        de.myticlegacy.client.cosmetics.Wings.register(mc);
         CombatTracker.tick(mc);
 
         float gamma = mc.gameSettings.gammaSetting;

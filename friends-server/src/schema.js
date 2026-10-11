@@ -42,4 +42,5 @@ CREATE TABLE IF NOT EXISTS requests (
 export const MIGRATIONS = [
   "ALTER TABLE users ADD COLUMN cape TEXT",
   "ALTER TABLE users ADD COLUMN minime TEXT",
+  "ALTER TABLE users ADD COLUMN wings TEXT",
 ];

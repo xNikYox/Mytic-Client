@@ -313,7 +313,7 @@ export function createApi(db, options = {}) {
       const me = await auth(request);
       const data = await body(request);
       // ältere Mods schicken nur "cape" (oder gar nichts für "kein Umhang")
-      if ("cape" in data || !("minime" in data)) {
+      if ("cape" in data || !("minime" in data || "wings" in data)) {
         const cape = typeof data.cape === "string" && /^[a-z0-9_-]{1,32}$/.test(data.cape) ? data.cape : null;
         await db.run("UPDATE users SET cape = ? WHERE uuid = ?", [cape, me.uuid]);
       }
@@ -321,8 +321,12 @@ export function createApi(db, options = {}) {
         const minime = typeof data.minime === "string" && NAME.test(data.minime) ? data.minime : null;
         await db.run("UPDATE users SET minime = ? WHERE uuid = ?", [minime, me.uuid]);
       }
-      const row = await db.get("SELECT cape, minime FROM users WHERE uuid = ?", [me.uuid]);
-      return { cape: row.cape || null, minime: row.minime || null };
+      if ("wings" in data) {
+        const wings = typeof data.wings === "string" && /^[a-z0-9_-]{1,32}$/.test(data.wings) ? data.wings : null;
+        await db.run("UPDATE users SET wings = ? WHERE uuid = ?", [wings, me.uuid]);
+      }
+      const row = await db.get("SELECT cape, minime, wings FROM users WHERE uuid = ?", [me.uuid]);
+      return { cape: row.cape || null, minime: row.minime || null, wings: row.wings || null };
     },
 
     /** Cosmetics anderer Spieler (z. B. alle auf dem Server), höchstens 100 auf einmal. */
@@ -332,14 +336,16 @@ export function createApi(db, options = {}) {
       const list = (Array.isArray(uuids) ? uuids : []).map((u) => String(u).replace(/-/g, "").toLowerCase()).filter((u) => UUID.test(u)).slice(0, 100);
       const capes = {};
       const minimes = {};
+      const wings = {};
       if (list.length) {
-        const rows = await db.all(`SELECT uuid, cape, minime FROM users WHERE (cape IS NOT NULL OR minime IS NOT NULL) AND uuid IN (${list.map(() => "?").join(",")})`, list);
+        const rows = await db.all(`SELECT uuid, cape, minime, wings FROM users WHERE (cape IS NOT NULL OR minime IS NOT NULL OR wings IS NOT NULL) AND uuid IN (${list.map(() => "?").join(",")})`, list);
         for (const row of rows) {
           if (row.cape) capes[row.uuid] = row.cape;
           if (row.minime) minimes[row.uuid] = row.minime;
+          if (row.wings) wings[row.uuid] = row.wings;
         }
       }
-      return { capes, minimes };
+      return { capes, minimes, wings };
     },
 
     "POST /api/friends/request": async (request) => {

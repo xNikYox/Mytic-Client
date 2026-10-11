@@ -201,4 +201,9 @@ public final class Cosmetics {
         Gui.drawScaledCustomSizeModalRect(x, y, k, k, 10 * k, 16 * k, w, h, 64 * k, 32 * k);
         return true;
     }
+
+    /** Vorschau eines Flügelpaars im Cosmetics-Menü. */
+    public static void drawWingPreview(GuiGraphics g, String id, int x, int y, int w, int h) {
+        Wings.drawPreview(g, id, x, y, w, h);
+    }
 }

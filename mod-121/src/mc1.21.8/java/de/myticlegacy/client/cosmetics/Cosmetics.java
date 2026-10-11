@@ -76,4 +76,18 @@ public final class Cosmetics {
                 x, y, w, h, k, k, 10 * k, 16 * k, 64 * k, 32 * k);
         return true;
     }
+
+    /** Flügel dieser Figur oder null. */
+    public static String wingsFor(Object entity) {
+        Minecraft mc = Minecraft.getInstance();
+        if (!(entity instanceof net.minecraft.world.entity.Entity e) || mc.player == null) return null;
+        return CosmeticsCore.wingsOf(e.getUUID().toString().replace("-", ""), e.getUUID().equals(mc.player.getUUID()));
+    }
+
+    /** Vorschau eines Flügelpaars im Cosmetics-Menü (eigenes kleines Vorschaubild aus dem Paket) mit animiertem Glanz. */
+    public static void drawWingPreview(GuiGraphics g, String id, int x, int y, int w, int h) {
+        Blit.region(g, ResourceLocation.fromNamespaceAndPath("myticclient", "textures/wings/" + id + "_icon.png"), x, y, w, h, 0, 0, 240, 144, 240, 144);
+        long frame = System.currentTimeMillis() / CosmeticsCore.WING_FX_MS % CosmeticsCore.WING_FX_FRAMES;
+        Blit.region(g, ResourceLocation.fromNamespaceAndPath("myticclient", "textures/wings/" + id + "_icon_fx_" + frame + ".png"), x, y, w, h, 0, 0, 240, 144, 240, 144);
+    }
 }

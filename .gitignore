@@ -8,3 +8,4 @@ launcher/scripts/.dev-update-site
 friends-server/friends.db*
 launcher/scripts/.dev-friends-site
 cosmetics/build/
+__pycache__/
