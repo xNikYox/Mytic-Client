@@ -37,3 +37,8 @@ CREATE TABLE IF NOT EXISTS requests (
   PRIMARY KEY (sender, target)
 );
 `;
+
+/** Spätere Erweiterungen bestehender Datenbanken (Fehler "Spalte gibt es schon" wird ignoriert). */
+export const MIGRATIONS = [
+  "ALTER TABLE users ADD COLUMN cape TEXT",
+];

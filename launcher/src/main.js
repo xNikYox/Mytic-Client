@@ -4,6 +4,7 @@ const importer = require("./core/importer");
 const { ModUpdater } = require("./core/modupdates");
 const autofix = require("./core/autofix");
 const { FriendsClient } = require("./core/friends");
+const { CosmeticsUpdater } = require("./core/cosmetics");
 const fs = require("node:fs");
 const fsp = require("node:fs/promises");
 const path = require("node:path");
@@ -40,6 +41,12 @@ const BUNDLED_MODS = app.isPackaged ? path.join(process.resourcesPath, "resource
 const modUpdater = new ModUpdater({
   cacheDir: path.join(DIRS.base, "mytic-mods"),
   bundledDir: BUNDLED_MODS,
+  source: DEV_BUILD ? { type: "site", base: DEV_UPDATE_SITE } : { type: "github", repo: updater.REPO },
+  log: (line) => emit("log", line),
+});
+/** Cosmetics-Paket (Umhänge), getrennt von der Mod, damit Launcher und Mod klein bleiben. */
+const cosmetics = new CosmeticsUpdater({
+  dir: path.join(DIRS.base, "cosmetics"),
   source: DEV_BUILD ? { type: "site", base: DEV_UPDATE_SITE } : { type: "github", repo: updater.REPO },
   log: (line) => emit("log", line),
 });
@@ -706,7 +713,10 @@ ipcMain.handle("game:launch", async () => {
       const { clientId, ...stored } = current;
       await writeJson(SETTINGS_FILE, { ...stored, verifyNext: false });
     }
-    const command = buildCommand(install, DIRS, account, { ...current, modsDir: profileMods, extraJvm: await friendsJvm(account) });
+    emit("status", "Cosmetics prüfen …");
+    const cosmeticsPack = await cosmetics.prepare();
+    const extraJvm = [...(await friendsJvm(account)), ...(cosmeticsPack ? [`-Dmytic.cosmetics=${cosmeticsPack}`] : [])];
+    const command = buildCommand(install, DIRS, account, { ...current, modsDir: profileMods, extraJvm, addMods: cosmeticsPack ? [cosmeticsPack] : [] });
     emit("status", "Minecraft startet …");
     emit("log", `[Launcher] Starte Minecraft ${profile.mcVersion} (Fabric) als ${account.name} – Profil „${profile.name}“`);
     // letzte Log-Zeilen für den Auto-Fix merken

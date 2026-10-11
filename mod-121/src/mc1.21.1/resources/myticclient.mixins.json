@@ -11,7 +11,8 @@
     "CameraMixin",
     "LevelMixin",
     "GuiCompatMixin",
-    "BossOverlayMixin"
+    "BossOverlayMixin",
+    "AbstractClientPlayerMixin"
   ],
   "injectors": {
     "defaultRequire": 1

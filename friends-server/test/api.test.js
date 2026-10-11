@@ -194,3 +194,14 @@ test("Offline-Konten nur wenn erlaubt", async () => {
   assert.equal(res.data.me.uuid, await offlineUuid("Steve"));
   assert.equal(res.data.me.uuid, "5627dd98e6be3c21b8a8e92344183641");
 });
+
+test("Cosmetics: wählen und für andere abfragen", async () => {
+  const s = setup();
+  const a = await s.login("Alice");
+  const b = await s.login("Bob");
+  assert.equal((await s.call("POST", "/api/cosmetics", { cape: "galaxie" }, a)).data.cape, "galaxie");
+  assert.equal((await s.call("POST", "/api/cosmetics", { cape: "../böse" }, b)).data.cape, null);
+  const res = await s.call("POST", "/api/cosmetics/lookup", { uuids: [ALICE, BOB, "kaputt"] }, b);
+  assert.deepEqual(res.data.capes, { [ALICE]: "galaxie" });
+  assert.equal((await s.call("POST", "/api/cosmetics/lookup", { uuids: [ALICE] })).status, 401);
+});

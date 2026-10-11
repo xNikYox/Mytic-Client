@@ -261,6 +261,16 @@ public final class Friends {
         return Collections.unmodifiableList(out);
     }
 
+    /** Aufruf am Friends-Server (blockierend, nur aus Hintergrund-Threads). */
+    public static JsonObject post(String path, JsonObject body) throws Exception {
+        return call("POST", path, body, 10000);
+    }
+
+    /** Aufgabe im Hintergrund-Thread der Freundesliste ausführen. */
+    public static void background(Runnable task) {
+        if (worker != null) worker.execute(task);
+    }
+
     @SuppressWarnings("deprecation")
     private static JsonObject call(String method, String path, JsonObject body, int timeout) throws Exception {
         HttpURLConnection c = (HttpURLConnection) new URL(BASE + path).openConnection();

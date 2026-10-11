@@ -7,3 +7,4 @@ launcher/test-results/
 launcher/scripts/.dev-update-site
 friends-server/friends.db*
 launcher/scripts/.dev-friends-site
+cosmetics/build/

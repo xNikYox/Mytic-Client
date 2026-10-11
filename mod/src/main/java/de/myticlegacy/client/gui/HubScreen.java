@@ -53,7 +53,8 @@ public class HubScreen extends MyticScreen {
             for (Module m : MyticClient.MODULES) if (m.enabled()) on++;
             return on + " aktiv";
         }
-        return "Bald verfügbar";
+        de.myticlegacy.client.cosmetics.CosmeticsCore.Cape cape = de.myticlegacy.client.cosmetics.CosmeticsCore.byId(de.myticlegacy.client.cosmetics.CosmeticsCore.selected());
+        return cape != null ? cape.name : "Kein Umhang";
     }
 
     @Override
@@ -109,12 +110,6 @@ public class HubScreen extends MyticScreen {
             Ui.centered(g, LABELS[i], cx, y + 66, Ui.TEXT, true);
             String sub = subtitle(i);
             Ui.scaled(g, sub, cx - font.width(sub) * 0.4f, y + 80, 0.8f, i == 0 && Friends.onlineCount() > 0 ? (lunar ? Ui.L_GREEN : Ui.GREEN) : Ui.MUTED, false);
-            if (i == 2) {
-                // "BALD"-Plakette
-                int bw = font.width("BALD") + 8;
-                Ui.rect(g, x + TILE_W - bw - 6, y + 6, bw, 11, 3, lunar ? 0xFF3A3A3A : Ui.withAlpha(Ui.PINK, 200));
-                Ui.scaled(g, "BALD", x + TILE_W - bw - 2, y + 8.5f, 0.75f, 0xFFFFFFFF, false);
-            }
             if (i == 0 && !Friends.incoming().isEmpty()) {
                 String n = String.valueOf(Friends.incoming().size());
                 int bw = Math.max(12, font.width(n) + 6);

@@ -15,7 +15,7 @@ const VERSION_MANIFEST = "https://piston-meta.mojang.com/mc/game/version_manifes
 const FABRIC_META = "https://meta.fabricmc.net/v2";
 const MODRINTH = "https://api.modrinth.com/v2";
 const LAUNCHER_NAME = "MyticClient";
-const LAUNCHER_VERSION = "2.22.0";
+const LAUNCHER_VERSION = "2.23.0";
 
 /** Mods, die der Launcher verwaltet. required = immer installiert, sonst über die Einstellungen schaltbar. */
 /** Alte Versionen laufen mit Forge statt Fabric (Version → Forge-Version). */
@@ -473,7 +473,7 @@ function buildCommand(install, dirs, account, settings = {}, { platform = proces
     ...collectArguments(version.arguments.jvm, vars, ruleOptions),
     ...collectArguments(fabric.arguments && fabric.arguments.jvm, vars, ruleOptions),
     // Mods des gewählten Profils (Fabric lädt alle JARs aus diesem Ordner zusätzlich)
-    ...(settings.modsDir ? [`-Dfabric.addMods=${settings.modsDir}`] : []),
+    ...(settings.modsDir || (settings.addMods || []).length ? [`-Dfabric.addMods=${[settings.modsDir, ...(settings.addMods || [])].filter(Boolean).join(path.delimiter)}`] : []),
     ...(settings.jvmArgs ? settings.jvmArgs.split(/\s+/).filter(Boolean) : []),
     ...(settings.extraJvm || []),
   ];

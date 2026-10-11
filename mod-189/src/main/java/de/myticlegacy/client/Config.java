@@ -23,6 +23,8 @@ public final class Config {
     public Map<String, Object> settings = new LinkedHashMap<String, Object>();
     /** Helligkeit vor dem Einschalten von Fullbright, wird beim Ausschalten wiederhergestellt. */
     public double savedGamma = 0.5;
+    /** Gewählter Umhang (Cosmetics), null = keiner. */
+    public String cape;
     /** Grafik-Optionen vor dem Einschalten von FPS-Boost (Name → Wert als Text), werden beim Ausschalten zurückgesetzt. */
     public Map<String, String> savedOptions = new LinkedHashMap<String, String>();
 

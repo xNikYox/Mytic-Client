@@ -9,7 +9,9 @@
     "OptionInstanceAccessor",
     "EntityMixin",
     "CameraMixin",
-    "LevelMixin"
+    "LevelMixin",
+    "AbstractClientPlayerMixin",
+    "AvatarRendererMixin"
   ],
   "injectors": {
     "defaultRequire": 1

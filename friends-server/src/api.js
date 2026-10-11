@@ -161,7 +161,7 @@ export function createApi(db, options = {}) {
     const outgoing = await db.all("SELECT u.*, r.created AS at FROM requests r JOIN users u ON u.uuid = r.target WHERE r.sender = ? ORDER BY r.created DESC", [me.uuid]);
     const list = friends.map(publicUser).sort((x, y) => (y.online - x.online) || (y.place === "game") - (x.place === "game") || y.lastSeen - x.lastSeen || x.name.localeCompare(y.name));
     const short = (row) => ({ uuid: row.uuid, name: row.name, head: row.head || null, at: row.at });
-    return { me: { uuid: me.uuid, name: me.name, head: me.head || null }, friends: list, incoming: incoming.map(short), outgoing: outgoing.map(short), serverTime: now() };
+    return { me: { uuid: me.uuid, name: me.name, head: me.head || null, cape: me.cape || null }, friends: list, incoming: incoming.map(short), outgoing: outgoing.map(short), serverTime: now() };
   }
 
   async function body(request) {
@@ -306,6 +306,28 @@ export function createApi(db, options = {}) {
       // sofort als offline zeigen ("zuletzt online" bleibt praktisch jetzt)
       await db.run("UPDATE users SET last_seen = ?, place = NULL, server = NULL WHERE uuid = ?", [now() - ONLINE_MS - 1, me.uuid]);
       return { ok: true };
+    },
+
+    /** Eigenes Cosmetic wählen (null = keins). */
+    "POST /api/cosmetics": async (request) => {
+      const me = await auth(request);
+      const { cape } = await body(request);
+      const value = typeof cape === "string" && /^[a-z0-9_-]{1,32}$/.test(cape) ? cape : null;
+      await db.run("UPDATE users SET cape = ? WHERE uuid = ?", [value, me.uuid]);
+      return { cape: value };
+    },
+
+    /** Cosmetics anderer Spieler (z. B. alle auf dem Server), höchstens 100 auf einmal. */
+    "POST /api/cosmetics/lookup": async (request) => {
+      await auth(request);
+      const { uuids } = await body(request);
+      const list = (Array.isArray(uuids) ? uuids : []).map((u) => String(u).replace(/-/g, "").toLowerCase()).filter((u) => UUID.test(u)).slice(0, 100);
+      const capes = {};
+      if (list.length) {
+        const rows = await db.all(`SELECT uuid, cape FROM users WHERE cape IS NOT NULL AND uuid IN (${list.map(() => "?").join(",")})`, list);
+        for (const row of rows) capes[row.uuid] = row.cape;
+      }
+      return { capes };
     },
 
     "POST /api/friends/request": async (request) => {

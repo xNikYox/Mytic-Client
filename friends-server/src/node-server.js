@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { createApi } from "./api.js";
-import { SCHEMA } from "./schema.js";
+import { SCHEMA, MIGRATIONS } from "./schema.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -14,6 +14,13 @@ export function openDb(file) {
   const sqlite = new DatabaseSync(file);
   sqlite.exec("PRAGMA journal_mode = WAL");
   sqlite.exec(SCHEMA);
+  for (const sql of MIGRATIONS) {
+    try {
+      sqlite.exec(sql);
+    } catch {
+      // schon vorhanden
+    }
+  }
   return {
     all: async (sql, params = []) => sqlite.prepare(sql).all(...params),
     get: async (sql, params = []) => sqlite.prepare(sql).get(...params) || null,

@@ -49,7 +49,7 @@ import java.util.List;
 public final class MyticClient implements ClientModInitializer {
     public static final String ID = "myticclient";
     public static final String NAME = "Mytic Client";
-    public static final String VERSION = "2.12";
+    public static final String VERSION = "2.13";
     public static final Logger LOG = LoggerFactory.getLogger(NAME);
 
     public static final List<Module> MODULES = new ArrayList<>();
@@ -285,6 +285,7 @@ public final class MyticClient implements ClientModInitializer {
         autoText.tick(mc);
         lightOverlay.tick(mc);
         fpsBoost.tick(mc);
+        de.myticlegacy.client.cosmetics.Cosmetics.tick(mc);
         CombatTracker.tick(mc);
 
         if (toggleSprint.enabled() && mc.player != null && Compat.screen(mc) == null
