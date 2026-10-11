@@ -716,7 +716,8 @@ ipcMain.handle("game:launch", async () => {
     }
     emit("status", "Cosmetics prüfen …");
     const cosmeticsPack = await cosmetics.prepare();
-    const extraJvm = [...(await friendsJvm(account)), ...(cosmeticsPack ? [`-Dmytic.cosmetics=${cosmeticsPack}`] : [])];
+    // Design des Launchers auch als Hintergrund des Mytic-Hauptmenüs
+    const extraJvm = [...(await friendsJvm(account)), ...(cosmeticsPack ? [`-Dmytic.cosmetics=${cosmeticsPack}`] : []), `-Dmytic.launcherTheme=${current.launcherTheme || "sunset"}`];
     const command = buildCommand(install, DIRS, account, { ...current, modsDir: profileMods, extraJvm, addMods: cosmeticsPack ? [cosmeticsPack] : [] });
     emit("status", "Minecraft startet …");
     emit("log", `[Launcher] Starte Minecraft ${profile.mcVersion} (Fabric) als ${account.name} – Profil „${profile.name}“`);

@@ -43,6 +43,8 @@ public final class SimpleModules {
         public final ModeSetting menuSize;
         public final ModeSetting hudStyle;
         public final ModeSetting menuStyle;
+        /** Hintergrund des Mytic-Hauptmenüs: Szene des Launcher-Designs oder das Minecraft-Panorama. */
+        public final ModeSetting titleBackground;
 
         public Theme() {
             super("theme", "Design", "Akzentfarbe, Mytic-Hauptmenü und Menü-Hintergrund", Category.CLIENT, () -> Items.AMETHYST_SHARD, true);
@@ -52,6 +54,7 @@ public final class SimpleModules {
             menuSize = new ModeSetting(this, "menuSize", "Menügröße", "Kompakt", "Kompakt", "Groß");
             hudStyle = new ModeSetting(this, "hudStyle", "HUD-Stil", "Lunar", "Lunar", "Neon", "Klassisch");
             menuStyle = new ModeSetting(this, "menuStyle", "Menü-Stil", "Lunar", "Lunar", "Neon");
+            titleBackground = new ModeSetting(this, "titleBackground", "Hauptmenü-Hintergrund", "Launcher-Design", "Launcher-Design", "Panorama");
         }
     }
 

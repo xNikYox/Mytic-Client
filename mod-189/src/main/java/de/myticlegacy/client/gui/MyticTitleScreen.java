@@ -63,6 +63,15 @@ public class MyticTitleScreen extends MyticScreen {
 
     @Override
     protected void renderBackground(GuiGraphics g) {
+        // Szene des Launcher-Designs (wie die Startseite des Launchers), sonst das Panorama
+        if (MyticClient.theme.titleBackground.is("Launcher-Design")) {
+            int mouseX = org.lwjgl.input.Mouse.getX() * width / Math.max(1, mc.displayWidth);
+            int mouseY = height - org.lwjgl.input.Mouse.getY() * height / Math.max(1, mc.displayHeight);
+            if (ThemeScene.draw(g, width, height, mouseX, mouseY)) {
+                g.fillGradient(0, 0, width, height, 0x00000000, 0x60000000);
+                return;
+            }
+        }
         Panorama.render(width, height);
         g.fillGradient(0, 0, width, height, 0x30000000, 0x90000000);
     }

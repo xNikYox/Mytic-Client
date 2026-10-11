@@ -51,6 +51,11 @@ public class MyticTitleScreen extends MyticScreen {
 
     @Override
     public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float delta) {
+        // Szene des Launcher-Designs (wie die Startseite des Launchers), sonst das Panorama von Minecraft
+        if (MyticClient.theme.titleBackground.is("Launcher-Design") && ThemeScene.draw(g, width, height, mouseX, mouseY)) {
+            g.fillGradient(0, 0, width, height, 0x00000000, 0x60000000);
+            return;
+        }
         renderPanorama(g, delta);
         g.fillGradient(0, 0, width, height, 0x30000000, 0x90000000);
     }
