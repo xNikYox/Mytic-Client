@@ -41,4 +41,5 @@ CREATE TABLE IF NOT EXISTS requests (
 /** Spätere Erweiterungen bestehender Datenbanken (Fehler "Spalte gibt es schon" wird ignoriert). */
 export const MIGRATIONS = [
   "ALTER TABLE users ADD COLUMN cape TEXT",
+  "ALTER TABLE users ADD COLUMN minime TEXT",
 ];

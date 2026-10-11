@@ -1,6 +1,10 @@
 package de.myticlegacy.client.mixin;
 
 import de.myticlegacy.client.cosmetics.Cosmetics;
+import de.myticlegacy.client.cosmetics.MiniMe;
+import de.myticlegacy.client.cosmetics.MiniMeState;
+import de.myticlegacy.client.render.MiniMeLayer;
+import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.renderer.entity.player.PlayerRenderer;
 import net.minecraft.client.renderer.entity.state.PlayerRenderState;
@@ -9,15 +13,22 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/** 1.21.2–1.21.8: Wind für Mytic-Umhänge (Name wie in 1.21.11, Ziel ist hier PlayerRenderer). */
+/** 1.21.2–1.21.8: Wind für Mytic-Umhänge und MiniMe (Name wie in 1.21.11, Ziel ist hier PlayerRenderer). */
 @Mixin(PlayerRenderer.class)
 abstract class AvatarRendererMixin {
     @Inject(method = "extractCapeState", at = @At("TAIL"))
     private static void mytic$wind(AbstractClientPlayer player, PlayerRenderState state, float partialTick, CallbackInfo ci) {
+        ((MiniMeState) state).mytic$setMiniMe(MiniMe.skinFor(player));
         if (state.skin == null || !Cosmetics.isMytic(state.skin.capeTexture())) return;
         float[] wind = Cosmetics.wind(player.getId());
         state.capeLean += wind[0];
         state.capeLean2 += wind[1];
         state.capeFlap += wind[2];
+    }
+
+    /** MiniMe-Ebene anmelden (sitzt auf der Schulter). */
+    @Inject(method = "<init>", at = @At("TAIL"))
+    private void mytic$miniMeLayer(EntityRendererProvider.Context context, boolean slim, CallbackInfo ci) {
+        ((LivingEntityRendererInvoker) (Object) this).mytic$addLayer(new MiniMeLayer((PlayerRenderer) (Object) this, context.getModelSet()));
     }
 }

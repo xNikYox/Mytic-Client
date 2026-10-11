@@ -12,7 +12,10 @@
     "LevelMixin",
     "GuiCompatMixin",
     "BossOverlayMixin",
-    "AbstractClientPlayerMixin"
+    "AbstractClientPlayerMixin",
+    "AvatarRendererMixin",
+    "AvatarRenderStateMixin",
+    "LivingEntityRendererInvoker"
   ],
   "injectors": {
     "defaultRequire": 1

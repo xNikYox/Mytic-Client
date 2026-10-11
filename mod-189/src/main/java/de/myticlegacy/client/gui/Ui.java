@@ -46,11 +46,18 @@ public final class Ui {
         lastFrame = now;
     }
 
-    /** Weicher Übergang zu einem Zielwert (0..1), z. B. für Hover-Effekte. */
+    /** Letzter Zeitpunkt je Animation – jede Animation misst ihre eigene Zeit (frame() wird pro Bild mehrfach aufgerufen). */
+    private static final Map<Object, Long> ANIMATED_AT = new HashMap<Object, Long>();
+
+    /** Weicher Übergang zu einem Zielwert (0..1), z. B. für Hover-Effekte – unabhängig von den FPS. */
     public static float animate(Object key, boolean target, float speed) {
-        float value = ANIMATIONS.getOrDefault(key, target ? 1f : 0f);
+        long now = System.nanoTime();
+        Long last = ANIMATED_AT.put(key, now);
+        float dt = last == null ? 0f : Math.min(0.1f, (now - last) / 1_000_000_000f);
+        Float stored = ANIMATIONS.get(key);
+        float value = stored != null ? stored : (target ? 1f : 0f);
         float goal = target ? 1f : 0f;
-        value += (goal - value) * Math.min(1f, frameSeconds * speed);
+        value += (goal - value) * Math.min(1f, dt * speed);
         if (Math.abs(goal - value) < 0.002f) value = goal;
         ANIMATIONS.put(key, value);
         return value;

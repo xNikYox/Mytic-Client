@@ -74,7 +74,7 @@ import java.util.List;
 public final class MyticClient {
     public static final String ID = "myticclient";
     public static final String NAME = "Mytic Client";
-    public static final String VERSION = "2.13";
+    public static final String VERSION = "2.14";
     public static final Logger LOG = LogManager.getLogger(NAME);
 
     public static final List<Module> MODULES = new ArrayList<Module>();
@@ -420,6 +420,7 @@ public final class MyticClient {
         lightOverlay.tick(mc);
         fpsBoost.tick(mc);
         de.myticlegacy.client.cosmetics.Cosmetics.tick(mc);
+        de.myticlegacy.client.cosmetics.MiniMe.register(mc);
         CombatTracker.tick(mc);
 
         float gamma = mc.gameSettings.gammaSetting;

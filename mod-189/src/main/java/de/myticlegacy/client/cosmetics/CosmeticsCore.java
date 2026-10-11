@@ -56,6 +56,8 @@ public final class CosmeticsCore {
 
     /** uuid (ohne Striche) → Umhang-ID oder "" (keiner). */
     private static final Map<String, String> REMOTE = new ConcurrentHashMap<>();
+    /** uuid (ohne Striche) → MiniMe-Name oder "" (keiner). */
+    private static final Map<String, String> REMOTE_MINI = new ConcurrentHashMap<>();
     private static final Map<String, Long> ASKED = new ConcurrentHashMap<>();
     private static volatile boolean lookupRunning;
     private static volatile boolean pushed;
@@ -121,10 +123,12 @@ public final class CosmeticsCore {
     public static void push() {
         pushed = true;
         final String id = MyticClient.config().cape;
+        final String mini = MiniMeCore.selected();
         Friends.background(() -> {
             try {
                 JsonObject body = new JsonObject();
-                if (id != null) body.addProperty("cape", id);
+                body.addProperty("cape", id);
+                body.addProperty("minime", mini);
                 Friends.post("api/cosmetics", body);
             } catch (Exception e) {
                 MyticClient.LOG.warn("Cosmetics nicht gespeichert: " + e.getMessage());
@@ -139,13 +143,19 @@ public final class CosmeticsCore {
         return id == null || id.isEmpty() ? null : byId(id);
     }
 
+    /** MiniMe-Name eines anderen Spielers (vom Friends-Server) oder null. */
+    public static String remoteMiniMe(String uuid) {
+        String name = REMOTE_MINI.get(uuid);
+        return name == null || name.isEmpty() ? null : name;
+    }
+
     /**
      * Regelmäßig aus dem Spiel-Thread: Umhänge der Spieler in der Nähe nachfragen (gesammelt, höchstens 100 auf
      * einmal, je Spieler alle 2 Minuten).
      */
     public static void tick(List<String> nearby) {
-        if (!Friends.available() || !available()) return;
-        if (!pushed && MyticClient.config().cape != null) push();
+        if (!Friends.available()) return;
+        if (!pushed && (MyticClient.config().cape != null || MiniMeCore.selected() != null)) push();
         if (lookupRunning) return;
         long now = System.currentTimeMillis();
         final List<String> ask = new ArrayList<>();
@@ -163,10 +173,17 @@ public final class CosmeticsCore {
                 JsonArray array = new JsonArray();
                 for (String uuid : ask) array.add(new com.google.gson.JsonPrimitive(uuid));
                 body.add("uuids", array);
-                JsonObject result = Friends.post("api/cosmetics/lookup", body).getAsJsonObject("capes");
+                JsonObject answer = Friends.post("api/cosmetics/lookup", body);
                 Map<String, String> found = new HashMap<>();
-                for (Map.Entry<String, JsonElement> e : result.entrySet()) found.put(e.getKey(), e.getValue().getAsString());
-                for (String uuid : ask) REMOTE.put(uuid, found.containsKey(uuid) ? found.get(uuid) : "");
+                for (Map.Entry<String, JsonElement> e : answer.getAsJsonObject("capes").entrySet()) found.put(e.getKey(), e.getValue().getAsString());
+                Map<String, String> minis = new HashMap<>();
+                if (answer.has("minimes")) {
+                    for (Map.Entry<String, JsonElement> e : answer.getAsJsonObject("minimes").entrySet()) minis.put(e.getKey(), e.getValue().getAsString());
+                }
+                for (String uuid : ask) {
+                    REMOTE.put(uuid, found.containsKey(uuid) ? found.get(uuid) : "");
+                    REMOTE_MINI.put(uuid, minis.containsKey(uuid) ? minis.get(uuid) : "");
+                }
             } catch (Exception e) {
                 // in 30 Sekunden erneut versuchen
                 long retry = System.currentTimeMillis() - REMOTE_MS + 30000;

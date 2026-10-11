@@ -205,3 +205,19 @@ test("Cosmetics: wählen und für andere abfragen", async () => {
   assert.deepEqual(res.data.capes, { [ALICE]: "galaxie" });
   assert.equal((await s.call("POST", "/api/cosmetics/lookup", { uuids: [ALICE] })).status, 401);
 });
+
+test("Cosmetics: MiniMe wählen, Umhang bleibt; alte Mods ohne Felder löschen nur den Umhang", async () => {
+  const s = setup();
+  const a = await s.login("Alice");
+  const b = await s.login("Bob");
+  await s.call("POST", "/api/cosmetics", { cape: "inferno" }, a);
+  let res = await s.call("POST", "/api/cosmetics", { minime: "Technoblade" }, a);
+  assert.deepEqual(res.data, { cape: "inferno", minime: "Technoblade" });
+  res = await s.call("POST", "/api/cosmetics", { cape: null, minime: "x y" }, a);
+  assert.deepEqual(res.data, { cape: null, minime: null });
+  await s.call("POST", "/api/cosmetics", { cape: "galaxie", minime: "Dream" }, a);
+  res = await s.call("POST", "/api/cosmetics", {}, a);
+  assert.deepEqual(res.data, { cape: null, minime: "Dream" });
+  const look = await s.call("POST", "/api/cosmetics/lookup", { uuids: [ALICE] }, b);
+  assert.deepEqual(look.data, { capes: {}, minimes: { [ALICE]: "Dream" } });
+});

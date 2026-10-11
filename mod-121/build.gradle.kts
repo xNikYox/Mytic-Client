@@ -14,13 +14,13 @@ val fabricApi = mapOf(
 /** Versionsgruppen mit gleicher API, von speziell nach allgemein. */
 val groups = mapOf(
     "1.21.10" to listOf("1.21.10", "1.21.9"), "1.21.9" to listOf("1.21.9"),
-    "1.21.5" to listOf("1.21.5", "blit2", "1.21.8", "1.21.9"),
-    "1.21.4" to listOf("1.21.4", "blit2", "1.21.5", "1.21.8", "1.21.9"),
-    "1.21.3" to listOf("1.21.3", "blit2", "1.21.1", "1.21.4", "1.21.5", "1.21.8", "1.21.9"),
-    "1.21.2" to listOf("1.21.2", "blit2", "1.21.1", "1.21.4", "1.21.5", "1.21.8", "1.21.9"),
-    "1.21.1" to listOf("1.21.1", "legacyfov", "1.21.4", "1.21.5", "1.21.8", "1.21.9"),
-    "1.21" to listOf("1.21", "legacyfov", "1.21.1", "1.21.4", "1.21.5", "1.21.8", "1.21.9"),
-    "1.21.8" to listOf("1.21.8", "1.21.9"), "1.21.7" to listOf("1.21.7", "1.21.8", "1.21.9"), "1.21.6" to listOf("1.21.6", "1.21.8", "1.21.9"),
+    "1.21.5" to listOf("1.21.5", "mini2", "blit2", "1.21.8", "1.21.9"),
+    "1.21.4" to listOf("1.21.4", "mini2", "blit2", "1.21.5", "1.21.8", "1.21.9"),
+    "1.21.3" to listOf("1.21.3", "mini2", "blit2", "1.21.1", "1.21.4", "1.21.5", "1.21.8", "1.21.9"),
+    "1.21.2" to listOf("1.21.2", "mini2", "blit2", "1.21.1", "1.21.4", "1.21.5", "1.21.8", "1.21.9"),
+    "1.21.1" to listOf("1.21.1", "legacyfov", "mini2", "1.21.4", "1.21.5", "1.21.8", "1.21.9"),
+    "1.21" to listOf("1.21", "legacyfov", "1.21.1", "mini2", "1.21.4", "1.21.5", "1.21.8", "1.21.9"),
+    "1.21.8" to listOf("1.21.8", "mini2", "1.21.9"), "1.21.7" to listOf("1.21.7", "1.21.8", "mini2", "1.21.9"), "1.21.6" to listOf("1.21.6", "1.21.8", "mini2", "1.21.9"),
 )
 val patch = mc.split(".").getOrNull(2)?.toInt() ?: 0
 
@@ -36,6 +36,7 @@ val renames = buildList {
     add(Regex("""\bIdentifier\b""") to "ResourceLocation")
     add(Regex("""\.identifier\(\)""") to ".location()")
     if (patch >= 9) add(Regex("""\.renderOutline\(""") to ".submitOutline(")
+    if (patch >= 9) add(Regex("""net\.minecraft\.client\.model\.player\.PlayerModel""") to "net.minecraft.client.model.PlayerModel")
 }
 // Erst die Versionsordner (speziellster zuerst), dann der gemeinsame Code; bei gleichen Dateien gewinnt die erste
 val copyShared by tasks.registering(Sync::class) {

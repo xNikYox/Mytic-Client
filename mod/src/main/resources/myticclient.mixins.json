@@ -11,7 +11,9 @@
     "CameraMixin",
     "LevelMixin",
     "AbstractClientPlayerMixin",
-    "AvatarRendererMixin"
+    "AvatarRendererMixin",
+    "AvatarRenderStateMixin",
+    "LivingEntityRendererInvoker"
   ],
   "injectors": {
     "defaultRequire": 1

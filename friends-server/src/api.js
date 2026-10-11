@@ -308,13 +308,21 @@ export function createApi(db, options = {}) {
       return { ok: true };
     },
 
-    /** Eigenes Cosmetic wählen (null = keins). */
+    /** Eigene Cosmetics wählen: Umhang und MiniMe (Minecraft-Name), null = keins. Fehlende Felder bleiben. */
     "POST /api/cosmetics": async (request) => {
       const me = await auth(request);
-      const { cape } = await body(request);
-      const value = typeof cape === "string" && /^[a-z0-9_-]{1,32}$/.test(cape) ? cape : null;
-      await db.run("UPDATE users SET cape = ? WHERE uuid = ?", [value, me.uuid]);
-      return { cape: value };
+      const data = await body(request);
+      // ältere Mods schicken nur "cape" (oder gar nichts für "kein Umhang")
+      if ("cape" in data || !("minime" in data)) {
+        const cape = typeof data.cape === "string" && /^[a-z0-9_-]{1,32}$/.test(data.cape) ? data.cape : null;
+        await db.run("UPDATE users SET cape = ? WHERE uuid = ?", [cape, me.uuid]);
+      }
+      if ("minime" in data) {
+        const minime = typeof data.minime === "string" && NAME.test(data.minime) ? data.minime : null;
+        await db.run("UPDATE users SET minime = ? WHERE uuid = ?", [minime, me.uuid]);
+      }
+      const row = await db.get("SELECT cape, minime FROM users WHERE uuid = ?", [me.uuid]);
+      return { cape: row.cape || null, minime: row.minime || null };
     },
 
     /** Cosmetics anderer Spieler (z. B. alle auf dem Server), höchstens 100 auf einmal. */
@@ -323,11 +331,15 @@ export function createApi(db, options = {}) {
       const { uuids } = await body(request);
       const list = (Array.isArray(uuids) ? uuids : []).map((u) => String(u).replace(/-/g, "").toLowerCase()).filter((u) => UUID.test(u)).slice(0, 100);
       const capes = {};
+      const minimes = {};
       if (list.length) {
-        const rows = await db.all(`SELECT uuid, cape FROM users WHERE cape IS NOT NULL AND uuid IN (${list.map(() => "?").join(",")})`, list);
-        for (const row of rows) capes[row.uuid] = row.cape;
+        const rows = await db.all(`SELECT uuid, cape, minime FROM users WHERE (cape IS NOT NULL OR minime IS NOT NULL) AND uuid IN (${list.map(() => "?").join(",")})`, list);
+        for (const row of rows) {
+          if (row.cape) capes[row.uuid] = row.cape;
+          if (row.minime) minimes[row.uuid] = row.minime;
+        }
       }
-      return { capes };
+      return { capes, minimes };
     },
 
     "POST /api/friends/request": async (request) => {

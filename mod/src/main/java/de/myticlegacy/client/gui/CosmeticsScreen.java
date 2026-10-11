@@ -1,8 +1,10 @@
 package de.myticlegacy.client.gui;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import de.myticlegacy.client.compat.Gfx;
 import de.myticlegacy.client.cosmetics.Cosmetics;
 import de.myticlegacy.client.cosmetics.CosmeticsCore;
+import de.myticlegacy.client.cosmetics.MiniMeCore;
 import de.myticlegacy.client.friends.Friends;
 import net.minecraft.client.gui.GuiGraphics;
 
@@ -18,6 +20,14 @@ public class CosmeticsScreen extends PanelScreen {
     private static final int PREVIEW_H = 64;
     private double scrollPos;
     private double scrollTarget;
+    private static final String[] TABS = {"Umhänge", "MiniMe"};
+    /** zuletzt offener Reiter bleibt beim nächsten Öffnen */
+    private static int tab;
+    private int lastHeaderX;
+    private String input = "";
+    private boolean inputFocused;
+    private String message;
+    private final long openedAt = System.currentTimeMillis();
 
     public CosmeticsScreen() {
         super("Cosmetics");
@@ -29,6 +39,12 @@ public class CosmeticsScreen extends PanelScreen {
     }
 
     // ------------------------------------------------------------------------------------------ Layout
+
+    private int tabX(int i) {
+        int x = lastHeaderX;
+        for (int k = 0; k < i; k++) x += font.width(TABS[k]) + 14;
+        return x;
+    }
 
     private int cx() {
         return px + 10;
@@ -76,15 +92,32 @@ public class CosmeticsScreen extends PanelScreen {
     @Override
     protected void drawContent(GuiGraphics g, int mouseX, int mouseY, int headerX) {
         boolean lunar = Ui.lunar();
-        // Reiter (weitere Kategorien folgen)
-        String tab = "Umhänge";
-        int tw = font.width(tab);
-        if (lunar) Ui.rect(g, headerX - 5, py + 9, tw + 10, 15, 4, 0x28FFFFFF);
-        Ui.text(g, tab, headerX, py + 13, lunar ? 0xFFFFFFFF : Ui.TEXT, false);
-        if (!lunar) Ui.hGradient(g, headerX, py + 24, tw, 2, Ui.accent(), Ui.accent2());
+        lastHeaderX = headerX;
+        // Reiter: Umhänge, MiniMe
+        for (int i = 0; i < TABS.length; i++) {
+            int x = tabX(i);
+            int tw = font.width(TABS[i]);
+            boolean active = tab == i;
+            boolean hover = Ui.inside(mouseX, mouseY, x - 4, py + 8, tw + 8, 18);
+            float t = Ui.animate("cosTab:" + i, active, 14f);
+            float h = Ui.animate("cosTabH:" + i, hover, 18f);
+            if (lunar) {
+                float fillT = Math.max(t, h * 0.4f);
+                if (fillT > 0.01f) Ui.rect(g, x - 5, py + 9, tw + 10, 15, 4, Ui.withAlpha(0xFFFFFF, Math.round(fillT * 40)));
+                Ui.text(g, TABS[i], x, py + 13, Ui.mix(0xFF9A9A9A, 0xFFFFFFFF, Math.max(t, h * 0.7f)), false);
+            } else {
+                Ui.text(g, TABS[i], x, py + 13, Ui.mix(Ui.MUTED, Ui.TEXT, Math.max(t, h * 0.7f)), false);
+                int line = Math.round(tw * t);
+                if (line > 0) Ui.hGradient(g, x + (tw - line) / 2, py + 24, line, 2, Ui.accent(), Ui.accent2());
+            }
+        }
 
         int mid = px + pw / 2;
         int midY = py + HEADER + (ph - HEADER - FOOTER) / 2;
+        if (tab == 1) {
+            drawMiniMe(g, mouseX, mouseY);
+            return;
+        }
         if (!CosmeticsCore.available()) {
             Ui.centered(g, "Cosmetics gibt es nur, wenn du über den Mytic Launcher startest.", mid, midY - 8, Ui.TEXT, false);
             Ui.centered(g, "Der Launcher lädt das Cosmetics-Paket beim Spielstart herunter.", mid, midY + 6, Ui.MUTED, false);
@@ -145,10 +178,173 @@ public class CosmeticsScreen extends PanelScreen {
         Ui.text(g, hint, px + pw - 12 - hintW, fy, Ui.withAlpha(Ui.MUTED, 160), false);
     }
 
+    // ------------------------------------------------------------------------------------------ MiniMe
+
+    private int[] miniInput() {
+        return new int[]{cx() + 96, cy() + 26, Math.min(150, cw() - 200), 16};
+    }
+
+    private int[] miniButton(int i) {
+        int[] in = miniInput();
+        int w0 = font.width("Übernehmen") + 14;
+        int w1 = font.width("Entfernen") + 14;
+        return i == 0 ? new int[]{in[0] + in[2] + 6, in[1], w0, 16} : new int[]{in[0] + in[2] + 6 + w0 + 4, in[1], w1, 16};
+    }
+
+    /** Freunde als Schnellauswahl (Name, Kopf). */
+    private List<Friends.Friend> suggestions() {
+        List<Friends.Friend> list = new java.util.ArrayList<>(Friends.friends());
+        if (list.size() > 8) list = list.subList(0, 8);
+        return list;
+    }
+
+    private void drawMiniMe(GuiGraphics g, int mouseX, int mouseY) {
+        boolean lunar = Ui.lunar();
+        int x = cx();
+        int y = cy();
+        String name = MiniMeCore.selected();
+        MiniMeCore.Profile profile = MiniMeCore.profile(name);
+
+        // Vorschau: Kopf des gewählten Skins
+        Ui.outline(g, x, y, 84, 100, lunar ? 4 : 6, lunar ? 0x30FFFFFF : Ui.LINE, lunar ? Ui.L_CARD : Ui.SURFACE);
+        if (name == null) {
+            Ui.scaled(g, "✕", x + 42 - font.width("✕"), y + 30, 2f, Ui.MUTED, false);
+            Ui.centered(g, "Kein MiniMe", x + 42, y + 82, Ui.MUTED, false);
+        } else {
+            if (profile != null && profile.head != null) FriendsScreen.drawHead(g, profile.head, name, x + 18, y + 12, 48);
+            else Ui.centered(g, MiniMeCore.missing(name) ? "?" : "…", x + 42, y + 32, Ui.MUTED, false);
+            String shown = profile != null ? profile.name : name;
+            Ui.centered(g, font.plainSubstrByWidth(shown, 78), x + 42, y + 82, Ui.TEXT, false);
+        }
+
+        // Eingabe und Knöpfe
+        Ui.text(g, "Skin von Spieler", x + 96, y + 12, Ui.MUTED, false);
+        int[] in = miniInput();
+        boolean iHover = Ui.inside(mouseX, mouseY, in[0], in[1], in[2], in[3]);
+        if (lunar) Ui.outline(g, in[0], in[1], in[2], in[3], 4, inputFocused ? 0x90FFFFFF : iHover ? 0x50FFFFFF : Ui.L_LINE, 0xFF1C1C1C);
+        else Ui.outline(g, in[0], in[1], in[2], in[3], 8, inputFocused ? Ui.accent2() : iHover ? Ui.withAlpha(Ui.accent2(), 120) : Ui.LINE, Ui.SURFACE);
+        String shownInput = input.isEmpty() && !inputFocused ? "Minecraft-Name …" : input;
+        Ui.text(g, font.plainSubstrByWidth(shownInput, in[2] - 12), in[0] + 6, in[1] + 4, input.isEmpty() ? Ui.MUTED : Ui.TEXT, false);
+        if (inputFocused && (System.currentTimeMillis() / 500) % 2 == 0) {
+            int caret = in[0] + 6 + font.width(input);
+            g.fill(caret, in[1] + 3, caret + 1, in[1] + 13, Ui.TEXT);
+        }
+        String[] labels = {"Übernehmen", "Entfernen"};
+        for (int i = 0; i < 2; i++) {
+            int[] b = miniButton(i);
+            boolean hover = Ui.inside(mouseX, mouseY, b[0], b[1], b[2], b[3]);
+            int color = i == 0 ? (lunar ? Ui.L_GREEN : Ui.accent()) : 0xFF555555;
+            Ui.rect(g, b[0], b[1], b[2], b[3], lunar ? 4 : 8, hover ? Ui.mix(color, 0xFFFFFFFF, 0.15f) : color);
+            Ui.centered(g, labels[i], b[0] + b[2] / 2, b[1] + 4, 0xFFFFFFFF, false);
+        }
+        String status = message;
+        if (status == null && name != null) {
+            status = MiniMeCore.missing(name) ? "Den Spieler „" + name + "“ gibt es nicht" : profile == null ? "Skin wird geladen …" : "Sitzt auf deiner linken Schulter";
+        }
+        if (status != null) Ui.text(g, font.plainSubstrByWidth(status, cw() - 100), x + 96, y + 50, MiniMeCore.missing(name) ? Ui.RED : Ui.MUTED, false);
+
+        // Schnellauswahl: Freunde
+        List<Friends.Friend> list = suggestions();
+        if (!list.isEmpty()) {
+            Ui.scaled(g, "FREUNDE", x + 96, y + 68, 0.75f, Ui.MUTED, false);
+            for (int i = 0; i < list.size(); i++) {
+                Friends.Friend f = list.get(i);
+                int fx = x + 96 + i * 22;
+                boolean hover = Ui.inside(mouseX, mouseY, fx, y + 78, 18, 18);
+                if (hover) Ui.rect(g, fx - 1, y + 77, 20, 20, 3, 0x40FFFFFF);
+                FriendsScreen.drawHead(g, f.head, f.name, fx + 1, y + 79, 16);
+                if (hover) Ui.text(g, f.name, x + 96, y + 100, Ui.TEXT, false);
+            }
+        }
+
+        int fy = py + ph - FOOTER + 10;
+        String info = Friends.available() ? "Andere Mytic-Spieler sehen deinen MiniMe" : "Nur du siehst ihn (ohne Mytic Launcher)";
+        Ui.text(g, font.plainSubstrByWidth(info, pw - 40), px + 12, fy, Ui.MUTED, false);
+    }
+
+    private void applyInput() {
+        String name = input.trim();
+        if (!name.matches(MiniMeCore.NAME)) {
+            message = "Name: 3–16 Zeichen, nur Buchstaben, Zahlen und _";
+            return;
+        }
+        MiniMeCore.select(name);
+        message = null;
+        input = "";
+        inputFocused = false;
+    }
+
+    private boolean clickMiniMe(double mx, double my) {
+        int[] in = miniInput();
+        inputFocused = Ui.inside(mx, my, in[0], in[1], in[2], in[3]);
+        if (inputFocused) return true;
+        if (Ui.inside(mx, my, miniButton(0)[0], miniButton(0)[1], miniButton(0)[2], miniButton(0)[3])) {
+            applyInput();
+            return true;
+        }
+        if (Ui.inside(mx, my, miniButton(1)[0], miniButton(1)[1], miniButton(1)[2], miniButton(1)[3])) {
+            MiniMeCore.select(null);
+            message = null;
+            return true;
+        }
+        List<Friends.Friend> list = suggestions();
+        for (int i = 0; i < list.size(); i++) {
+            if (Ui.inside(mx, my, cx() + 96 + i * 22, cy() + 78, 18, 18)) {
+                MiniMeCore.select(list.get(i).name);
+                message = null;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean nameChar(String c) {
+        return c.length() == 1 && (Character.isLetterOrDigit(c.charAt(0)) && c.charAt(0) < 128 || c.charAt(0) == '_');
+    }
+
+    @Override
+    protected boolean onChar(Input.Typed event) {
+        if (tab != 1 || System.currentTimeMillis() - openedAt < 250) return false;
+        String c = event.codepointAsString();
+        if (!nameChar(c)) return inputFocused;
+        inputFocused = true;
+        if (input.length() < 16) input += c;
+        return true;
+    }
+
+    @Override
+    protected boolean onKey(Input.Key event) {
+        int key = event.key();
+        if (tab == 1 && inputFocused) {
+            if (key == InputConstants.KEY_BACKSPACE) {
+                if (!input.isEmpty()) input = event.hasControlDown() ? "" : input.substring(0, input.length() - 1);
+                return true;
+            }
+            if (key == InputConstants.KEY_RETURN || key == InputConstants.KEY_NUMPADENTER) {
+                applyInput();
+                return true;
+            }
+            if (key == InputConstants.KEY_ESCAPE && !input.isEmpty()) {
+                input = "";
+                inputFocused = false;
+                return true;
+            }
+        }
+        return super.onKey(event);
+    }
+
     // ------------------------------------------------------------------------------------------ Eingaben
 
     @Override
     protected boolean clickContent(double mx, double my) {
+        for (int i = 0; i < TABS.length; i++) {
+            if (Ui.inside(mx, my, tabX(i) - 4, py + 8, font.width(TABS[i]) + 8, 18)) {
+                tab = i;
+                inputFocused = false;
+                return true;
+            }
+        }
+        if (tab == 1) return clickMiniMe(mx, my);
         if (!CosmeticsCore.available() || !Ui.inside(mx, my, cx(), cy(), cw(), ch())) return false;
         List<CosmeticsCore.Cape> capes = CosmeticsCore.capes();
         for (int i = 0; i < count(); i++) {

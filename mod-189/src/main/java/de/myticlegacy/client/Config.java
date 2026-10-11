@@ -25,6 +25,8 @@ public final class Config {
     public double savedGamma = 0.5;
     /** Gewählter Umhang (Cosmetics), null = keiner. */
     public String cape;
+    /** MiniMe: Minecraft-Name, dessen Skin die kleine Figur auf der Schulter trägt (null = keine). */
+    public String miniMe;
     /** Grafik-Optionen vor dem Einschalten von FPS-Boost (Name → Wert als Text), werden beim Ausschalten zurückgesetzt. */
     public Map<String, String> savedOptions = new LinkedHashMap<String, String>();
 
