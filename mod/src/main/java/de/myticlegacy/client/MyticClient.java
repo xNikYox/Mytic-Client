@@ -67,6 +67,7 @@ public final class MyticClient implements ClientModInitializer {
     public static Module fullbright;
     public static Module clearWeather;
     public static Module noHurtCam;
+    public static Module capePhysics;
     public static Module hideBossbar;
 
     public static KeyMapping menuKey;
@@ -183,6 +184,7 @@ public final class MyticClient implements ClientModInitializer {
         timeChanger = module(new SimpleModules.TimeChanger());
         clearWeather = module(SimpleModules.clearWeather());
         noHurtCam = module(SimpleModules.noHurtCam());
+        capePhysics = module(SimpleModules.capePhysics());
         scoreboard = module(new SimpleModules.ScoreboardTweaks());
         hideBossbar = module(SimpleModules.hideBossbar());
         autoText = module(new AutoTextModule());

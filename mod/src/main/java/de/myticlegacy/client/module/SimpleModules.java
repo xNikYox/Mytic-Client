@@ -74,6 +74,10 @@ public final class SimpleModules {
         return new Module("clearweather", "Klares Wetter", "Kein Regen und kein Gewitter (nur für dich)", Category.VISUELL, () -> Items.WATER_BUCKET, false);
     }
 
+    public static Module capePhysics() {
+        return new Module("capephysics", "Umhang-Physik", "Umhänge wehen und flattern wie Stoff", Category.VISUELL, () -> Items.FEATHER, true);
+    }
+
     public static Module noHurtCam() {
         return new Module("nohurtcam", "No Hurt Cam", "Kein Wackeln der Kamera bei Schaden", Category.VISUELL, () -> Items.SHIELD, false);
     }

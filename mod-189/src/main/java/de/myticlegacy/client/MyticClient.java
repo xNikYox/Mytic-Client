@@ -91,6 +91,7 @@ public final class MyticClient {
     public static Module fullbright;
     public static Module clearWeather;
     public static Module noHurtCam;
+    public static Module capePhysics;
     public static Module hideBossbar;
 
     public static KeyBinding menuKey;
@@ -210,6 +211,7 @@ public final class MyticClient {
         timeChanger = module(new SimpleModules.TimeChanger());
         clearWeather = module(SimpleModules.clearWeather());
         noHurtCam = module(SimpleModules.noHurtCam());
+        capePhysics = module(SimpleModules.capePhysics());
         scoreboard = module(new SimpleModules.ScoreboardTweaks());
         hideBossbar = module(SimpleModules.hideBossbar());
         autoText = module(new AutoTextModule());
@@ -422,6 +424,7 @@ public final class MyticClient {
         de.myticlegacy.client.cosmetics.Cosmetics.tick(mc);
         de.myticlegacy.client.cosmetics.MiniMe.register(mc);
         de.myticlegacy.client.cosmetics.Wings.register(mc);
+        de.myticlegacy.client.cosmetics.PhysicsCape.register(mc);
         CombatTracker.tick(mc);
 
         float gamma = mc.gameSettings.gammaSetting;

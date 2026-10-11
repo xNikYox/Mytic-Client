@@ -16,7 +16,8 @@
     "AvatarRendererMixin",
     "AvatarRenderStateMixin",
     "LivingEntityRendererInvoker",
-    "AbstractContainerScreenAccessor"
+    "AbstractContainerScreenAccessor",
+    "CapeLayerMixin"
   ],
   "injectors": {
     "defaultRequire": 1
