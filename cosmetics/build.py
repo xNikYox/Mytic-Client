@@ -26,6 +26,21 @@ def main():
     catalog = {"version": VERSION, "scale": 8, "capes": [{"id": i, "name": n, "frames": 24, "frameMs": 70} for i, n in CAPES]}
     mod = {"schemaVersion": 1, "id": "myticcosmetics", "version": VERSION, "name": "Mytic Cosmetics",
            "description": "Umhänge des Mytic Clients (nur Texturen)", "environment": "client"}
+    # Elytra: Minecraft nimmt für die Flügel die Umhang-Textur, Bereich (22,0)–(46,22) der 64x32-Vorlage.
+    # Dort das Motiv der Außenseite (auf 10x20 gestreckt) und die Randfarben eintragen.
+    K = 12
+    for cid, _ in CAPES:
+        for f in range(24):
+            src = os.path.join(FRAMES, f"{cid}_{f}.png")
+            subprocess.run(["convert", src,
+                "(", "+clone", "-crop", f"{10*K}x{16*K}+{K}+{K}", "+repage", "-resize", f"{10*K}x{20*K}!", ")", "-geometry", f"+{24*K}+{2*K}", "-composite",
+                "(", "+clone", "-crop", f"{10*K}x{16*K}+{K}+{K}", "+repage", "-resize", f"{10*K}x{20*K}!", ")", "-geometry", f"+{36*K}+{2*K}", "-composite",
+                "(", "+clone", "-crop", f"{K}x{16*K}+0+{K}", "+repage", "-resize", f"{2*K}x{20*K}!", ")", "-geometry", f"+{22*K}+{2*K}", "-composite",
+                "(", "+clone", "-crop", f"{K}x{16*K}+0+{K}", "+repage", "-resize", f"{2*K}x{20*K}!", ")", "-geometry", f"+{34*K}+{2*K}", "-composite",
+                "(", "+clone", "-crop", f"{10*K}x{K}+{K}+0", "+repage", "-resize", f"{10*K}x{2*K}!", ")", "-geometry", f"+{24*K}+0", "-composite",
+                "(", "+clone", "-crop", f"{10*K}x{K}+{K}+0", "+repage", "-resize", f"{10*K}x{2*K}!", ")", "-geometry", f"+{34*K}+0", "-composite",
+                "-depth", "8", f"PNG32:{src}"], check=True)
+
     # Gezeichnet in 12-facher, ausgeliefert in 8-facher Auflösung (512x256): scharf, aber halb so viel Grafikspeicher
     small = os.path.join(BUILD, "small")
     os.makedirs(small, exist_ok=True)
