@@ -25,9 +25,10 @@ public final class Config {
     public double savedGamma = 0.5;
     /** Gewählter Umhang (Cosmetics), null = keiner. */
     public String cape;
-    /** MiniMe: Minecraft-Name, dessen Skin die kleine Figur auf der Schulter trägt (null = keine). */
+    /** MiniMes je Stelle (shoulder, head, arm, leg) → Minecraft-Name, dessen Skin die kleine Figur trägt. */
+    public Map<String, String> miniMes = new LinkedHashMap<String, String>();
+    /** Bis 2.18: ein MiniMe und seine Stelle – wird beim ersten Start nach miniMes übernommen. */
     public String miniMe;
-    /** Wo der MiniMe sitzt: shoulder, head, arm, leg (null = Schulter). */
     public String miniMePos;
     /** Gewählte Flügel (Cosmetics), null = keine. */
     public String wings;

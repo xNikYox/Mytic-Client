@@ -20,6 +20,18 @@ const NAME = /^[A-Za-z0-9_]{3,16}$/;
 const MINIME_POS = ["shoulder", "head", "arm", "leg"];
 const UUID = /^[0-9a-f]{32}$/;
 
+/** MiniMes eines Nutzers je Stelle ({ shoulder: "Name", ... }), auch aus den alten Feldern (ein MiniMe + Position). */
+function miniMeSet(row) {
+  if (row.minime_set) {
+    try {
+      return JSON.parse(row.minime_set);
+    } catch {
+      return {};
+    }
+  }
+  return row.minime ? { [row.minime_pos || "shoulder"]: row.minime } : {};
+}
+
 class HttpError extends Error {
   constructor(status, message) {
     super(message);
@@ -310,29 +322,43 @@ export function createApi(db, options = {}) {
       return { ok: true };
     },
 
-    /** Eigene Cosmetics wählen: Umhang und MiniMe (Minecraft-Name), null = keins. Fehlende Felder bleiben. */
+    /** Eigene Cosmetics wählen: Umhang, MiniMes je Stelle (Minecraft-Namen), Flügel; null = keins. Fehlende Felder bleiben. */
     "POST /api/cosmetics": async (request) => {
       const me = await auth(request);
       const data = await body(request);
       // ältere Mods schicken nur "cape" (oder gar nichts für "kein Umhang")
-      if ("cape" in data || !("minime" in data || "wings" in data || "minimePos" in data)) {
+      if ("cape" in data || !("minime" in data || "wings" in data || "minimePos" in data || "minimes" in data)) {
         const cape = typeof data.cape === "string" && /^[a-z0-9_-]{1,32}$/.test(data.cape) ? data.cape : null;
         await db.run("UPDATE users SET cape = ? WHERE uuid = ?", [cape, me.uuid]);
       }
-      if ("minime" in data) {
-        const minime = typeof data.minime === "string" && NAME.test(data.minime) ? data.minime : null;
-        await db.run("UPDATE users SET minime = ? WHERE uuid = ?", [minime, me.uuid]);
-      }
-      if ("minimePos" in data) {
-        const pos = MINIME_POS.includes(data.minimePos) ? data.minimePos : null;
-        await db.run("UPDATE users SET minime_pos = ? WHERE uuid = ?", [pos, me.uuid]);
+      if ("minimes" in data) {
+        // ein MiniMe je Stelle; für ältere Mods zusätzlich der erste als einzelner MiniMe
+        const set = {};
+        const given = data.minimes && typeof data.minimes === "object" ? data.minimes : {};
+        for (const pos of MINIME_POS) {
+          if (typeof given[pos] === "string" && NAME.test(given[pos])) set[pos] = given[pos];
+        }
+        const first = MINIME_POS.find((pos) => set[pos]);
+        await db.run("UPDATE users SET minime_set = ?, minime = ?, minime_pos = ? WHERE uuid = ?",
+          [first ? JSON.stringify(set) : null, first ? set[first] : null, first || null, me.uuid]);
+      } else if ("minime" in data || "minimePos" in data) {
+        // Mods bis 2.18: ein MiniMe mit Position
+        if ("minime" in data) {
+          const minime = typeof data.minime === "string" && NAME.test(data.minime) ? data.minime : null;
+          await db.run("UPDATE users SET minime = ? WHERE uuid = ?", [minime, me.uuid]);
+        }
+        if ("minimePos" in data) {
+          const pos = MINIME_POS.includes(data.minimePos) ? data.minimePos : null;
+          await db.run("UPDATE users SET minime_pos = ? WHERE uuid = ?", [pos, me.uuid]);
+        }
+        await db.run("UPDATE users SET minime_set = NULL WHERE uuid = ?", [me.uuid]);
       }
       if ("wings" in data) {
         const wings = typeof data.wings === "string" && /^[a-z0-9_-]{1,32}$/.test(data.wings) ? data.wings : null;
         await db.run("UPDATE users SET wings = ? WHERE uuid = ?", [wings, me.uuid]);
       }
-      const row = await db.get("SELECT cape, minime, minime_pos, wings FROM users WHERE uuid = ?", [me.uuid]);
-      return { cape: row.cape || null, minime: row.minime || null, minimePos: row.minime_pos || null, wings: row.wings || null };
+      const row = await db.get("SELECT cape, minime, minime_pos, minime_set, wings FROM users WHERE uuid = ?", [me.uuid]);
+      return { cape: row.cape || null, minime: row.minime || null, minimePos: row.minime_pos || null, minimes: miniMeSet(row), wings: row.wings || null };
     },
 
     /** Cosmetics anderer Spieler (z. B. alle auf dem Server), höchstens 100 auf einmal. */
@@ -343,17 +369,19 @@ export function createApi(db, options = {}) {
       const capes = {};
       const minimes = {};
       const minimePos = {};
+      const minimeSets = {};
       const wings = {};
       if (list.length) {
-        const rows = await db.all(`SELECT uuid, cape, minime, minime_pos, wings FROM users WHERE (cape IS NOT NULL OR minime IS NOT NULL OR wings IS NOT NULL) AND uuid IN (${list.map(() => "?").join(",")})`, list);
+        const rows = await db.all(`SELECT uuid, cape, minime, minime_pos, minime_set, wings FROM users WHERE (cape IS NOT NULL OR minime IS NOT NULL OR wings IS NOT NULL) AND uuid IN (${list.map(() => "?").join(",")})`, list);
         for (const row of rows) {
           if (row.cape) capes[row.uuid] = row.cape;
           if (row.minime) minimes[row.uuid] = row.minime;
           if (row.minime && row.minime_pos) minimePos[row.uuid] = row.minime_pos;
+          if (row.minime) minimeSets[row.uuid] = miniMeSet(row);
           if (row.wings) wings[row.uuid] = row.wings;
         }
       }
-      return { capes, minimes, minimePos, wings };
+      return { capes, minimes, minimePos, minimeSets, wings };
     },
 
     "POST /api/friends/request": async (request) => {

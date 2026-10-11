@@ -22,8 +22,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * MiniMe für 1.8.9: kleine Figur mit fremdem Skin auf Schulter oder Kopf, oder hängend an Hand bzw. Bein (eigene Ebene
- * am Spieler-Renderer).
+ * MiniMe für 1.8.9: kleine Figur mit fremdem Skin auf Schulter oder Kopf, oder hängend an Hand bzw. Bein, je Stelle ein
+ * eigener (eigene Ebene am Spieler-Renderer).
  */
 public final class MiniMe implements LayerRenderer<AbstractClientPlayer> {
     private final RenderPlayer renderer;
@@ -76,12 +76,17 @@ public final class MiniMe implements LayerRenderer<AbstractClientPlayer> {
         Minecraft mc = Minecraft.getMinecraft();
         if (player.isInvisible() || mc.thePlayer == null) return;
         String uuid = player.getUniqueID().toString().replace("-", "");
-        String name = MiniMeCore.nameOf(uuid, player == mc.thePlayer);
-        MiniMeCore.Profile profile = MiniMeCore.profile(name);
-        if (profile == null) return;
-        ResourceLocation tex = texture(profile);
-        if (tex == null) return;
-        String pos = MiniMeCore.positionOf(uuid, player == mc.thePlayer);
+        for (String[] p : MiniMeCore.POSITIONS) {
+            String name = MiniMeCore.nameOf(uuid, player == mc.thePlayer, p[0]);
+            MiniMeCore.Profile profile = MiniMeCore.profile(name);
+            if (profile == null) continue;
+            ResourceLocation tex = texture(profile);
+            if (tex != null) renderOne(mc, player, profile, tex, p[0], ageInTicks, netHeadYaw, headPitch, scale);
+        }
+    }
+
+    private void renderOne(Minecraft mc, AbstractClientPlayer player, MiniMeCore.Profile profile, ResourceLocation tex, String pos, float ageInTicks,
+                           float netHeadYaw, float headPitch, float scale) {
         boolean hanging = "arm".equals(pos) || "leg".equals(pos);
         boolean onHead = "head".equals(pos);
         ModelPlayer model = profile.slim ? slim : wide;
@@ -103,8 +108,9 @@ public final class MiniMe implements LayerRenderer<AbstractClientPlayer> {
             parent.bipedLeftArm.postRender(scale);
             GlStateManager.translate(0.0625f, 0.625f + 0.5f * SCALE, 0f);
         } else if ("leg".equals(pos)) {
-            parent.bipedLeftLeg.postRender(scale);
-            GlStateManager.translate(0.24f, 0.05f + 0.5f * SCALE, 0f);
+            // außen am rechten Bein
+            parent.bipedRightLeg.postRender(scale);
+            GlStateManager.translate(-0.24f, 0.05f + 0.5f * SCALE, 0f);
         } else {
             GlStateManager.translate(0.37f, (player.isSneaking() ? 0.2f : 0f) - 0.75f * SCALE - 0.02f, 0f);
         }

@@ -13,7 +13,7 @@ public final class MiniMePlace {
      * Verschiebt die Pose so, dass die kleine Figur (danach mit scale verkleinert) richtig sitzt: auf dem Kopf und der
      * Schulter mit der Hüfte (12/16 über den Füßen), beim Hängen mit den erhobenen Händen (8/16 über dem Hals).
      */
-    public static void apply(PoseStack pose, String pos, ModelPart head, ModelPart leftArm, ModelPart leftLeg, boolean crouching, float scale) {
+    public static void apply(PoseStack pose, String pos, ModelPart head, ModelPart leftArm, ModelPart rightLeg, boolean crouching, float scale) {
         if ("head".equals(pos)) {
             head.translateAndRotate(pose);
             pose.translate(0f, -0.5f - 0.75f * scale, 0f);
@@ -21,9 +21,9 @@ public final class MiniMePlace {
             leftArm.translateAndRotate(pose);
             pose.translate(0.0625f, 0.625f + 0.5f * scale, 0f);
         } else if ("leg".equals(pos)) {
-            // außen am linken Bein, Hände knapp unter der Hüfte
-            leftLeg.translateAndRotate(pose);
-            pose.translate(0.24f, 0.05f + 0.5f * scale, 0f);
+            // außen am rechten Bein, Hände knapp unter der Hüfte
+            rightLeg.translateAndRotate(pose);
+            pose.translate(-0.24f, 0.05f + 0.5f * scale, 0f);
         } else {
             pose.translate(0.37f, (crouching ? 0.2f : 0f) - 0.75f * scale - 0.02f, 0f);
         }

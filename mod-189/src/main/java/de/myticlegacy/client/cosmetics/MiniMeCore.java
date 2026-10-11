@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import de.myticlegacy.client.Config;
 import de.myticlegacy.client.MyticClient;
 
 import javax.imageio.ImageIO;
@@ -60,46 +61,64 @@ public final class MiniMeCore {
 
     // ------------------------------------------------------------------------------------------ Auswahl
 
-    /** Eigener MiniMe (Minecraft-Name) oder null. */
-    public static String selected() {
-        String name = MyticClient.config().miniMe;
+    /** Stellen: {id, Anzeigename}. An jeder kann ein eigener MiniMe sein. */
+    public static final String[][] POSITIONS = {{"shoulder", "Schulter"}, {"head", "Kopf"}, {"arm", "Arm"}, {"leg", "Bein"}};
+
+    private static boolean validPos(String pos) {
+        for (String[] p : POSITIONS) if (p[0].equals(pos)) return true;
+        return false;
+    }
+
+    /** Eigene MiniMes je Stelle (alte Einstellung mit einem MiniMe wird übernommen). */
+    private static Map<String, String> own() {
+        Config config = MyticClient.config();
+        if (config.miniMes == null) config.miniMes = new java.util.LinkedHashMap<String, String>();
+        if (config.miniMe != null) {
+            if (config.miniMe.matches(NAME)) config.miniMes.put(validPos(config.miniMePos) ? config.miniMePos : "shoulder", config.miniMe);
+            config.miniMe = null;
+            config.miniMePos = null;
+            config.save();
+        }
+        return config.miniMes;
+    }
+
+    /** Eigener MiniMe an einer Stelle (Minecraft-Name) oder null. Vorschau: -Dmytic.miniMeDemo=true zeigt den ersten überall. */
+    public static String selected(String pos) {
+        Map<String, String> own = own();
+        String name = own.get(pos);
+        if (name == null && Boolean.getBoolean("mytic.miniMeDemo")) {
+            for (String[] p : POSITIONS) if (own.get(p[0]) != null) return own.get(p[0]);
+        }
         return name == null || !name.matches(NAME) ? null : name;
     }
 
-    public static void select(String name) {
-        MyticClient.config().miniMe = name == null || !name.matches(NAME) ? null : name;
+    /** Hat der Spieler irgendwo einen MiniMe? */
+    public static boolean any() {
+        for (String[] p : POSITIONS) if (selected(p[0]) != null) return true;
+        return false;
+    }
+
+    public static void select(String pos, String name) {
+        if (!validPos(pos)) return;
+        if (name == null || !name.matches(NAME)) own().remove(pos);
+        else own().put(pos, name);
         MyticClient.config().save();
         CosmeticsCore.push();
     }
 
-    /** Positionen: {id, Anzeigename}. Die erste ist der Standard. */
-    public static final String[][] POSITIONS = {{"shoulder", "Schulter"}, {"head", "Kopf"}, {"arm", "Arm"}, {"leg", "Bein"}};
-
-    private static String validPos(String pos) {
-        for (String[] p : POSITIONS) if (p[0].equals(pos)) return pos;
-        return "shoulder";
+    /** Eigene Auswahl für den Friends-Server: Stelle → Name. */
+    public static Map<String, String> selectedAll() {
+        Map<String, String> out = new java.util.LinkedHashMap<String, String>();
+        for (String[] p : POSITIONS) {
+            String name = own().get(p[0]);
+            if (name != null && name.matches(NAME)) out.put(p[0], name);
+        }
+        return out;
     }
 
-    /** Eigene Position des MiniMe (Vorschau: -Dmytic.miniMeDemo=true wechselt alle 4 Sekunden). */
-    public static String position() {
-        if (Boolean.getBoolean("mytic.miniMeDemo")) return POSITIONS[(int) ((System.currentTimeMillis() / 4000) % POSITIONS.length)][0];
-        return validPos(MyticClient.config().miniMePos);
-    }
-
-    public static void selectPosition(String pos) {
-        MyticClient.config().miniMePos = validPos(pos);
-        MyticClient.config().save();
-        CosmeticsCore.push();
-    }
-
-    /** Position des MiniMe eines Spielers: shoulder, head, arm oder leg. */
-    public static String positionOf(String uuid, boolean self) {
-        return self ? position() : validPos(CosmeticsCore.remoteMiniMePos(uuid));
-    }
-
-    /** MiniMe-Name eines Spielers: eigener aus der Auswahl, andere vom Friends-Server. */
-    public static String nameOf(String uuid, boolean self) {
-        return self ? selected() : CosmeticsCore.remoteMiniMe(uuid);
+    /** MiniMe-Name eines Spielers an einer Stelle: eigener aus der Auswahl, andere vom Friends-Server. */
+    public static String nameOf(String uuid, boolean self, String pos) {
+        return self ? selected(pos) : CosmeticsCore.remoteMiniMe(uuid, pos);
     }
 
     // ------------------------------------------------------------------------------------------ Laden

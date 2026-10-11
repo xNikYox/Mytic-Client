@@ -2,14 +2,9 @@ package de.myticlegacy.client.cosmetics;
 
 import net.minecraft.world.entity.player.PlayerSkin;
 
-/** Zusatzfeld am Render-Zustand eines Spielers: Skin seines MiniMe (null = keiner). */
+/** Zusatzfeld am Render-Zustand eines Spielers: Skins seiner MiniMes je Stelle (Reihenfolge wie MiniMeCore.POSITIONS, null = keiner). */
 public interface MiniMeState {
-    PlayerSkin mytic$miniMe();
+    PlayerSkin[] mytic$miniMes();
 
-    void mytic$setMiniMe(PlayerSkin skin);
-
-    /** Wo er sitzt: shoulder, head, arm, leg. */
-    String mytic$miniMePos();
-
-    void mytic$setMiniMePos(String pos);
+    void mytic$setMiniMes(PlayerSkin[] skins);
 }

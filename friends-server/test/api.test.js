@@ -212,20 +212,32 @@ test("Cosmetics: MiniMe wählen, Umhang bleibt; alte Mods ohne Felder löschen n
   const a = await s.login("Alice");
   const b = await s.login("Bob");
   await s.call("POST", "/api/cosmetics", { cape: "inferno" }, a);
+  // Mods bis 2.18: ein MiniMe mit Position
   let res = await s.call("POST", "/api/cosmetics", { minime: "Technoblade" }, a);
-  assert.deepEqual(res.data, { cape: "inferno", minime: "Technoblade", minimePos: null, wings: null });
+  assert.deepEqual(res.data, { cape: "inferno", minime: "Technoblade", minimePos: null, minimes: { shoulder: "Technoblade" }, wings: null });
   res = await s.call("POST", "/api/cosmetics", { cape: null, minime: "x y" }, a);
-  assert.deepEqual(res.data, { cape: null, minime: null, minimePos: null, wings: null });
+  assert.deepEqual(res.data, { cape: null, minime: null, minimePos: null, minimes: {}, wings: null });
   await s.call("POST", "/api/cosmetics", { cape: "galaxie", minime: "Dream" }, a);
   res = await s.call("POST", "/api/cosmetics", {}, a);
-  assert.deepEqual(res.data, { cape: null, minime: "Dream", minimePos: null, wings: null });
-  res = await s.call("POST", "/api/cosmetics", { wings: "neon" }, a);
-  assert.deepEqual(res.data, { cape: null, minime: "Dream", minimePos: null, wings: "neon" });
-  res = await s.call("POST", "/api/cosmetics", { minimePos: "head" }, a);
-  assert.deepEqual(res.data, { cape: null, minime: "Dream", minimePos: "head", wings: "neon" });
+  assert.deepEqual(res.data, { cape: null, minime: "Dream", minimePos: null, minimes: { shoulder: "Dream" }, wings: null });
+  res = await s.call("POST", "/api/cosmetics", { wings: "neon", minimePos: "head" }, a);
+  assert.deepEqual(res.data, { cape: null, minime: "Dream", minimePos: "head", minimes: { head: "Dream" }, wings: "neon" });
   res = await s.call("POST", "/api/cosmetics", { minimePos: "bauch" }, a);
   assert.equal(res.data.minimePos, null);
-  await s.call("POST", "/api/cosmetics", { minimePos: "leg" }, a);
-  const look = await s.call("POST", "/api/cosmetics/lookup", { uuids: [ALICE] }, b);
-  assert.deepEqual(look.data, { capes: {}, minimes: { [ALICE]: "Dream" }, minimePos: { [ALICE]: "leg" }, wings: { [ALICE]: "neon" } });
+
+  // ab 2.19: ein MiniMe je Stelle, ungültige Stellen und Namen fallen weg
+  res = await s.call("POST", "/api/cosmetics", { minimes: { head: "Dream", leg: "Technoblade", bauch: "Steve", arm: "x y" } }, a);
+  assert.deepEqual(res.data.minimes, { head: "Dream", leg: "Technoblade" });
+  assert.equal(res.data.minime, "Dream");
+  assert.equal(res.data.minimePos, "head");
+  let look = await s.call("POST", "/api/cosmetics/lookup", { uuids: [ALICE] }, b);
+  assert.deepEqual(look.data, {
+    capes: {}, minimes: { [ALICE]: "Dream" }, minimePos: { [ALICE]: "head" },
+    minimeSets: { [ALICE]: { head: "Dream", leg: "Technoblade" } }, wings: { [ALICE]: "neon" },
+  });
+  res = await s.call("POST", "/api/cosmetics", { minimes: {} }, a);
+  assert.deepEqual(res.data.minimes, {});
+  assert.equal(res.data.minime, null);
+  look = await s.call("POST", "/api/cosmetics/lookup", { uuids: [ALICE] }, b);
+  assert.deepEqual(look.data.minimeSets, {});
 });

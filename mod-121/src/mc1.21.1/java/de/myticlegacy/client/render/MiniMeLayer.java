@@ -2,6 +2,7 @@ package de.myticlegacy.client.render;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import de.myticlegacy.client.cosmetics.MiniMe;
+import de.myticlegacy.client.cosmetics.MiniMeCore;
 import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.model.geom.EntityModelSet;
 import net.minecraft.client.model.geom.ModelLayers;
@@ -27,9 +28,15 @@ public class MiniMeLayer extends RenderLayer<AbstractClientPlayer, PlayerModel<A
     @Override
     public void render(PoseStack pose, MultiBufferSource buffers, int light, AbstractClientPlayer player, float limbSwing, float limbSwingAmount,
                        float partialTick, float ageInTicks, float netHeadYaw, float headPitch) {
-        PlayerSkin skin = MiniMe.skinFor(player);
-        if (skin == null || player.isInvisible()) return;
-        String pos = MiniMe.positionFor(player);
+        PlayerSkin[] skins = MiniMe.skinsFor(player);
+        if (skins == null || player.isInvisible()) return;
+        for (int i = 0; i < skins.length; i++) {
+            if (skins[i] != null) renderOne(pose, buffers, light, player, ageInTicks, netHeadYaw, headPitch, skins[i], MiniMeCore.POSITIONS[i][0]);
+        }
+    }
+
+    private void renderOne(PoseStack pose, MultiBufferSource buffers, int light, AbstractClientPlayer player, float ageInTicks, float netHeadYaw,
+                           float headPitch, PlayerSkin skin, String pos) {
         boolean hanging = "arm".equals(pos) || "leg".equals(pos);
         boolean onHead = "head".equals(pos);
         PlayerModel<AbstractClientPlayer> model = skin.model() == PlayerSkin.Model.SLIM ? slim : wide;
@@ -41,7 +48,7 @@ public class MiniMeLayer extends RenderLayer<AbstractClientPlayer, PlayerModel<A
         if (hanging) MiniMePlace.armsUp(model);
         PlayerModel<AbstractClientPlayer> parent = getParentModel();
         pose.pushPose();
-        MiniMePlace.apply(pose, pos, parent.head, parent.leftArm, parent.leftLeg, player.isCrouching(), SCALE);
+        MiniMePlace.apply(pose, pos, parent.head, parent.leftArm, parent.rightLeg, player.isCrouching(), SCALE);
         pose.scale(SCALE, SCALE, SCALE);
         model.renderToBuffer(pose, buffers.getBuffer(model.renderType(skin.texture())), light, OverlayTexture.NO_OVERLAY);
         pose.popPose();

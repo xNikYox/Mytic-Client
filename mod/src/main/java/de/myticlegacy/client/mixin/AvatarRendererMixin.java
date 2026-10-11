@@ -17,8 +17,7 @@ abstract class AvatarRendererMixin {
     /** Mytic-Umhänge schwingen zusätzlich im Wind (auch im Stehen). */
     @Inject(method = "extractCapeState", at = @At("TAIL"))
     private void mytic$wind(@org.spongepowered.asm.mixin.injection.Coerce Object entity, AvatarRenderState state, float partialTick, CallbackInfo ci) {
-        ((MiniMeState) state).mytic$setMiniMe(MiniMe.skinFor(entity));
-        ((MiniMeState) state).mytic$setMiniMePos(MiniMe.positionFor(entity));
+        ((MiniMeState) state).mytic$setMiniMes(MiniMe.skinsFor(entity));
         ((de.myticlegacy.client.cosmetics.WingsState) state).mytic$setWings(Cosmetics.wingsFor(entity));
         if (state.skin == null || !Cosmetics.isMytic(state.skin.cape())) return;
         float[] wind = Cosmetics.wind(entity.hashCode());

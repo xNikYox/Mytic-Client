@@ -23,6 +23,8 @@ public class CosmeticsScreen extends PanelScreen {
     private static final String[] TABS = {"Umhänge", "MiniMe", "Flügel"};
     /** zuletzt offener Reiter bleibt beim nächsten Öffnen */
     private static int tab;
+    /** Stelle, deren MiniMe gerade bearbeitet wird (Index in MiniMeCore.POSITIONS) */
+    private static int slot;
     private int lastHeaderX;
     private String input = "";
     private boolean inputFocused;
@@ -200,11 +202,19 @@ public class CosmeticsScreen extends PanelScreen {
         return i == 0 ? new int[]{in[0] + in[2] + 6, in[1], w0, 16} : new int[]{in[0] + in[2] + 6 + w0 + 4, in[1], w1, 16};
     }
 
-    /** Knopf für Position i (Schulter, Kopf, Arm, Bein) unter der Vorschau. */
+    private static String slotPos() {
+        return MiniMeCore.POSITIONS[slot][0];
+    }
+
+    private int posButtonWidth(int i) {
+        return font.width(MiniMeCore.POSITIONS[i][1]) + 14 + (MiniMeCore.selected(MiniMeCore.POSITIONS[i][0]) != null ? 12 : 0);
+    }
+
+    /** Knopf für Stelle i (Schulter, Kopf, Arm, Bein) unter der Vorschau. */
     private int[] posButton(int i) {
         int x = cx();
-        for (int k = 0; k < i; k++) x += font.width(MiniMeCore.POSITIONS[k][1]) + 18;
-        return new int[]{x, cy() + 124, font.width(MiniMeCore.POSITIONS[i][1]) + 14, 16};
+        for (int k = 0; k < i; k++) x += posButtonWidth(k) + 4;
+        return new int[]{x, cy() + 124, posButtonWidth(i), 16};
     }
 
     /** Freunde als Schnellauswahl (Name, Kopf). */
@@ -218,7 +228,7 @@ public class CosmeticsScreen extends PanelScreen {
         boolean lunar = Ui.lunar();
         int x = cx();
         int y = cy();
-        String name = MiniMeCore.selected();
+        String name = MiniMeCore.selected(slotPos());
         MiniMeCore.Profile profile = MiniMeCore.profile(name);
 
         // Vorschau: Kopf des gewählten Skins
@@ -257,6 +267,7 @@ public class CosmeticsScreen extends PanelScreen {
         if (status == null && name != null) {
             status = MiniMeCore.missing(name) ? "Den Spieler „" + name + "“ gibt es nicht" : profile == null ? "Skin wird geladen …" : placeText();
         }
+        if (status == null) status = "Stelle „" + MiniMeCore.POSITIONS[slot][1] + "“: noch kein MiniMe – Namen eingeben";
         if (status != null) Ui.text(g, font.plainSubstrByWidth(status, cw() - 100), x + 96, y + 50, MiniMeCore.missing(name) ? Ui.RED : Ui.MUTED, false);
 
         // Schnellauswahl: Freunde
@@ -273,19 +284,25 @@ public class CosmeticsScreen extends PanelScreen {
             }
         }
 
-        // Position
-        Ui.scaled(g, "POSITION", x, y + 112, 0.75f, Ui.MUTED, false);
-        String current = MiniMeCore.position();
+        // Stellen: jede mit eigenem MiniMe; die gewählte wird oben bearbeitet
+        Ui.scaled(g, "STELLE – JE STELLE EIN EIGENER SKIN", x, y + 112, 0.75f, Ui.MUTED, false);
         for (int i = 0; i < MiniMeCore.POSITIONS.length; i++) {
             int[] b = posButton(i);
-            boolean on = MiniMeCore.POSITIONS[i][0].equals(current);
+            boolean on = i == slot;
+            String slotName = MiniMeCore.selected(MiniMeCore.POSITIONS[i][0]);
             boolean hover = Ui.inside(mouseX, mouseY, b[0], b[1], b[2], b[3]);
             float t = Ui.animate("miniPos:" + i, on, 14f);
             int accent = lunar ? Ui.L_GREEN : Ui.accent();
             int fill = Ui.mix(lunar ? Ui.L_CARD : Ui.SURFACE, accent, t);
             if (hover && !on) fill = Ui.mix(fill, 0xFFFFFFFF, 0.08f);
             Ui.outline(g, b[0], b[1], b[2], b[3], lunar ? 4 : 8, Ui.mix(lunar ? Ui.L_LINE : Ui.LINE, accent, t), fill);
-            Ui.centered(g, MiniMeCore.POSITIONS[i][1], b[0] + b[2] / 2, b[1] + 4, on ? 0xFFFFFFFF : Ui.TEXT, false);
+            int tx = b[0] + 7;
+            if (slotName != null) {
+                MiniMeCore.Profile p = MiniMeCore.profile(slotName);
+                FriendsScreen.drawHead(g, p != null ? p.head : null, slotName, b[0] + 6, b[1] + 4, 8);
+                tx += 12;
+            }
+            Ui.text(g, MiniMeCore.POSITIONS[i][1], tx, b[1] + 4, on ? 0xFFFFFFFF : Ui.TEXT, false);
         }
 
         int fy = py + ph - FOOTER + 10;
@@ -294,10 +311,10 @@ public class CosmeticsScreen extends PanelScreen {
     }
 
     private static String placeText() {
-        switch (MiniMeCore.position()) {
+        switch (slotPos()) {
             case "head": return "Sitzt auf deinem Kopf";
             case "arm": return "Hängt an deiner linken Hand";
-            case "leg": return "Hält sich an deinem linken Bein fest";
+            case "leg": return "Hält sich an deinem rechten Bein fest";
             default: return "Sitzt auf deiner linken Schulter";
         }
     }
@@ -308,7 +325,7 @@ public class CosmeticsScreen extends PanelScreen {
             message = "Name: 3–16 Zeichen, nur Buchstaben, Zahlen und _";
             return;
         }
-        MiniMeCore.select(name);
+        MiniMeCore.select(slotPos(), name);
         message = null;
         input = "";
         inputFocused = false;
@@ -323,21 +340,23 @@ public class CosmeticsScreen extends PanelScreen {
             return true;
         }
         if (Ui.inside(mx, my, miniButton(1)[0], miniButton(1)[1], miniButton(1)[2], miniButton(1)[3])) {
-            MiniMeCore.select(null);
+            MiniMeCore.select(slotPos(), null);
             message = null;
             return true;
         }
         for (int i = 0; i < MiniMeCore.POSITIONS.length; i++) {
             int[] b = posButton(i);
             if (Ui.inside(mx, my, b[0], b[1], b[2], b[3])) {
-                MiniMeCore.selectPosition(MiniMeCore.POSITIONS[i][0]);
+                slot = i;
+                message = null;
+                input = "";
                 return true;
             }
         }
         List<Friends.Friend> list = suggestions();
         for (int i = 0; i < list.size(); i++) {
             if (Ui.inside(mx, my, cx() + 96 + i * 22, cy() + 78, 18, 18)) {
-                MiniMeCore.select(list.get(i).name);
+                MiniMeCore.select(slotPos(), list.get(i).name);
                 message = null;
                 return true;
             }

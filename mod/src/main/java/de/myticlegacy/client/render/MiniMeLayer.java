@@ -1,6 +1,7 @@
 package de.myticlegacy.client.render;
 
 import com.mojang.blaze3d.vertex.PoseStack;
+import de.myticlegacy.client.cosmetics.MiniMeCore;
 import de.myticlegacy.client.cosmetics.MiniMeState;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.geom.EntityModelSet;
@@ -16,7 +17,7 @@ import net.minecraft.world.entity.player.PlayerSkin;
 
 /**
  * MiniMe: kleine Figur mit fremdem Skin. Sitzt auf der linken Schulter (wie der Papagei) oder auf dem Kopf, oder hängt mit
- * erhobenen Armen an der linken Hand bzw. am linken Bein.
+ * erhobenen Armen an der linken Hand bzw. am rechten Bein. An jeder Stelle kann ein anderer sein.
  */
 public class MiniMeLayer extends RenderLayer<AvatarRenderState, PlayerModel> {
     private static final float SCALE = 0.35f;
@@ -31,12 +32,17 @@ public class MiniMeLayer extends RenderLayer<AvatarRenderState, PlayerModel> {
 
     @Override
     public void submit(PoseStack pose, SubmitNodeCollector collector, int light, AvatarRenderState state, float yRot, float xRot) {
-        PlayerSkin skin = ((MiniMeState) state).mytic$miniMe();
-        if (skin == null || state.isInvisible) return;
-        // eigener Zustand: sitzend, gleiche Kopfhaltung wie der Spieler
-        String pos = ((MiniMeState) state).mytic$miniMePos();
+        PlayerSkin[] skins = ((MiniMeState) state).mytic$miniMes();
+        if (skins == null || state.isInvisible) return;
+        for (int i = 0; i < skins.length; i++) {
+            if (skins[i] != null) submitOne(pose, collector, light, state, skins[i], MiniMeCore.POSITIONS[i][0]);
+        }
+    }
+
+    private void submitOne(PoseStack pose, SubmitNodeCollector collector, int light, AvatarRenderState state, PlayerSkin skin, String pos) {
         boolean hanging = "arm".equals(pos) || "leg".equals(pos);
         boolean onHead = "head".equals(pos);
+        // eigener Zustand: sitzend (oder hängend), gleiche Kopfhaltung wie der Spieler
         AvatarRenderState mini = new AvatarRenderState();
         mini.ageInTicks = state.ageInTicks;
         // auf dem Kopf dreht er sich schon mit dem Kopf mit
@@ -51,7 +57,7 @@ public class MiniMeLayer extends RenderLayer<AvatarRenderState, PlayerModel> {
         PlayerModel model = skin.model() == PlayerModelType.SLIM ? slim : wide;
         PlayerModel parent = getParentModel();
         pose.pushPose();
-        MiniMePlace.apply(pose, pos, parent.head, parent.leftArm, parent.leftLeg, state.isCrouching, SCALE);
+        MiniMePlace.apply(pose, pos, parent.head, parent.leftArm, parent.rightLeg, state.isCrouching, SCALE);
         pose.scale(SCALE, SCALE, SCALE);
         collector.submitModel(model, mini, pose, model.renderType(skin.body().texturePath()), light, OverlayTexture.NO_OVERLAY, state.outlineColor, null);
         pose.popPose();

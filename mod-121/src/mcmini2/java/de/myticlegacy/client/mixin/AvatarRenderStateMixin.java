@@ -11,29 +11,16 @@ import org.spongepowered.asm.mixin.Unique;
 @Mixin(PlayerRenderState.class)
 abstract class AvatarRenderStateMixin implements MiniMeState, WingsState {
     @Unique
-    private PlayerSkin mytic$miniMe;
+    private PlayerSkin[] mytic$miniMes;
 
     @Override
-    public PlayerSkin mytic$miniMe() {
-        return mytic$miniMe;
+    public PlayerSkin[] mytic$miniMes() {
+        return mytic$miniMes;
     }
 
     @Override
-    public void mytic$setMiniMe(PlayerSkin skin) {
-        mytic$miniMe = skin;
-    }
-
-    @Unique
-    private String mytic$miniMePos;
-
-    @Override
-    public String mytic$miniMePos() {
-        return mytic$miniMePos;
-    }
-
-    @Override
-    public void mytic$setMiniMePos(String pos) {
-        mytic$miniMePos = pos;
+    public void mytic$setMiniMes(PlayerSkin[] skins) {
+        mytic$miniMes = skins;
     }
 
     @Unique

@@ -18,19 +18,21 @@ public final class MiniMe {
     private MiniMe() {
     }
 
-    /** MiniMe-Skin für diese Figur oder null. */
-    public static PlayerSkin skinFor(Object entity) {
+    /** MiniMe-Skins dieser Figur je Stelle (Reihenfolge wie MiniMeCore.POSITIONS) oder null, wenn sie keinen hat. */
+    public static PlayerSkin[] skinsFor(Object entity) {
         Minecraft mc = Minecraft.getInstance();
         if (!(entity instanceof Entity e) || mc.player == null) return null;
-        String name = MiniMeCore.nameOf(e.getUUID().toString().replace("-", ""), e.getUUID().equals(mc.player.getUUID()));
-        return name == null ? null : skin(name);
-    }
-
-    /** Position des MiniMe dieser Figur: shoulder, head, arm oder leg. */
-    public static String positionFor(Object entity) {
-        Minecraft mc = Minecraft.getInstance();
-        if (!(entity instanceof Entity e) || mc.player == null) return "shoulder";
-        return MiniMeCore.positionOf(e.getUUID().toString().replace("-", ""), e.getUUID().equals(mc.player.getUUID()));
+        String uuid = e.getUUID().toString().replace("-", "");
+        boolean self = e.getUUID().equals(mc.player.getUUID());
+        PlayerSkin[] skins = null;
+        for (int i = 0; i < MiniMeCore.POSITIONS.length; i++) {
+            String name = MiniMeCore.nameOf(uuid, self, MiniMeCore.POSITIONS[i][0]);
+            PlayerSkin skin = name == null ? null : skin(name);
+            if (skin == null) continue;
+            if (skins == null) skins = new PlayerSkin[MiniMeCore.POSITIONS.length];
+            skins[i] = skin;
+        }
+        return skins;
     }
 
     public static PlayerSkin skin(String name) {
