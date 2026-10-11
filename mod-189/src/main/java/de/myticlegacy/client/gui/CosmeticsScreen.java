@@ -200,6 +200,13 @@ public class CosmeticsScreen extends PanelScreen {
         return i == 0 ? new int[]{in[0] + in[2] + 6, in[1], w0, 16} : new int[]{in[0] + in[2] + 6 + w0 + 4, in[1], w1, 16};
     }
 
+    /** Knopf für Position i (Schulter, Kopf, Arm, Bein) unter der Vorschau. */
+    private int[] posButton(int i) {
+        int x = cx();
+        for (int k = 0; k < i; k++) x += font.width(MiniMeCore.POSITIONS[k][1]) + 18;
+        return new int[]{x, cy() + 124, font.width(MiniMeCore.POSITIONS[i][1]) + 14, 16};
+    }
+
     /** Freunde als Schnellauswahl (Name, Kopf). */
     private List<Friends.Friend> suggestions() {
         List<Friends.Friend> list = new java.util.ArrayList<>(Friends.friends());
@@ -248,7 +255,7 @@ public class CosmeticsScreen extends PanelScreen {
         }
         String status = message;
         if (status == null && name != null) {
-            status = MiniMeCore.missing(name) ? "Den Spieler „" + name + "“ gibt es nicht" : profile == null ? "Skin wird geladen …" : "Sitzt auf deiner linken Schulter";
+            status = MiniMeCore.missing(name) ? "Den Spieler „" + name + "“ gibt es nicht" : profile == null ? "Skin wird geladen …" : placeText();
         }
         if (status != null) Ui.text(g, font.plainSubstrByWidth(status, cw() - 100), x + 96, y + 50, MiniMeCore.missing(name) ? Ui.RED : Ui.MUTED, false);
 
@@ -266,9 +273,33 @@ public class CosmeticsScreen extends PanelScreen {
             }
         }
 
+        // Position
+        Ui.scaled(g, "POSITION", x, y + 112, 0.75f, Ui.MUTED, false);
+        String current = MiniMeCore.position();
+        for (int i = 0; i < MiniMeCore.POSITIONS.length; i++) {
+            int[] b = posButton(i);
+            boolean on = MiniMeCore.POSITIONS[i][0].equals(current);
+            boolean hover = Ui.inside(mouseX, mouseY, b[0], b[1], b[2], b[3]);
+            float t = Ui.animate("miniPos:" + i, on, 14f);
+            int accent = lunar ? Ui.L_GREEN : Ui.accent();
+            int fill = Ui.mix(lunar ? Ui.L_CARD : Ui.SURFACE, accent, t);
+            if (hover && !on) fill = Ui.mix(fill, 0xFFFFFFFF, 0.08f);
+            Ui.outline(g, b[0], b[1], b[2], b[3], lunar ? 4 : 8, Ui.mix(lunar ? Ui.L_LINE : Ui.LINE, accent, t), fill);
+            Ui.centered(g, MiniMeCore.POSITIONS[i][1], b[0] + b[2] / 2, b[1] + 4, on ? 0xFFFFFFFF : Ui.TEXT, false);
+        }
+
         int fy = py + ph - FOOTER + 10;
         String info = Friends.available() ? "Andere Mytic-Spieler sehen deinen MiniMe" : "Nur du siehst ihn (ohne Mytic Launcher)";
         Ui.text(g, font.plainSubstrByWidth(info, pw - 40), px + 12, fy, Ui.MUTED, false);
+    }
+
+    private static String placeText() {
+        switch (MiniMeCore.position()) {
+            case "head": return "Sitzt auf deinem Kopf";
+            case "arm": return "Hängt an deiner linken Hand";
+            case "leg": return "Hält sich an deinem linken Bein fest";
+            default: return "Sitzt auf deiner linken Schulter";
+        }
     }
 
     private void applyInput() {
@@ -295,6 +326,13 @@ public class CosmeticsScreen extends PanelScreen {
             MiniMeCore.select(null);
             message = null;
             return true;
+        }
+        for (int i = 0; i < MiniMeCore.POSITIONS.length; i++) {
+            int[] b = posButton(i);
+            if (Ui.inside(mx, my, b[0], b[1], b[2], b[3])) {
+                MiniMeCore.selectPosition(MiniMeCore.POSITIONS[i][0]);
+                return true;
+            }
         }
         List<Friends.Friend> list = suggestions();
         for (int i = 0; i < list.size(); i++) {

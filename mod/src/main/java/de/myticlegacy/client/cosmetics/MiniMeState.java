@@ -7,4 +7,9 @@ public interface MiniMeState {
     PlayerSkin mytic$miniMe();
 
     void mytic$setMiniMe(PlayerSkin skin);
+
+    /** Wo er sitzt: shoulder, head, arm, leg. */
+    String mytic$miniMePos();
+
+    void mytic$setMiniMePos(String pos);
 }

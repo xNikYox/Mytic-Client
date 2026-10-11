@@ -37,6 +37,7 @@ val renames = buildList {
     add(Regex("""\.identifier\(\)""") to ".location()")
     if (patch >= 9) add(Regex("""\.renderOutline\(""") to ".submitOutline(")
     if (patch >= 9) add(Regex("""net\.minecraft\.client\.model\.player\.PlayerModel""") to "net.minecraft.client.model.PlayerModel")
+    if (patch >= 9) add(Regex("""ArmPose\.THROW_TRIDENT""") to "ArmPose.THROW_SPEAR")
     add(Regex("""net\.minecraft\.client\.renderer\.rendertype\.RenderTypes""") to "net.minecraft.client.renderer.RenderType")
     add(Regex("""\bRenderTypes\.""") to "RenderType.")
 }

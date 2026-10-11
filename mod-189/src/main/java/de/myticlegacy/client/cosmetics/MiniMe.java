@@ -21,8 +21,12 @@ import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
 
-/** MiniMe für 1.8.9: kleine Figur mit fremdem Skin sitzt auf der linken Schulter (eigene Ebene am Spieler-Renderer). */
+/**
+ * MiniMe für 1.8.9: kleine Figur mit fremdem Skin auf Schulter oder Kopf, oder hängend an Hand bzw. Bein (eigene Ebene
+ * am Spieler-Renderer).
+ */
 public final class MiniMe implements LayerRenderer<AbstractClientPlayer> {
+    private final RenderPlayer renderer;
     private static final float SCALE = 0.35f;
     /** Profil-UUID → hochgeladener Skin */
     private static final Map<String, ResourceLocation> TEXTURES = new HashMap<String, ResourceLocation>();
@@ -38,11 +42,15 @@ public final class MiniMe implements LayerRenderer<AbstractClientPlayer> {
             Method add = null;
             for (RenderPlayer renderer : mc.getRenderManager().getSkinMap().values()) {
                 if (add == null) add = ReflectionHelper.findMethod(RendererLivingEntity.class, renderer, new String[]{"addLayer", "func_177094_a"}, LayerRenderer.class);
-                add.invoke(renderer, new MiniMe());
+                add.invoke(renderer, new MiniMe(renderer));
             }
         } catch (Exception e) {
             MyticClient.LOG.warn("MiniMe-Ebene nicht angemeldet: " + e);
         }
+    }
+
+    private MiniMe(RenderPlayer renderer) {
+        this.renderer = renderer;
     }
 
     private static ResourceLocation texture(MiniMeCore.Profile profile) {
@@ -67,23 +75,77 @@ public final class MiniMe implements LayerRenderer<AbstractClientPlayer> {
                               float netHeadYaw, float headPitch, float scale) {
         Minecraft mc = Minecraft.getMinecraft();
         if (player.isInvisible() || mc.thePlayer == null) return;
-        String name = MiniMeCore.nameOf(player.getUniqueID().toString().replace("-", ""), player == mc.thePlayer);
+        String uuid = player.getUniqueID().toString().replace("-", "");
+        String name = MiniMeCore.nameOf(uuid, player == mc.thePlayer);
         MiniMeCore.Profile profile = MiniMeCore.profile(name);
         if (profile == null) return;
         ResourceLocation tex = texture(profile);
         if (tex == null) return;
+        String pos = MiniMeCore.positionOf(uuid, player == mc.thePlayer);
+        boolean hanging = "arm".equals(pos) || "leg".equals(pos);
+        boolean onHead = "head".equals(pos);
         ModelPlayer model = profile.slim ? slim : wide;
-        model.isRiding = true;
+        ModelPlayer parent = renderer.getMainModel();
+        model.isRiding = !hanging;
         model.isSneak = false;
         model.isChild = false;
         model.swingProgress = 0;
+        model.heldItemLeft = 0;
+        model.heldItemRight = 0;
+        model.aimedBow = false;
         GlStateManager.pushMatrix();
-        GlStateManager.translate(0.37f, (player.isSneaking() ? 0.2f : 0f) - 0.75f * SCALE - 0.02f, 0f);
+        if (onHead) {
+            parent.bipedHead.postRender(scale);
+            GlStateManager.translate(0f, -0.5f - 0.75f * SCALE, 0f);
+        } else if ("arm".equals(pos)) {
+            // wie beim Gegenstand in der Hand: beim Schleichen etwas tiefer
+            if (player.isSneaking()) GlStateManager.translate(0f, 0.2f, 0f);
+            parent.bipedLeftArm.postRender(scale);
+            GlStateManager.translate(0.0625f, 0.625f + 0.5f * SCALE, 0f);
+        } else if ("leg".equals(pos)) {
+            parent.bipedLeftLeg.postRender(scale);
+            GlStateManager.translate(0.24f, 0.05f + 0.5f * SCALE, 0f);
+        } else {
+            GlStateManager.translate(0.37f, (player.isSneaking() ? 0.2f : 0f) - 0.75f * SCALE - 0.02f, 0f);
+        }
         GlStateManager.scale(SCALE, SCALE, SCALE);
         GlStateManager.color(1f, 1f, 1f, 1f);
         mc.getTextureManager().bindTexture(tex);
-        model.render(player, 0, 0, ageInTicks, netHeadYaw, headPitch, scale);
+        // erst die Haltung berechnen, dann (beim Hängen) die Arme nach oben, dann zeichnen
+        model.setRotationAngles(0, 0, ageInTicks, onHead ? 0 : netHeadYaw, onHead ? 0 : headPitch, scale, player);
+        if (hanging) {
+            for (net.minecraft.client.model.ModelRenderer arm : new net.minecraft.client.model.ModelRenderer[]{model.bipedRightArm, model.bipedLeftArm}) {
+                arm.rotateAngleX = (float) Math.PI;
+                arm.rotateAngleY = 0f;
+                arm.rotateAngleZ = 0f;
+            }
+            copy(model.bipedRightArm, model.bipedRightArmwear);
+            copy(model.bipedLeftArm, model.bipedLeftArmwear);
+        }
+        renderParts(model, scale);
         GlStateManager.popMatrix();
+    }
+
+    private static void copy(net.minecraft.client.model.ModelRenderer from, net.minecraft.client.model.ModelRenderer to) {
+        to.rotateAngleX = from.rotateAngleX;
+        to.rotateAngleY = from.rotateAngleY;
+        to.rotateAngleZ = from.rotateAngleZ;
+    }
+
+    /** Wie ModelPlayer.render, aber ohne setRotationAngles (das würde die erhobenen Arme zurücksetzen). */
+    private static void renderParts(ModelPlayer m, float scale) {
+        m.bipedHead.render(scale);
+        m.bipedBody.render(scale);
+        m.bipedRightArm.render(scale);
+        m.bipedLeftArm.render(scale);
+        m.bipedRightLeg.render(scale);
+        m.bipedLeftLeg.render(scale);
+        m.bipedHeadwear.render(scale);
+        m.bipedBodyWear.render(scale);
+        m.bipedRightArmwear.render(scale);
+        m.bipedLeftArmwear.render(scale);
+        m.bipedRightLegwear.render(scale);
+        m.bipedLeftLegwear.render(scale);
     }
 
     @Override

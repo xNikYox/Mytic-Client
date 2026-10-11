@@ -24,6 +24,19 @@ abstract class AvatarRenderStateMixin implements MiniMeState, WingsState {
     }
 
     @Unique
+    private String mytic$miniMePos;
+
+    @Override
+    public String mytic$miniMePos() {
+        return mytic$miniMePos;
+    }
+
+    @Override
+    public void mytic$setMiniMePos(String pos) {
+        mytic$miniMePos = pos;
+    }
+
+    @Unique
     private String mytic$wings;
 
     @Override

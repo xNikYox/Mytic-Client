@@ -72,6 +72,31 @@ public final class MiniMeCore {
         CosmeticsCore.push();
     }
 
+    /** Positionen: {id, Anzeigename}. Die erste ist der Standard. */
+    public static final String[][] POSITIONS = {{"shoulder", "Schulter"}, {"head", "Kopf"}, {"arm", "Arm"}, {"leg", "Bein"}};
+
+    private static String validPos(String pos) {
+        for (String[] p : POSITIONS) if (p[0].equals(pos)) return pos;
+        return "shoulder";
+    }
+
+    /** Eigene Position des MiniMe (Vorschau: -Dmytic.miniMeDemo=true wechselt alle 4 Sekunden). */
+    public static String position() {
+        if (Boolean.getBoolean("mytic.miniMeDemo")) return POSITIONS[(int) ((System.currentTimeMillis() / 4000) % POSITIONS.length)][0];
+        return validPos(MyticClient.config().miniMePos);
+    }
+
+    public static void selectPosition(String pos) {
+        MyticClient.config().miniMePos = validPos(pos);
+        MyticClient.config().save();
+        CosmeticsCore.push();
+    }
+
+    /** Position des MiniMe eines Spielers: shoulder, head, arm oder leg. */
+    public static String positionOf(String uuid, boolean self) {
+        return self ? position() : validPos(CosmeticsCore.remoteMiniMePos(uuid));
+    }
+
     /** MiniMe-Name eines Spielers: eigener aus der Auswahl, andere vom Friends-Server. */
     public static String nameOf(String uuid, boolean self) {
         return self ? selected() : CosmeticsCore.remoteMiniMe(uuid);

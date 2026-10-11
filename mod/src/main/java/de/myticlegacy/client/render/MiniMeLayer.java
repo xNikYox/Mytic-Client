@@ -14,7 +14,10 @@ import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.world.entity.player.PlayerModelType;
 import net.minecraft.world.entity.player.PlayerSkin;
 
-/** MiniMe: kleine Figur mit fremdem Skin sitzt auf der linken Schulter (wie der Papagei) und schaut in dieselbe Richtung. */
+/**
+ * MiniMe: kleine Figur mit fremdem Skin. Sitzt auf der linken Schulter (wie der Papagei) oder auf dem Kopf, oder hängt mit
+ * erhobenen Armen an der linken Hand bzw. am linken Bein.
+ */
 public class MiniMeLayer extends RenderLayer<AvatarRenderState, PlayerModel> {
     private static final float SCALE = 0.35f;
     private final PlayerModel wide;
@@ -31,19 +34,24 @@ public class MiniMeLayer extends RenderLayer<AvatarRenderState, PlayerModel> {
         PlayerSkin skin = ((MiniMeState) state).mytic$miniMe();
         if (skin == null || state.isInvisible) return;
         // eigener Zustand: sitzend, gleiche Kopfhaltung wie der Spieler
+        String pos = ((MiniMeState) state).mytic$miniMePos();
+        boolean hanging = "arm".equals(pos) || "leg".equals(pos);
+        boolean onHead = "head".equals(pos);
         AvatarRenderState mini = new AvatarRenderState();
         mini.ageInTicks = state.ageInTicks;
-        mini.yRot = state.yRot;
-        mini.xRot = state.xRot;
-        mini.isPassenger = true;
+        // auf dem Kopf dreht er sich schon mit dem Kopf mit
+        mini.yRot = onHead ? 0f : state.yRot;
+        mini.xRot = onHead ? 0f : state.xRot;
+        mini.isPassenger = !hanging;
         mini.mainArm = state.mainArm;
-        mini.rightArmPose = HumanoidModel.ArmPose.EMPTY;
-        mini.leftArmPose = HumanoidModel.ArmPose.EMPTY;
+        // beim Hängen beide Arme nach oben (wie beim Dreizack-Wurf)
+        mini.rightArmPose = hanging ? HumanoidModel.ArmPose.THROW_TRIDENT : HumanoidModel.ArmPose.EMPTY;
+        mini.leftArmPose = hanging ? HumanoidModel.ArmPose.THROW_TRIDENT : HumanoidModel.ArmPose.EMPTY;
         mini.skin = skin;
         PlayerModel model = skin.model() == PlayerModelType.SLIM ? slim : wide;
+        PlayerModel parent = getParentModel();
         pose.pushPose();
-        // Hüfte der kleinen Figur (12/16 über den Füßen) auf die linke Schulter setzen
-        pose.translate(0.37f, (state.isCrouching ? 0.2f : 0f) - 0.75f * SCALE - 0.02f, 0f);
+        MiniMePlace.apply(pose, pos, parent.head, parent.leftArm, parent.leftLeg, state.isCrouching, SCALE);
         pose.scale(SCALE, SCALE, SCALE);
         collector.submitModel(model, mini, pose, model.renderType(skin.body().texturePath()), light, OverlayTexture.NO_OVERLAY, state.outlineColor, null);
         pose.popPose();

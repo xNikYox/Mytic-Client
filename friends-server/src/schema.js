@@ -43,4 +43,5 @@ export const MIGRATIONS = [
   "ALTER TABLE users ADD COLUMN cape TEXT",
   "ALTER TABLE users ADD COLUMN minime TEXT",
   "ALTER TABLE users ADD COLUMN wings TEXT",
+  "ALTER TABLE users ADD COLUMN minime_pos TEXT",
 ];

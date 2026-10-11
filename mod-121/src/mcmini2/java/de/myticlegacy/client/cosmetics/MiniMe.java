@@ -26,6 +26,13 @@ public final class MiniMe {
         return name == null ? null : skin(name);
     }
 
+    /** Position des MiniMe dieser Figur: shoulder, head, arm oder leg. */
+    public static String positionFor(Object entity) {
+        Minecraft mc = Minecraft.getInstance();
+        if (!(entity instanceof Entity e) || mc.player == null) return "shoulder";
+        return MiniMeCore.positionOf(e.getUUID().toString().replace("-", ""), e.getUUID().equals(mc.player.getUUID()));
+    }
+
     public static PlayerSkin skin(String name) {
         MiniMeCore.Profile profile = MiniMeCore.profile(name);
         if (profile == null || profile.textures == null) return null;

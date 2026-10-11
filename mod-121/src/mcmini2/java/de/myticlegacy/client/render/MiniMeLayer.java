@@ -12,7 +12,7 @@ import net.minecraft.client.renderer.entity.state.PlayerRenderState;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.client.resources.PlayerSkin;
 
-/** 1.21.2–1.21.8: MiniMe sitzt auf der linken Schulter (direkt gezeichnet). */
+/** 1.21.2–1.21.8: MiniMe auf Schulter oder Kopf, oder hängend an Hand bzw. Bein (direkt gezeichnet). */
 public class MiniMeLayer extends RenderLayer<PlayerRenderState, PlayerModel> {
     private static final float SCALE = 0.35f;
     private final PlayerModel wide;
@@ -28,18 +28,23 @@ public class MiniMeLayer extends RenderLayer<PlayerRenderState, PlayerModel> {
     public void render(PoseStack pose, MultiBufferSource buffers, int light, PlayerRenderState state, float yRot, float xRot) {
         PlayerSkin skin = ((MiniMeState) state).mytic$miniMe();
         if (skin == null || state.isInvisible) return;
+        String pos = ((MiniMeState) state).mytic$miniMePos();
+        boolean hanging = "arm".equals(pos) || "leg".equals(pos);
+        boolean onHead = "head".equals(pos);
         PlayerRenderState mini = new PlayerRenderState();
         mini.ageInTicks = state.ageInTicks;
-        mini.yRot = state.yRot;
-        mini.xRot = state.xRot;
-        mini.isPassenger = true;
+        mini.yRot = onHead ? 0f : state.yRot;
+        mini.xRot = onHead ? 0f : state.xRot;
+        mini.isPassenger = !hanging;
         mini.mainArm = state.mainArm;
         mini.skin = skin;
         PlayerModel model = skin.model() == PlayerSkin.Model.SLIM ? slim : wide;
+        PlayerModel parent = getParentModel();
         pose.pushPose();
-        pose.translate(0.37f, (state.isCrouching ? 0.2f : 0f) - 0.75f * SCALE - 0.02f, 0f);
+        MiniMePlace.apply(pose, pos, parent.head, parent.leftArm, parent.leftLeg, state.isCrouching, SCALE);
         pose.scale(SCALE, SCALE, SCALE);
         model.setupAnim(mini);
+        if (hanging) MiniMePlace.armsUp(model);
         model.renderToBuffer(pose, buffers.getBuffer(model.renderType(skin.texture())), light, OverlayTexture.NO_OVERLAY);
         pose.popPose();
     }

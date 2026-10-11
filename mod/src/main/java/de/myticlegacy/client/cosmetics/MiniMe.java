@@ -32,6 +32,13 @@ public final class MiniMe {
         return name == null ? null : skin(name);
     }
 
+    /** Position des MiniMe dieser Figur: shoulder, head, arm oder leg. */
+    public static String positionFor(Object entity) {
+        Minecraft mc = Minecraft.getInstance();
+        if (!(entity instanceof Entity e) || mc.player == null) return "shoulder";
+        return MiniMeCore.positionOf(e.getUUID().toString().replace("-", ""), e.getUUID().equals(mc.player.getUUID()));
+    }
+
     /** Skin zu einem Namen (null, solange er lädt). */
     public static PlayerSkin skin(String name) {
         MiniMeCore.Profile profile = MiniMeCore.profile(name);
@@ -45,9 +52,14 @@ public final class MiniMe {
         props.put("textures", new Property("textures", profile.textures, profile.signature));
         UUID uuid = UUID.fromString(profile.uuid.replaceFirst("(\\w{8})(\\w{4})(\\w{4})(\\w{4})(\\w{12})", "$1-$2-$3-$4-$5"));
         Minecraft.getInstance().getSkinManager().get(new GameProfile(uuid, profile.name, new PropertyMap(props)))
-                .thenAccept(opt -> {
-                    if (opt.isPresent()) SKINS.put(profile.uuid, opt.get());
-                    else FAILED.put(profile.uuid, System.currentTimeMillis());
+                .whenComplete((opt, error) -> {
+                    if (error == null && opt.isPresent()) {
+                        SKINS.put(profile.uuid, opt.get());
+                    } else {
+                        // nach einer Minute erneut versuchen
+                        de.myticlegacy.client.MyticClient.LOG.warn("MiniMe-Skin " + profile.name + " nicht geladen: " + (error != null ? error : "kein Skin"));
+                        FAILED.put(profile.uuid, System.currentTimeMillis());
+                    }
                     LOADING.remove(profile.uuid);
                 });
         return null;

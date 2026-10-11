@@ -21,6 +21,7 @@ abstract class AvatarRendererMixin {
     @Inject(method = "extractCapeState", at = @At("TAIL"))
     private static void mytic$wind(AbstractClientPlayer player, PlayerRenderState state, float partialTick, CallbackInfo ci) {
         ((MiniMeState) state).mytic$setMiniMe(MiniMe.skinFor(player));
+        ((MiniMeState) state).mytic$setMiniMePos(MiniMe.positionFor(player));
         ((WingsState) state).mytic$setWings(Cosmetics.wingsFor(player));
         if (state.skin == null || !Cosmetics.isMytic(state.skin.capeTexture())) return;
         float[] wind = Cosmetics.wind(player.getId());

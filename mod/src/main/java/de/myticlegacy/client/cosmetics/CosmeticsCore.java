@@ -60,6 +60,8 @@ public final class CosmeticsCore {
     private static final Map<String, String> REMOTE = new ConcurrentHashMap<>();
     /** uuid (ohne Striche) → MiniMe-Name oder "" (keiner). */
     private static final Map<String, String> REMOTE_MINI = new ConcurrentHashMap<>();
+    /** uuid → Position des MiniMe ("" = Schulter). */
+    private static final Map<String, String> REMOTE_MINI_POS = new ConcurrentHashMap<>();
     /** Glanz-Animation der Flügel: Bilder und Dauer pro Bild (wie im Cosmetics-Paket). */
     public static final int WING_FX_FRAMES = 16;
     public static final long WING_FX_MS = 90;
@@ -159,12 +161,14 @@ public final class CosmeticsCore {
         final String id = MyticClient.config().cape;
         final String mini = MiniMeCore.selected();
         final String wingsId = MyticClient.config().wings;
+        final String miniPos = MiniMeCore.position();
         Friends.background(() -> {
             try {
                 JsonObject body = new JsonObject();
                 body.addProperty("cape", id);
                 body.addProperty("minime", mini);
                 body.addProperty("wings", wingsId);
+                body.addProperty("minimePos", miniPos);
                 Friends.post("api/cosmetics", body);
             } catch (Exception e) {
                 MyticClient.LOG.warn("Cosmetics nicht gespeichert: " + e.getMessage());
@@ -198,6 +202,12 @@ public final class CosmeticsCore {
         return name == null || name.isEmpty() ? null : name;
     }
 
+    /** Position des MiniMe eines anderen Spielers (vom Friends-Server), "" = Schulter. */
+    public static String remoteMiniMePos(String uuid) {
+        String pos = REMOTE_MINI_POS.get(uuid);
+        return pos == null ? "" : pos;
+    }
+
     /**
      * Regelmäßig aus dem Spiel-Thread: Umhänge der Spieler in der Nähe nachfragen (gesammelt, höchstens 100 auf
      * einmal, je Spieler alle 2 Minuten).
@@ -229,6 +239,10 @@ public final class CosmeticsCore {
                 if (answer.has("minimes")) {
                     for (Map.Entry<String, JsonElement> e : answer.getAsJsonObject("minimes").entrySet()) minis.put(e.getKey(), e.getValue().getAsString());
                 }
+                Map<String, String> miniPos = new HashMap<>();
+                if (answer.has("minimePos")) {
+                    for (Map.Entry<String, JsonElement> e : answer.getAsJsonObject("minimePos").entrySet()) miniPos.put(e.getKey(), e.getValue().getAsString());
+                }
                 Map<String, String> wingsFound = new HashMap<>();
                 if (answer.has("wings")) {
                     for (Map.Entry<String, JsonElement> e : answer.getAsJsonObject("wings").entrySet()) wingsFound.put(e.getKey(), e.getValue().getAsString());
@@ -236,6 +250,7 @@ public final class CosmeticsCore {
                 for (String uuid : ask) {
                     REMOTE.put(uuid, found.containsKey(uuid) ? found.get(uuid) : "");
                     REMOTE_MINI.put(uuid, minis.containsKey(uuid) ? minis.get(uuid) : "");
+                    REMOTE_MINI_POS.put(uuid, miniPos.containsKey(uuid) ? miniPos.get(uuid) : "");
                     REMOTE_WINGS.put(uuid, wingsFound.containsKey(uuid) ? wingsFound.get(uuid) : "");
                 }
             } catch (Exception e) {

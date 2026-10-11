@@ -27,6 +27,8 @@ public final class Config {
     public String cape;
     /** MiniMe: Minecraft-Name, dessen Skin die kleine Figur auf der Schulter trägt (null = keine). */
     public String miniMe;
+    /** Wo der MiniMe sitzt: shoulder, head, arm, leg (null = Schulter). */
+    public String miniMePos;
     /** Gewählte Flügel (Cosmetics), null = keine. */
     public String wings;
     /** Grafik-Optionen vor dem Einschalten von FPS-Boost (Name → Wert als Text), werden beim Ausschalten zurückgesetzt. */
