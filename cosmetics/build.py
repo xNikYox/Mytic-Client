@@ -23,7 +23,7 @@ def main():
     os.makedirs(FRAMES, exist_ok=True)
     if "--skip-render" not in sys.argv:
         subprocess.run([sys.executable, os.path.join(HERE, "capes.py"), FRAMES], check=True)
-    catalog = {"version": VERSION, "capes": [{"id": i, "name": n, "frames": 24, "frameMs": 70} for i, n in CAPES]}
+    catalog = {"version": VERSION, "scale": 8, "capes": [{"id": i, "name": n, "frames": 24, "frameMs": 70} for i, n in CAPES]}
     mod = {"schemaVersion": 1, "id": "myticcosmetics", "version": VERSION, "name": "Mytic Cosmetics",
            "description": "Umhänge des Mytic Clients (nur Texturen)", "environment": "client"}
     # Gezeichnet in 12-facher, ausgeliefert in 8-facher Auflösung (512x256): scharf, aber halb so viel Grafikspeicher

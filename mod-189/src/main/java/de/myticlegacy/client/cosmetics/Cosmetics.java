@@ -1,7 +1,10 @@
 package de.myticlegacy.client.cosmetics;
 
 import de.myticlegacy.client.MyticClient;
+import de.myticlegacy.client.compat.GuiGraphics;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Gui;
+import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.entity.AbstractClientPlayer;
 import net.minecraft.client.network.NetworkPlayerInfo;
 import net.minecraft.client.renderer.texture.DynamicTexture;
@@ -32,6 +35,10 @@ public final class Cosmetics {
     /** im Hintergrund gelesene Bilder, die noch hochgeladen werden müssen */
     private static final Map<String, BufferedImage[]> DECODED = new ConcurrentHashMap<String, BufferedImage[]>();
     private static final Map<String, Boolean> LOADING = new ConcurrentHashMap<String, Boolean>();
+    /** erstes Bild je Umhang für die Vorschau im Menü */
+    private static final Map<String, ResourceLocation> FIRST = new HashMap<String, ResourceLocation>();
+    private static final Map<String, BufferedImage> FIRST_DECODED = new ConcurrentHashMap<String, BufferedImage>();
+    private static final Map<String, Boolean> FIRST_LOADING = new ConcurrentHashMap<String, Boolean>();
     /** ursprünglicher Umhang (z. B. Minecon) je Spieler, um ihn zurückzusetzen */
     private static final Map<NetworkPlayerInfo, ResourceLocation> ORIGINAL = new HashMap<NetworkPlayerInfo, ResourceLocation>();
 
@@ -137,5 +144,61 @@ public final class Cosmetics {
         List<String> nearby = new ArrayList<String>();
         for (EntityPlayer p : mc.theWorld.playerEntities) if (p != mc.thePlayer) nearby.add(uuid(p));
         CosmeticsCore.tick(nearby);
+    }
+
+    /** Erstes Bild eines Umhangs (für die Vorschau), im Hintergrund gelesen; null, solange es lädt. */
+    private static ResourceLocation firstFrame(final CosmeticsCore.Cape cape) {
+        ResourceLocation[] all = READY.get(cape.id);
+        if (all != null) return all[0];
+        ResourceLocation first = FIRST.get(cape.id);
+        if (first != null) return first;
+        BufferedImage image = FIRST_DECODED.remove(cape.id);
+        if (image != null) {
+            first = new ResourceLocation("myticclient", "cape_preview/" + cape.id);
+            Minecraft.getMinecraft().getTextureManager().loadTexture(first, new DynamicTexture(image));
+            FIRST.put(cape.id, first);
+            return first;
+        }
+        if (FIRST_LOADING.putIfAbsent(cape.id, Boolean.TRUE) == null) {
+            Thread t = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        ZipFile zip = new ZipFile(CosmeticsCore.packPath());
+                        try {
+                            InputStream in = zip.getInputStream(zip.getEntry("assets/myticclient/textures/cape/" + cape.id + "_0.png"));
+                            try {
+                                FIRST_DECODED.put(cape.id, ImageIO.read(in));
+                            } finally {
+                                in.close();
+                            }
+                        } finally {
+                            zip.close();
+                        }
+                    } catch (Exception e) {
+                        MyticClient.LOG.warn("Vorschau " + cape.id + " nicht geladen: " + e);
+                    }
+                }
+            }, "Mytic Vorschau " + cape.id);
+            t.setDaemon(true);
+            t.start();
+        }
+        return null;
+    }
+
+    /**
+     * Vorschau im Cosmetics-Menü: Außenseite des Umhangs direkt aus der Textur (volle Auflösung). Nur animiert, wenn
+     * gewünscht (ausgewählt oder unter der Maus) – sonst das erste Bild.
+     */
+    public static boolean drawPreview(GuiGraphics g, CosmeticsCore.Cape cape, int x, int y, int w, int h, boolean animated) {
+        ResourceLocation tex = animated ? texture(cape) : null;
+        if (tex == null) tex = firstFrame(cape);
+        if (tex == null) return false;
+        Minecraft.getMinecraft().getTextureManager().bindTexture(tex);
+        GlStateManager.enableBlend();
+        GlStateManager.color(1, 1, 1, 1);
+        int k = cape.scale;
+        Gui.drawScaledCustomSizeModalRect(x, y, k, k, 10 * k, 16 * k, w, h, 64 * k, 32 * k);
+        return true;
     }
 }

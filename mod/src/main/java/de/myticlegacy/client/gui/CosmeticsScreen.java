@@ -1,6 +1,7 @@
 package de.myticlegacy.client.gui;
 
 import de.myticlegacy.client.compat.Gfx;
+import de.myticlegacy.client.cosmetics.Cosmetics;
 import de.myticlegacy.client.cosmetics.CosmeticsCore;
 import de.myticlegacy.client.friends.Friends;
 import net.minecraft.client.gui.GuiGraphics;
@@ -12,13 +13,14 @@ public class CosmeticsScreen extends PanelScreen {
     private static final int CARD_W = 52;
     private static final int CARD_H = 92;
     private static final int GAP = 5;
-    private static final int PREVIEW_SCALE = 2;
+    /** Vorschaugröße (Seitenverhältnis des Umhangs 10:16). */
+    private static final int PREVIEW_W = 40;
+    private static final int PREVIEW_H = 64;
     private double scrollPos;
     private double scrollTarget;
 
     public CosmeticsScreen() {
         super("Cosmetics");
-        CosmeticsCore.loadPreviews();
     }
 
     @Override
@@ -108,26 +110,16 @@ public class CosmeticsScreen extends PanelScreen {
             if (!lunar && on > 0.02f) Ui.glow(g, c[0], c[1], CARD_W, CARD_H, 6, Ui.accent(), 4, on * 0.7f);
             Ui.outline(g, c[0], c[1], CARD_W, CARD_H, lunar ? 4 : 6, border, fill);
 
-            int pw2 = CosmeticsCore.PREVIEW_W * PREVIEW_SCALE;
-            int ph2 = CosmeticsCore.PREVIEW_H * PREVIEW_SCALE;
+            int pw2 = PREVIEW_W;
+            int ph2 = PREVIEW_H;
             int ix = c[0] + (CARD_W - pw2) / 2;
             int iy = c[1] + 6 - Math.round(hv * 2);
             if (cape == null) {
                 Ui.rect(g, ix, iy, pw2, ph2, 2, 0x30FFFFFF);
                 Ui.scaled(g, "✕", ix + pw2 / 2f - font.width("✕"), iy + ph2 / 2f - 8, 2f, Ui.MUTED, false);
-            } else {
-                int[] pixels = cape.previewFrame();
-                if (pixels == null) {
-                    Ui.rect(g, ix, iy, pw2, ph2, 2, 0x30FFFFFF);
-                    Ui.centered(g, "…", ix + pw2 / 2, iy + ph2 / 2 - 4, Ui.MUTED, false);
-                } else {
-                    for (int y = 0; y < CosmeticsCore.PREVIEW_H; y++) {
-                        for (int x = 0; x < CosmeticsCore.PREVIEW_W; x++) {
-                            int px1 = ix + x * PREVIEW_SCALE, py1 = iy + y * PREVIEW_SCALE;
-                            g.fill(px1, py1, px1 + PREVIEW_SCALE, py1 + PREVIEW_SCALE, pixels[y * CosmeticsCore.PREVIEW_W + x]);
-                        }
-                    }
-                }
+            } else if (!Cosmetics.drawPreview(g, cape, ix, iy, pw2, ph2, over || active)) {
+                Ui.rect(g, ix, iy, pw2, ph2, 2, 0x30FFFFFF);
+                Ui.centered(g, "…", ix + pw2 / 2, iy + ph2 / 2 - 4, Ui.MUTED, false);
             }
             String name = cape == null ? "Keiner" : cape.name;
             name = font.plainSubstrByWidth(name, Math.round((CARD_W - 6) / 0.8f));

@@ -1,6 +1,8 @@
 package de.myticlegacy.client.cosmetics;
 
+import de.myticlegacy.client.compat.Blit;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Player;
@@ -61,5 +63,17 @@ public final class Cosmetics {
         float side = (float) (4 * Math.sin(t * 0.8 + 0.5) + 1.5 * Math.sin(t * 2.1));
         float flap = (float) (1.2 * Math.sin(t * 3.7));
         return new float[]{lean, side, flap};
+    }
+
+    /**
+     * Vorschau im Cosmetics-Menü: Außenseite des Umhangs direkt aus der Textur (volle Auflösung). Nur animiert, wenn
+     * gewünscht (ausgewählt oder unter der Maus) – sonst das erste Bild, damit nicht alle Bilder geladen werden.
+     */
+    public static boolean drawPreview(GuiGraphics g, CosmeticsCore.Cape cape, int x, int y, int w, int h, boolean animated) {
+        int k = cape.scale;
+        int frame = animated ? cape.frame() : 0;
+        Blit.region(g, ResourceLocation.fromNamespaceAndPath("myticclient", "textures/cape/" + cape.id + "_" + frame + ".png"),
+                x, y, w, h, k, k, 10 * k, 16 * k, 64 * k, 32 * k);
+        return true;
     }
 }

@@ -7,8 +7,6 @@ import com.google.gson.JsonParser;
 import de.myticlegacy.client.MyticClient;
 import de.myticlegacy.client.friends.Friends;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -33,34 +31,28 @@ public final class CosmeticsCore {
         public final String name;
         public final int frames;
         public final long frameMs;
-        /** Vorschau pro Bild: PREVIEW_W x PREVIEW_H Pixel ARGB (null, solange nicht geladen). */
-        volatile int[][] preview;
+        /** Auflösung gegenüber der 64x32-Vorlage (Paket 1.0: 8 → 512x256). */
+        public final int scale;
 
-        Cape(String id, String name, int frames, long frameMs) {
+        Cape(String id, String name, int frames, long frameMs, int scale) {
             this.id = id;
             this.name = name;
             this.frames = frames;
             this.frameMs = frameMs;
+            this.scale = scale;
         }
 
         public int frame() {
             return (int) ((System.currentTimeMillis() / frameMs) % frames);
         }
 
-        public int[] previewFrame() {
-            int[][] p = preview;
-            return p == null ? null : p[frame()];
-        }
     }
 
-    public static final int PREVIEW_W = 20;
-    public static final int PREVIEW_H = 32;
     /** Wie lange die Umhänge anderer Spieler gemerkt werden, bevor neu gefragt wird. */
     private static final long REMOTE_MS = 2 * 60 * 1000;
 
     private static final String PACK = System.getProperty("mytic.cosmetics", "").trim();
     private static List<Cape> capes;
-    private static volatile boolean previewsRequested;
 
     /** uuid (ohne Striche) → Umhang-ID oder "" (keiner). */
     private static final Map<String, String> REMOTE = new ConcurrentHashMap<>();
@@ -89,7 +81,8 @@ public final class CosmeticsCore {
                         JsonArray array = root.getAsJsonArray("capes");
                         for (JsonElement e : array) {
                             JsonObject o = e.getAsJsonObject();
-                            list.add(new Cape(o.get("id").getAsString(), o.get("name").getAsString(), o.get("frames").getAsInt(), o.get("frameMs").getAsLong()));
+                            int scale = o.has("scale") ? o.get("scale").getAsInt() : (root.has("scale") ? root.get("scale").getAsInt() : 8);
+                            list.add(new Cape(o.get("id").getAsString(), o.get("name").getAsString(), o.get("frames").getAsInt(), o.get("frameMs").getAsLong(), scale));
                         }
                     }
                 }
@@ -109,56 +102,6 @@ public final class CosmeticsCore {
 
     public static String packPath() {
         return PACK;
-    }
-
-    /** Vorschaubilder im Hintergrund laden (für das Cosmetics-Menü). */
-    public static void loadPreviews() {
-        if (previewsRequested || capes().isEmpty()) return;
-        previewsRequested = true;
-        Thread t = new Thread(() -> {
-            try (ZipFile zip = new ZipFile(PACK)) {
-                for (Cape cape : capes()) {
-                    int[][] frames = new int[cape.frames][];
-                    for (int f = 0; f < cape.frames; f++) frames[f] = preview(zip, "assets/myticclient/textures/cape/" + cape.id + "_" + f + ".png");
-                    cape.preview = frames;
-                }
-            } catch (Exception e) {
-                MyticClient.LOG.warn("Cosmetics-Vorschau nicht geladen: " + e);
-            }
-        }, "Mytic Cosmetics Vorschau");
-        t.setDaemon(true);
-        t.start();
-    }
-
-    /** Außenseite des Umhangs (Bereich 1..11 x 1..17 der 64x32-Vorlage) auf PREVIEW_W x PREVIEW_H verkleinern. */
-    private static int[] preview(ZipFile zip, String name) throws Exception {
-        ZipEntry entry = zip.getEntry(name);
-        int[] out = new int[PREVIEW_W * PREVIEW_H];
-        if (entry == null) return out;
-        BufferedImage img;
-        try (InputStream in = zip.getInputStream(entry)) {
-            img = ImageIO.read(in);
-        }
-        double k = img.getWidth() / 64.0;
-        double x0 = k, y0 = k, w = 10 * k, h = 16 * k;
-        for (int py = 0; py < PREVIEW_H; py++) {
-            for (int px = 0; px < PREVIEW_W; px++) {
-                int sx0 = (int) (x0 + px * w / PREVIEW_W), sx1 = (int) Math.max(sx0 + 1, x0 + (px + 1) * w / PREVIEW_W);
-                int sy0 = (int) (y0 + py * h / PREVIEW_H), sy1 = (int) Math.max(sy0 + 1, y0 + (py + 1) * h / PREVIEW_H);
-                long r = 0, g = 0, b = 0, n = 0;
-                for (int y = sy0; y < sy1; y++) {
-                    for (int x = sx0; x < sx1; x++) {
-                        int c = img.getRGB(x, y);
-                        r += (c >> 16) & 255;
-                        g += (c >> 8) & 255;
-                        b += c & 255;
-                        n++;
-                    }
-                }
-                out[py * PREVIEW_W + px] = 0xFF000000 | (int) (r / n) << 16 | (int) (g / n) << 8 | (int) (b / n);
-            }
-        }
-        return out;
     }
 
     // ------------------------------------------------------------------------------------------ Auswahl
