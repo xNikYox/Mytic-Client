@@ -37,7 +37,7 @@ Minecraft 1.8.9, 1.21 – 1.21.11 und 26.x · Fabric & Forge · Windows
 
 ### Im Spiel
 
-**Neu:** Freundesliste (Anfragen, online/zuletzt online, Server, Skin-Kopf) im Launcher und im Spiel; Rechts-Shift öffnet eine Übersicht mit Freunde, Mods und Cosmetics (Strg + Rechts-Shift direkt die Mods). Light Level Overlay (zeigt, wo Monster spawnen), Auto Text (Hotkeys für Chat/Befehle), Freelook mit Modus „Halten“ oder „Umschalten“, Farbpalette für alle Farben und Fadenkreuz-Farbe auf Spielern.
+**Neu:** Mehr Leistung: More Culling, Krypton, ModernFix und Noisium sind integriert (abschaltbar), FPS-Boost (Visuell) dreht Wolken, Partikel, Schatten und Biom-Übergänge herunter und stellt sie beim Ausschalten wieder her. Freundesliste (Anfragen, online/zuletzt online, Server, Skin-Kopf) im Launcher und im Spiel; Rechts-Shift öffnet eine Übersicht mit Freunde, Mods und Cosmetics (Strg + Rechts-Shift direkt die Mods). Light Level Overlay (zeigt, wo Monster spawnen), Auto Text (Hotkeys für Chat/Befehle), Freelook mit Modus „Halten“ oder „Umschalten“, Farbpalette für alle Farben und Fadenkreuz-Farbe auf Spielern.
 
 **Design:** schlichtes Hauptmenü mit Mond-Emblem, HUD im Lunar-Stil (eckige dunkle Boxen, weißer Text) und ein leuchtendes Mod-Menü im Neon-Stil. Unter Design → HUD-Stil lässt sich das HUD auf „Neon“ oder „Klassisch“ umstellen.
 

@@ -28,9 +28,20 @@ public class TextModule extends HudModule {
         labelColor = new ColorSetting(this, "labelColor", "Farbe der Bezeichnung", 0xFFC9B0FF);
     }
 
+    /** Werte höchstens 20-mal pro Sekunde neu berechnen (sonst mehrmals pro Bild für Breite, Position und Text). */
+    private static final long REFRESH_NANOS = 50_000_000L;
+    private final String[] cached = new String[2];
+    private final long[] cachedAt = new long[2];
+
     private String value(boolean preview) {
-        String v = value.apply(preview);
-        return v == null ? "" : v;
+        int i = preview ? 1 : 0;
+        long now = System.nanoTime();
+        if (cached[i] == null || now - cachedAt[i] >= REFRESH_NANOS) {
+            String v = value.apply(preview);
+            cached[i] = v == null ? "" : v;
+            cachedAt[i] = now;
+        }
+        return cached[i];
     }
 
     /** Bezeichnungen, die bei Lunar als Einheit hinter dem Wert stehen ("120 FPS"). */

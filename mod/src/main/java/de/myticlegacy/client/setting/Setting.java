@@ -9,17 +9,20 @@ public abstract class Setting<T> {
     public final String key;
     public final String label;
     protected final T defaultValue;
+    /** Schlüssel in der Konfiguration – einmal gebildet, weil Einstellungen in jedem Bild oft gelesen werden. */
+    private final String path;
 
     protected Setting(Module module, String key, String label, T defaultValue) {
         this.module = module;
         this.key = key;
         this.label = label;
         this.defaultValue = defaultValue;
+        this.path = module.id + "." + key;
         module.settings.add(this);
     }
 
     protected String path() {
-        return module.id + "." + key;
+        return path;
     }
 
     protected Object raw() {

@@ -20,6 +20,8 @@ public final class Config {
     public Map<String, Object> settings = new LinkedHashMap<>();
     /** Helligkeit vor dem Einschalten von Fullbright, wird beim Ausschalten wiederhergestellt. */
     public double savedGamma = 0.5;
+    /** Grafik-Optionen vor dem Einschalten von FPS-Boost (Name → Wert als Text), werden beim Ausschalten zurückgesetzt. */
+    public Map<String, String> savedOptions = new LinkedHashMap<>();
 
     private static Path file() {
         return FabricLoader.getInstance().getConfigDir().resolve("myticclient.json");
@@ -33,6 +35,7 @@ public final class Config {
                     if (config.enabled == null) config.enabled = new LinkedHashMap<>();
                     if (config.positions == null) config.positions = new LinkedHashMap<>();
                     if (config.settings == null) config.settings = new LinkedHashMap<>();
+                    if (config.savedOptions == null) config.savedOptions = new LinkedHashMap<>();
                     return config;
                 }
             }

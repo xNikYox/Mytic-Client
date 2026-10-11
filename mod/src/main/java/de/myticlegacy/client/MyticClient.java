@@ -22,6 +22,7 @@ import de.myticlegacy.client.mixin.OptionInstanceAccessor;
 import de.myticlegacy.client.module.AutoTextModule;
 import de.myticlegacy.client.module.CrosshairModule;
 import de.myticlegacy.client.module.LightOverlayModule;
+import de.myticlegacy.client.module.FpsBoostModule;
 import de.myticlegacy.client.module.FreelookModule;
 import de.myticlegacy.client.module.FriendsModule;
 import de.myticlegacy.client.module.Module;
@@ -48,7 +49,7 @@ import java.util.List;
 public final class MyticClient implements ClientModInitializer {
     public static final String ID = "myticclient";
     public static final String NAME = "Mytic Client";
-    public static final String VERSION = "2.11";
+    public static final String VERSION = "2.12";
     public static final Logger LOG = LoggerFactory.getLogger(NAME);
 
     public static final List<Module> MODULES = new ArrayList<>();
@@ -76,6 +77,7 @@ public final class MyticClient implements ClientModInitializer {
     public static final KeyMapping[] autoTextKeys = new KeyMapping[AutoTextModule.SLOTS];
     public static AutoTextModule autoText;
     public static LightOverlayModule lightOverlay;
+    public static FpsBoostModule fpsBoost;
     public static FriendsModule friends;
 
     private static Config config;
@@ -183,6 +185,7 @@ public final class MyticClient implements ClientModInitializer {
         hideBossbar = module(SimpleModules.hideBossbar());
         autoText = module(new AutoTextModule());
         lightOverlay = module(new LightOverlayModule());
+        fpsBoost = module(new FpsBoostModule());
         friends = module(new FriendsModule());
         theme = module(new SimpleModules.Theme());
 
@@ -281,6 +284,7 @@ public final class MyticClient implements ClientModInitializer {
         snaplook.tick(mc);
         autoText.tick(mc);
         lightOverlay.tick(mc);
+        fpsBoost.tick(mc);
         CombatTracker.tick(mc);
 
         if (toggleSprint.enabled() && mc.player != null && Compat.screen(mc) == null

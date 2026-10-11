@@ -15,7 +15,7 @@ const VERSION_MANIFEST = "https://piston-meta.mojang.com/mc/game/version_manifes
 const FABRIC_META = "https://meta.fabricmc.net/v2";
 const MODRINTH = "https://api.modrinth.com/v2";
 const LAUNCHER_NAME = "MyticClient";
-const LAUNCHER_VERSION = "2.21.0";
+const LAUNCHER_VERSION = "2.22.0";
 
 /** Mods, die der Launcher verwaltet. required = immer installiert, sonst über die Einstellungen schaltbar. */
 /** Alte Versionen laufen mit Forge statt Fabric (Version → Forge-Version). */
@@ -65,6 +65,10 @@ const MANAGED_MODS = [
   { slug: "ferrite-core", name: "FerriteCore", description: "Weniger Arbeitsspeicher", default: true },
   { slug: "immediatelyfast", name: "ImmediatelyFast", description: "Schnelleres Zeichnen von HUD, Text und Items", default: true },
   { slug: "entityculling", name: "EntityCulling", description: "Unsichtbare Entities werden nicht gezeichnet", default: true, loaders: ["fabric", "forge"] },
+  { slug: "moreculling", name: "More Culling", description: "Verdeckte Blockseiten, Blätter und Rahmen werden nicht gezeichnet", default: true, requires: ["cloth-config"] },
+  { slug: "modernfix", name: "ModernFix", description: "Schnellerer Spielstart, weniger Arbeitsspeicher (nicht für jede Version)", default: true },
+  { slug: "krypton", name: "Krypton", description: "Schnellerer Netzwerk-Code, weniger Lag auf Servern", default: true },
+  { slug: "noisium", name: "Noisium", description: "Schnellere Weltgenerierung im Einzelspieler (bis 1.21.6)", default: true },
   { slug: "patcher", name: "PolyPatcher", description: "Mehr FPS in 1.8.9 – bringt OneConfig mit (eigenes Menü ebenfalls auf Rechts-Shift)", default: false, loaders: ["forge"] },
   { slug: "iris", name: "Iris Shaders", description: "Shader-Unterstützung (braucht Sodium)", default: false, requires: ["sodium"] },
 ];

@@ -23,6 +23,8 @@ public final class Config {
     public Map<String, Object> settings = new LinkedHashMap<String, Object>();
     /** Helligkeit vor dem Einschalten von Fullbright, wird beim Ausschalten wiederhergestellt. */
     public double savedGamma = 0.5;
+    /** Grafik-Optionen vor dem Einschalten von FPS-Boost (Name → Wert als Text), werden beim Ausschalten zurückgesetzt. */
+    public Map<String, String> savedOptions = new LinkedHashMap<String, String>();
 
     static File configDir;
 
@@ -41,6 +43,7 @@ public final class Config {
                     if (config.enabled == null) config.enabled = new LinkedHashMap<String, Boolean>();
                     if (config.positions == null) config.positions = new LinkedHashMap<String, int[]>();
                     if (config.settings == null) config.settings = new LinkedHashMap<String, Object>();
+                    if (config.savedOptions == null) config.savedOptions = new LinkedHashMap<String, String>();
                     return config;
                 }
             }

@@ -79,6 +79,11 @@ const GAME_MODULES = [
   { id: "nohurtcam", name: "No Hurt Cam", description: "Kein Kamerawackeln bei Schaden", category: "Visuell", default: false },
   { id: "scoreboard", name: "Scoreboard", description: "Scoreboard verkleinern oder ausblenden", category: "Visuell", default: false },
   { id: "bossbar", name: "Bossbar ausblenden", description: "Blendet die Bossleiste aus", category: "Visuell", default: false },
+  { id: "fpsboost", name: "FPS-Boost", description: "Wolken, Partikel, Schatten und Biom-Übergänge herunterdrehen", category: "Visuell", default: false },
+  { id: "lightoverlay", name: "Light Level Overlay", description: "Zeigt, wo Monster spawnen können", category: "Visuell", default: false },
+  { id: "snaplook", name: "Snaplook", description: "Taste V halten: dich selbst von vorne sehen", category: "Mechanik", default: true },
+  { id: "autotext", name: "Auto Text", description: "Tasten senden einen Text oder Befehl", category: "Mechanik", default: false },
+  { id: "friends", name: "Freunde", description: "Freunde sehen, dass du online bist", category: "Client", default: true },
   { id: "theme", name: "Design", description: "Akzentfarbe und Mytic-Hauptmenü", category: "Client", default: true },
 ];
 
