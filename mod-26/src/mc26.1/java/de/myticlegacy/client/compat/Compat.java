@@ -102,4 +102,9 @@ public final class Compat {
     public static boolean ctrlDown() {
         return Minecraft.getInstance().hasControlDown();
     }
+
+    /** Ob Shift gedrückt ist. */
+    public static boolean shiftDown() {
+        return Minecraft.getInstance().hasShiftDown();
+    }
 }

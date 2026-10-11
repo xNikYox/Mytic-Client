@@ -86,6 +86,7 @@ const GAME_MODULES = [
   { id: "nohurtcam", name: "No Hurt Cam", description: "Kein Kamerawackeln bei Schaden", category: "Visuell", default: false },
   { id: "scoreboard", name: "Scoreboard", description: "Scoreboard verkleinern oder ausblenden", category: "Visuell", default: false },
   { id: "bossbar", name: "Bossbar ausblenden", description: "Blendet die Bossleiste aus", category: "Visuell", default: false },
+  { id: "shulkerpreview", name: "Shulker-Vorschau", description: "Inhalt von Shulker-Kisten beim Drüberfahren", category: "Visuell", default: true },
   { id: "fpsboost", name: "FPS-Boost", description: "Wolken, Partikel, Schatten und Biom-Übergänge herunterdrehen", category: "Visuell", default: false },
   { id: "lightoverlay", name: "Light Level Overlay", description: "Zeigt, wo Monster spawnen können", category: "Visuell", default: false },
   { id: "snaplook", name: "Snaplook", description: "Taste V halten: dich selbst von vorne sehen", category: "Mechanik", default: true },

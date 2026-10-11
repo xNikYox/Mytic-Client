@@ -27,6 +27,7 @@ import de.myticlegacy.client.module.FreelookModule;
 import de.myticlegacy.client.module.FriendsModule;
 import de.myticlegacy.client.module.Module;
 import de.myticlegacy.client.module.SimpleModules;
+import de.myticlegacy.client.module.ShulkerPreviewModule;
 import de.myticlegacy.client.module.SnaplookModule;
 import de.myticlegacy.client.module.ZoomModule;
 import net.fabricmc.api.ClientModInitializer;
@@ -49,7 +50,7 @@ import java.util.List;
 public final class MyticClient implements ClientModInitializer {
     public static final String ID = "myticclient";
     public static final String NAME = "Mytic Client";
-    public static final String VERSION = "2.14";
+    public static final String VERSION = "2.15";
     public static final Logger LOG = LoggerFactory.getLogger(NAME);
 
     public static final List<Module> MODULES = new ArrayList<>();
@@ -78,6 +79,7 @@ public final class MyticClient implements ClientModInitializer {
     public static AutoTextModule autoText;
     public static LightOverlayModule lightOverlay;
     public static FpsBoostModule fpsBoost;
+    public static ShulkerPreviewModule shulkerPreview;
     public static FriendsModule friends;
 
     private static Config config;
@@ -186,6 +188,7 @@ public final class MyticClient implements ClientModInitializer {
         autoText = module(new AutoTextModule());
         lightOverlay = module(new LightOverlayModule());
         fpsBoost = module(new FpsBoostModule());
+        shulkerPreview = module(new ShulkerPreviewModule());
         friends = module(new FriendsModule());
         theme = module(new SimpleModules.Theme());
 
@@ -201,6 +204,12 @@ public final class MyticClient implements ClientModInitializer {
         Friends.start();
         CombatTracker.register();
         ClientTickEvents.END_CLIENT_TICK.register(MyticClient::tick);
+        net.fabricmc.fabric.api.client.item.v1.ItemTooltipCallback.EVENT.register((stack, context, flag, lines) -> shulkerPreview.trimTooltip(stack, lines));
+        ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> {
+            if (screen instanceof net.minecraft.client.gui.screens.inventory.AbstractContainerScreen<?>) {
+                ScreenEvents.afterRender(screen).register((s, g, mouseX, mouseY, delta) -> shulkerPreview.draw(s, g, mouseX, mouseY));
+            }
+        });
         ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> {
             if (screen instanceof TitleScreen && theme.customMenu.get()) {
                 client.execute(() -> {

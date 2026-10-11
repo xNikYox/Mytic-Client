@@ -24,6 +24,7 @@ val renames = listOf(
     Regex("""\.drawString\(""") to ".text(",
     Regex("""\.drawCenteredString\(""") to ".centeredText(",
     Regex("""\.renderItem\(""") to ".item(",
+    Regex("""ScreenEvents\.afterRender\(""") to "ScreenEvents.afterExtract(",
     Regex("""\.renderOutline\(""") to ".outline(",
     Regex("""\brenderPanorama\(""") to "extractPanorama(",
     Regex("""void render\(GuiGraphicsExtractor (\w+), int mouseX, int mouseY, float delta\)""") to "void extractRenderState(GuiGraphicsExtractor $1, int mouseX, int mouseY, float delta)",

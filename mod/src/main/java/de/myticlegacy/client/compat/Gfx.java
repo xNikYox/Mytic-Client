@@ -31,4 +31,9 @@ public final class Gfx {
     public static void noScissor(GuiGraphics g) {
         g.disableScissor();
     }
+
+    /** Nach vorne holen (bis 1.21.5 über Tiefe, damit Inventar-Items nicht durchscheinen). */
+    public static void raise(GuiGraphics g, float z) {
+        // ab 1.21.6 zeichnet die Oberfläche in Reihenfolge, ohne Tiefe
+    }
 }

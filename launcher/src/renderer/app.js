@@ -63,6 +63,7 @@ const MOD_ICONS = {
   nohurtcam: '<path d="M3 8h3l2-3h8l2 3h3v11H3z"/><circle cx="12" cy="13" r="3.5"/>',
   scoreboard: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>',
   bossbar: '<rect x="3" y="9" width="18" height="6" rx="3"/><path d="M6 12h8"/>',
+  shulkerpreview: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M3 11h18M8 4h8l2 3H6z"/>',
   fpsboost: '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
   lightoverlay: '<path d="M5 5l14 14M19 5L5 19"/><rect x="3" y="3" width="18" height="18" rx="2"/>',
   snaplook: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/>',

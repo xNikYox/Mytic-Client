@@ -13,7 +13,8 @@
     "AbstractClientPlayerMixin",
     "AvatarRendererMixin",
     "AvatarRenderStateMixin",
-    "LivingEntityRendererInvoker"
+    "LivingEntityRendererInvoker",
+    "AbstractContainerScreenAccessor"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -110,4 +110,9 @@ public final class Compat {
     public static boolean ctrlDown() {
         return net.minecraft.client.gui.screens.Screen.hasControlDown();
     }
+
+    /** Ob Shift gedrückt ist. */
+    public static boolean shiftDown() {
+        return net.minecraft.client.gui.screens.Screen.hasShiftDown();
+    }
 }

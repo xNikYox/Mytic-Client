@@ -74,7 +74,7 @@ import java.util.List;
 public final class MyticClient {
     public static final String ID = "myticclient";
     public static final String NAME = "Mytic Client";
-    public static final String VERSION = "2.14";
+    public static final String VERSION = "2.15";
     public static final Logger LOG = LogManager.getLogger(NAME);
 
     public static final List<Module> MODULES = new ArrayList<Module>();
