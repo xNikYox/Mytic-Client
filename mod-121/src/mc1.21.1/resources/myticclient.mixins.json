@@ -17,7 +17,10 @@
     "AvatarRenderStateMixin",
     "LivingEntityRendererInvoker",
     "AbstractContainerScreenAccessor",
-    "CapeLayerMixin"
+    "CapeLayerMixin",
+    "ItemModelResolverMixin",
+    "ShieldSpecialRendererMixin",
+    "ItemInHandLayerMixin"
   ],
   "injectors": {
     "defaultRequire": 1

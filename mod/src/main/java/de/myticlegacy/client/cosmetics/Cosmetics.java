@@ -48,6 +48,12 @@ public final class Cosmetics {
         return CosmeticsCore.wingsOf(e.getUUID().toString().replace("-", ""), e.getUUID().equals(mc.player.getUUID()));
     }
 
+    /** Vorschau eines Schilds im Cosmetics-Menü: Vorderseite (6,6 / 72x132 in der 384x384-Textur), animiert wenn gewünscht. */
+    public static void drawShieldPreview(GuiGraphics g, String id, int x, int y, int w, int h, boolean animated) {
+        int frame = animated ? CosmeticsCore.shieldFrame(id) : 0;
+        Blit.region(g, Identifier.fromNamespaceAndPath("myticclient", "textures/shield/" + id + "_" + frame + ".png"), x, y, w, h, 6, 6, 72, 132, 384, 384);
+    }
+
     /** Vorschau eines Flügelpaars im Cosmetics-Menü (eigenes kleines Vorschaubild aus dem Paket) mit animiertem Glanz. */
     public static void drawWingPreview(GuiGraphics g, String id, int x, int y, int w, int h) {
         Blit.region(g, Identifier.fromNamespaceAndPath("myticclient", "textures/wings/" + id + "_icon.png"), x, y, w, h, 0, 0, 240, 144, 240, 144);

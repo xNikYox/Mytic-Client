@@ -20,7 +20,7 @@ public class CosmeticsScreen extends PanelScreen {
     private static final int PREVIEW_H = 64;
     private double scrollPos;
     private double scrollTarget;
-    private static final String[] TABS = {"Umhänge", "MiniMe", "Flügel"};
+    private static final String[] TABS = {"Umhänge", "MiniMe", "Flügel", "Schilde"};
     /** zuletzt offener Reiter bleibt beim nächsten Öffnen */
     private static int tab;
     /** Stelle, deren MiniMe gerade bearbeitet wird (Index in MiniMeCore.POSITIONS) */
@@ -77,7 +77,7 @@ public class CosmeticsScreen extends PanelScreen {
     }
 
     private int count() {
-        return (tab == 2 ? CosmeticsCore.wings().size() : CosmeticsCore.capes().size()) + 1;
+        return (tab == 2 ? CosmeticsCore.wings().size() : tab == 3 ? CosmeticsCore.shields().size() : CosmeticsCore.capes().size()) + 1;
     }
 
     private int contentHeight() {
@@ -129,16 +129,18 @@ public class CosmeticsScreen extends PanelScreen {
         clampScroll();
 
         List<CosmeticsCore.Cape> capes = CosmeticsCore.capes();
-        List<String[]> wings = CosmeticsCore.wings();
         boolean wingTab = tab == 2;
-        String selected = wingTab ? CosmeticsCore.selectedWings() : CosmeticsCore.selected();
+        boolean shieldTab = tab == 3;
+        // Flügel und Schilde: Liste aus {id, name, ...}
+        List<String[]> wings = shieldTab ? CosmeticsCore.shields() : CosmeticsCore.wings();
+        String selected = wingTab ? CosmeticsCore.selectedWings() : shieldTab ? CosmeticsCore.selectedShield() : CosmeticsCore.selected();
         boolean inContent = Ui.inside(mouseX, mouseY, cx(), cy(), cw(), ch());
         Gfx.scissor(g, cx(), cy() - 3, cx() + cw(), cy() + ch());
         for (int i = 0; i < count(); i++) {
             int[] c = card(i);
             if (c[1] + CARD_H < cy() - 4 || c[1] > cy() + ch()) continue;
-            CosmeticsCore.Cape cape = i == 0 || wingTab ? null : capes.get(i - 1);
-            String[] wing = i == 0 || !wingTab ? null : wings.get(i - 1);
+            CosmeticsCore.Cape cape = i == 0 || wingTab || shieldTab ? null : capes.get(i - 1);
+            String[] wing = i == 0 || !(wingTab || shieldTab) ? null : wings.get(i - 1);
             String id = cape != null ? cape.id : wing != null ? wing[0] : null;
             boolean active = id == null ? selected == null : id.equals(selected);
             boolean over = inContent && Ui.inside(mouseX, mouseY, c[0], c[1], CARD_W, CARD_H);
@@ -153,7 +155,11 @@ public class CosmeticsScreen extends PanelScreen {
             int ph2 = PREVIEW_H;
             int ix = c[0] + (CARD_W - pw2) / 2;
             int iy = c[1] + 6 - Math.round(hv * 2);
-            if (wing != null) {
+            if (wing != null && shieldTab) {
+                // Vorderseite 12x22 Pixel, mittig in der Vorschaufläche
+                int sw = ph2 * 12 / 22;
+                Cosmetics.drawShieldPreview(g, wing[0], c[0] + (CARD_W - sw) / 2, iy, sw, ph2, over || active);
+            } else if (wing != null) {
                 int ww = CARD_W - 4;
                 int wh = ww * 3 / 5;
                 Cosmetics.drawWingPreview(g, wing[0], c[0] + 2, iy + (ph2 - wh) / 2, ww, wh);
@@ -184,7 +190,7 @@ public class CosmeticsScreen extends PanelScreen {
         String hint = "F5: Ansicht wechseln";
         int hintW = font.width(hint);
         String info = !Friends.available() ? (wingTab ? "Nur du siehst sie (ohne Mytic Launcher)" : "Nur du siehst ihn (ohne Mytic Launcher)")
-                : wingTab ? "Andere Mytic-Spieler sehen deine Flügel" : "Andere Mytic-Spieler sehen deinen Umhang";
+                : wingTab ? "Andere Mytic-Spieler sehen deine Flügel" : shieldTab ? "Andere Mytic-Spieler sehen deinen Schild" : "Andere Mytic-Spieler sehen deinen Umhang";
         Ui.text(g, font.plainSubstrByWidth(info, pw - 40 - hintW), px + 12, fy, Ui.MUTED, false);
         Ui.text(g, hint, px + pw - 12 - hintW, fy, Ui.withAlpha(Ui.MUTED, 160), false);
     }
@@ -418,6 +424,7 @@ public class CosmeticsScreen extends PanelScreen {
             int[] c = card(i);
             if (Ui.inside(mx, my, c[0], c[1], CARD_W, CARD_H)) {
                 if (tab == 2) CosmeticsCore.selectWings(i == 0 ? null : CosmeticsCore.wings().get(i - 1)[0]);
+                else if (tab == 3) CosmeticsCore.selectShield(i == 0 ? null : CosmeticsCore.shields().get(i - 1)[0]);
                 else CosmeticsCore.select(i == 0 ? null : capes.get(i - 1).id);
                 return true;
             }

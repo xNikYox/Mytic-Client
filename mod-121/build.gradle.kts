@@ -38,8 +38,10 @@ val renames = buildList {
     if (patch >= 9) add(Regex("""\.renderOutline\(""") to ".submitOutline(")
     if (patch >= 9) add(Regex("""net\.minecraft\.client\.model\.player\.PlayerModel""") to "net.minecraft.client.model.PlayerModel")
     if (patch >= 9) add(Regex("""ArmPose\.THROW_TRIDENT""") to "ArmPose.THROW_SPEAR")
+    add(Regex("""net\.minecraft\.client\.model\.object\.equipment\.ShieldModel""") to "net.minecraft.client.model.ShieldModel")
     add(Regex("""net\.minecraft\.client\.renderer\.rendertype\.RenderTypes""") to "net.minecraft.client.renderer.RenderType")
     add(Regex("""\bRenderTypes\.""") to "RenderType.")
+    add(Regex("""net\.minecraft\.client\.renderer\.rendertype\.RenderType\b""") to "net.minecraft.client.renderer.RenderType")
 }
 // Erst die Versionsordner (speziellster zuerst), dann der gemeinsame Code; bei gleichen Dateien gewinnt die erste
 val copyShared by tasks.registering(Sync::class) {

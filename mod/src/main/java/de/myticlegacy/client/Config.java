@@ -27,6 +27,8 @@ public final class Config {
     /** Bis 2.18: ein MiniMe und seine Stelle – wird beim ersten Start nach miniMes übernommen. */
     public String miniMe;
     public String miniMePos;
+    /** Gewählter Schild (Cosmetics), null = keiner. */
+    public String shield;
     /** Gewählte Flügel (Cosmetics), null = keine. */
     public String wings;
     /** Grafik-Optionen vor dem Einschalten von FPS-Boost (Name → Wert als Text), werden beim Ausschalten zurückgesetzt. */

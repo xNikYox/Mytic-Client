@@ -55,6 +55,8 @@ public final class CosmeticsCore {
     private static List<Cape> capes;
     /** Flügel aus dem Katalog: {id, name} */
     private static List<String[]> wings = Collections.emptyList();
+    /** Schilde aus dem Katalog: {id, name, bilder, ms je bild} */
+    private static List<String[]> shields = Collections.emptyList();
 
     /** uuid (ohne Striche) → Umhang-ID oder "" (keiner). */
     private static final Map<String, String> REMOTE = new ConcurrentHashMap<>();
@@ -64,6 +66,8 @@ public final class CosmeticsCore {
     /** Glanz-Animation der Flügel: Bilder und Dauer pro Bild (wie im Cosmetics-Paket). */
     public static final int WING_FX_FRAMES = 16;
     public static final long WING_FX_MS = 90;
+    /** uuid (ohne Striche) → Schild-ID oder "" (keiner). */
+    private static final Map<String, String> REMOTE_SHIELD = new ConcurrentHashMap<>();
     /** uuid (ohne Striche) → Flügel-ID oder "" (keine). */
     private static final Map<String, String> REMOTE_WINGS = new ConcurrentHashMap<>();
     private static final Map<String, Long> ASKED = new ConcurrentHashMap<>();
@@ -100,6 +104,14 @@ public final class CosmeticsCore {
                             }
                             wings = Collections.unmodifiableList(w);
                         }
+                        if (root.has("shields")) {
+                            List<String[]> sh = new ArrayList<>();
+                            for (JsonElement e : root.getAsJsonArray("shields")) {
+                                JsonObject o = e.getAsJsonObject();
+                                sh.add(new String[]{o.get("id").getAsString(), o.get("name").getAsString(), o.get("frames").getAsString(), o.get("frameMs").getAsString()});
+                            }
+                            shields = Collections.unmodifiableList(sh);
+                        }
                         JsonArray array = root.getAsJsonArray("capes");
                         for (JsonElement e : array) {
                             JsonObject o = e.getAsJsonObject();
@@ -128,6 +140,51 @@ public final class CosmeticsCore {
             }
         }
         return new int[]{20, 24};
+    }
+
+    /** Schilde im Paket: {id, name, bilder, ms je bild} */
+    public static List<String[]> shields() {
+        capes();
+        return shields;
+    }
+
+    public static boolean hasShield(String id) {
+        if (id == null) return false;
+        for (String[] s : shields()) if (s[0].equals(id)) return true;
+        return false;
+    }
+
+    /** Aktuelles Bild eines animierten Schilds. */
+    public static int shieldFrame(String id) {
+        for (String[] s : shields()) {
+            if (s[0].equals(id)) {
+                int frames = Integer.parseInt(s[2]);
+                long ms = Long.parseLong(s[3]);
+                return (int) ((System.currentTimeMillis() / ms) % frames);
+            }
+        }
+        return 0;
+    }
+
+    /** Eigener Schild (Vorschau: -Dmytic.shieldDemo=<id>). */
+    public static String selectedShield() {
+        String demo = System.getProperty("mytic.shieldDemo");
+        if (demo != null && hasShield(demo)) return demo;
+        String id = MyticClient.config().shield;
+        return hasShield(id) ? id : null;
+    }
+
+    public static void selectShield(String id) {
+        MyticClient.config().shield = id;
+        MyticClient.config().save();
+        push();
+    }
+
+    /** Schild eines Spielers: eigener aus der Auswahl, andere vom Friends-Server. */
+    public static String shieldOf(String uuid, boolean self) {
+        if (self) return selectedShield();
+        String id = REMOTE_SHIELD.get(uuid);
+        return id == null || id.isEmpty() || !hasShield(id) ? null : id;
     }
 
     /** Verlieren diese Flügel ab und zu Federn (Bild <id>_feather.png im Paket)? */
@@ -184,6 +241,7 @@ public final class CosmeticsCore {
         final String id = MyticClient.config().cape;
         final Map<String, String> minis = MiniMeCore.selectedAll();
         final String wingsId = MyticClient.config().wings;
+        final String shieldId = MyticClient.config().shield;
         Friends.background(() -> {
             try {
                 JsonObject body = new JsonObject();
@@ -192,6 +250,7 @@ public final class CosmeticsCore {
                 for (Map.Entry<String, String> e : minis.entrySet()) set.addProperty(e.getKey(), e.getValue());
                 body.add("minimes", set);
                 body.addProperty("wings", wingsId);
+                body.addProperty("shield", shieldId);
                 Friends.post("api/cosmetics", body);
             } catch (Exception e) {
                 MyticClient.LOG.warn("Cosmetics nicht gespeichert: " + e.getMessage());
@@ -231,7 +290,7 @@ public final class CosmeticsCore {
      */
     public static void tick(List<String> nearby) {
         if (!Friends.available()) return;
-        if (!pushed && (MyticClient.config().cape != null || MiniMeCore.any() || MyticClient.config().wings != null)) push();
+        if (!pushed && (MyticClient.config().cape != null || MiniMeCore.any() || MyticClient.config().wings != null || MyticClient.config().shield != null)) push();
         if (lookupRunning) return;
         long now = System.currentTimeMillis();
         final List<String> ask = new ArrayList<>();
@@ -260,6 +319,10 @@ public final class CosmeticsCore {
                         minis.put(e.getKey(), set);
                     }
                 }
+                Map<String, String> shieldsFound = new HashMap<>();
+                if (answer.has("shields")) {
+                    for (Map.Entry<String, JsonElement> e : answer.getAsJsonObject("shields").entrySet()) shieldsFound.put(e.getKey(), e.getValue().getAsString());
+                }
                 Map<String, String> wingsFound = new HashMap<>();
                 if (answer.has("wings")) {
                     for (Map.Entry<String, JsonElement> e : answer.getAsJsonObject("wings").entrySet()) wingsFound.put(e.getKey(), e.getValue().getAsString());
@@ -267,6 +330,7 @@ public final class CosmeticsCore {
                 for (String uuid : ask) {
                     REMOTE.put(uuid, found.containsKey(uuid) ? found.get(uuid) : "");
                     REMOTE_MINI.put(uuid, minis.containsKey(uuid) ? minis.get(uuid) : new HashMap<String, String>());
+                    REMOTE_SHIELD.put(uuid, shieldsFound.containsKey(uuid) ? shieldsFound.get(uuid) : "");
                     REMOTE_WINGS.put(uuid, wingsFound.containsKey(uuid) ? wingsFound.get(uuid) : "");
                 }
             } catch (Exception e) {

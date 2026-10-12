@@ -206,4 +206,8 @@ public final class Cosmetics {
     public static void drawWingPreview(GuiGraphics g, String id, int x, int y, int w, int h) {
         Wings.drawPreview(g, id, x, y, w, h);
     }
+
+    /** 1.8.9 hat keine Schilde (der Reiter fehlt dort). */
+    public static void drawShieldPreview(GuiGraphics g, String id, int x, int y, int w, int h, boolean animated) {
+    }
 }

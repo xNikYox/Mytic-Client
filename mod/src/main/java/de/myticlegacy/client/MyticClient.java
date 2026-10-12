@@ -293,6 +293,7 @@ public final class MyticClient implements ClientModInitializer {
         zoom.tick(mc);
         freelook.tick(mc);
         snaplook.tick(mc);
+        de.myticlegacy.client.cosmetics.Shields.demoTick(mc);
         autoText.tick(mc);
         lightOverlay.tick(mc);
         fpsBoost.tick(mc);

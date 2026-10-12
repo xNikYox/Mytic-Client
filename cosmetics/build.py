@@ -26,14 +26,22 @@ PIXEL_WINGS = [("rabe", "Rabe"), ("taube", "Taube"), ("elster", "Elster"), ("pho
                ("amethyst", "Amethyst"), ("kirsche", "Kirschblüte"), ("sonne", "Sonnengold"), ("polarlicht", "Polarlicht"),
                ("sternennacht", "Sternennacht")]
 
+# Schilde aus shields.py (24 Bilder, gezeichnet 12-fach, ausgeliefert 6-fach = 384x384 im 64x64-Format des Minecraft-Schilds)
+SHIELDS = [("void", "Void"), ("death", "Death"), ("mytic", "Mytic Neon"), ("drache", "Drachenschuppen"), ("galaxie", "Galaxie"),
+           ("lava", "Lava"), ("frost", "Frost"), ("gewitter", "Gewitter"), ("kristall", "Kristall"), ("totenkopf", "Totenkopf"),
+           ("code", "Code-Regen"), ("synthwave", "Synthwave")]
+SHIELD_FRAMES = os.path.join(BUILD, "shields")
+
 
 def main():
     os.makedirs(FRAMES, exist_ok=True)
     if "--skip-render" not in sys.argv:
         subprocess.run([sys.executable, os.path.join(HERE, "capes.py"), FRAMES], check=True)
+        subprocess.run([sys.executable, os.path.join(HERE, "shields.py"), SHIELD_FRAMES], check=True)
     catalog = {"version": VERSION, "scale": 8, "capes": [{"id": i, "name": n, "frames": 24, "frameMs": 70} for i, n in CAPES],
                "wings": [{"id": i, "name": n, "fxFrames": 16, "fxMs": 90} for i, n in WINGS]
-                        + [{"id": i, "name": n, "fxFrames": 16, "fxMs": 90, "w": 24, "h": 20, "feathers": True} for i, n in PIXEL_WINGS]}
+                        + [{"id": i, "name": n, "fxFrames": 16, "fxMs": 90, "w": 24, "h": 20, "feathers": True} for i, n in PIXEL_WINGS],
+               "shields": [{"id": i, "name": n, "frames": 24, "frameMs": 70} for i, n in SHIELDS]}
     subprocess.run([sys.executable, os.path.join(HERE, "wings.py"), os.path.join(BUILD, "wings")], check=True)
     subprocess.run([sys.executable, os.path.join(HERE, "pixelwings.py"), os.path.join(BUILD, "wings")], check=True)
     # kleine, weich verkleinerte Bilder für die Vorschau im Cosmetics-Menü (große Texturen flimmern dort)
@@ -44,7 +52,7 @@ def main():
             subprocess.run(["convert", os.path.join(wdir, src), "-filter", "Lanczos", "-resize", "240x144!", "-depth", "8",
                             f"PNG32:{os.path.join(wdir, dst)}"], check=True)
     mod = {"schemaVersion": 1, "id": "myticcosmetics", "version": VERSION, "name": "Mytic Cosmetics",
-           "description": "Umhänge des Mytic Clients (nur Texturen)", "environment": "client"}
+           "description": "Cosmetics des Mytic Clients (nur Texturen)", "environment": "client"}
     # Maske aus der Form der Original-Elytra (Bereich 22,0–46,22), auf 12-fache Größe ohne Glätten vergrößert,
     # dazu eine weiche Abdunklung zum Rand hin
     global MASK, MASK_SHADE
@@ -99,6 +107,13 @@ def main():
         for f in range(24):
             name = f"{cid}_{f}.png"
             subprocess.run(["convert", os.path.join(FRAMES, name), "-filter", "Lanczos", "-resize", "512x256!", "-depth", "8", f"PNG32:{os.path.join(small, name)}"], check=True)
+    shield_small = os.path.join(BUILD, "shields-small")
+    os.makedirs(shield_small, exist_ok=True)
+    for sid, _ in SHIELDS:
+        for f in range(24):
+            name = f"{sid}_{f}.png"
+            subprocess.run(["convert", os.path.join(SHIELD_FRAMES, name), "-filter", "Lanczos", "-resize", "384x384!", "-depth", "8",
+                            f"PNG32:{os.path.join(shield_small, name)}"], check=True)
     jar = os.path.join(BUILD, f"mytic-cosmetics-{VERSION}.jar")
     with zipfile.ZipFile(jar, "w", zipfile.ZIP_STORED) as z:  # PNGs sind schon komprimiert
         z.writestr("fabric.mod.json", json.dumps(mod, indent=2))
@@ -107,6 +122,10 @@ def main():
             for f in range(24):
                 name = f"{cid}_{f}.png"
                 z.write(os.path.join(small, name), f"assets/myticclient/textures/cape/{name}")
+        for sid, _ in SHIELDS:
+            for f in range(24):
+                name = f"{sid}_{f}.png"
+                z.write(os.path.join(shield_small, name), f"assets/myticclient/textures/shield/{name}")
         for wid, _ in PIXEL_WINGS:
             z.write(os.path.join(BUILD, "wings", f"{wid}_feather.png"), f"assets/myticclient/textures/wings/{wid}_feather.png")
         for wid, _ in WINGS + PIXEL_WINGS:
