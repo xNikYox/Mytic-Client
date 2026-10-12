@@ -18,6 +18,7 @@ CAPES = [
     ("mond", "Mytic Mond"), ("nordlicht", "Nordlicht"), ("inferno", "Inferno"), ("tiefsee", "Tiefsee"),
     ("coderegen", "Code-Regen"), ("synthwave", "Synthwave"), ("gewitter", "Gewitter"),
     ("kirschbluete", "Kirschblüte"), ("eiskristall", "Eiskristall"), ("galaxie", "Galaxie"), ("totenkopf", "Totenkopf"),
+    ("ozean", "Ozean"), ("netherportal", "Netherportal"), ("feuerwerk", "Feuerwerk"), ("regenbogen", "Regenbogen"), ("herzen", "Herzen"), ("gold", "Königsgold"),
 ]
 
 WINGS = [("engel", "Engel"), ("inferno", "Inferno"), ("eis", "Eis"), ("neon", "Mytic Neon"), ("smaragd", "Smaragd")]
@@ -29,7 +30,8 @@ PIXEL_WINGS = [("rabe", "Rabe"), ("taube", "Taube"), ("elster", "Elster"), ("pho
 # Schilde aus shields.py (24 Bilder, gezeichnet 12-fach, ausgeliefert 6-fach = 384x384 im 64x64-Format des Minecraft-Schilds)
 SHIELDS = [("void", "Void"), ("death", "Death"), ("mytic", "Mytic Neon"), ("drache", "Drachenschuppen"), ("galaxie", "Galaxie"),
            ("lava", "Lava"), ("frost", "Frost"), ("gewitter", "Gewitter"), ("kristall", "Kristall"), ("totenkopf", "Totenkopf"),
-           ("code", "Code-Regen"), ("synthwave", "Synthwave")]
+           ("code", "Code-Regen"), ("synthwave", "Synthwave"), ("ozean", "Ozean"), ("netherportal", "Netherportal"),
+           ("feuerwerk", "Feuerwerk"), ("regenbogen", "Regenbogen"), ("herzen", "Herzen"), ("gold", "Königsgold")]
 SHIELD_FRAMES = os.path.join(BUILD, "shields")
 
 

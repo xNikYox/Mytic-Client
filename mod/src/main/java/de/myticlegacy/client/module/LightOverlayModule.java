@@ -6,8 +6,10 @@ import de.myticlegacy.client.setting.ColorSetting;
 import de.myticlegacy.client.setting.SliderSetting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.NaturalSpawner;
+import net.minecraft.world.level.biome.Biomes;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.block.state.BlockState;
@@ -17,7 +19,7 @@ import java.util.List;
 
 /**
  * Light Level Overlay wie bei Lunar: markiert Blöcke, auf denen Monster spawnen können (Blocklicht 0).
- * Rot = jederzeit (auch kein Himmelslicht), Gelb = nur nachts. Wird alle 10 Ticks neu berechnet.
+ * Rot = jederzeit (auch kein Himmelslicht), Gelb = nur nachts. Der Scan ist auf 4 Ticks verteilt.
  */
 public class LightOverlayModule extends Module {
     private final SliderSetting radius;
@@ -26,7 +28,11 @@ public class LightOverlayModule extends Module {
     private final ColorSetting nightColor;
     /** x, y, z, Art (0 = jederzeit, 1 = nachts) */
     private volatile List<int[]> markers = new ArrayList<>();
-    private int cooldown;
+    /** Laufender Durchgang: wird über SLICES Ticks verteilt aufgebaut, dann getauscht (kein Ruckeln bei großem Radius) */
+    private List<int[]> building = new ArrayList<>();
+    private int slice;
+    private BlockPos sweepCenter;
+    private static final int SLICES = 4;
 
     public LightOverlayModule() {
         super("lightoverlay", "Light Level Overlay", "Zeigt, wo Monster spawnen können (rot: immer, gelb: nachts)", Category.VISUELL, () -> Items.GLOWSTONE_DUST, false);
@@ -39,34 +45,56 @@ public class LightOverlayModule extends Module {
     public void tick(Minecraft mc) {
         if (!enabled() || mc.level == null || mc.player == null) {
             if (!markers.isEmpty()) markers = new ArrayList<>();
+            slice = 0;
+            building = new ArrayList<>();
             return;
         }
-        if (--cooldown > 0) return;
-        cooldown = 10;
         Level level = mc.level;
-        BlockPos center = mc.player.blockPosition();
+        if (slice == 0) sweepCenter = mc.player.blockPosition();
+        BlockPos center = sweepCenter;
         int r = radius.intValue();
         int ry = Math.min(r, 10);
-        List<int[]> found = new ArrayList<>();
+        // je Tick ein Streifen von x-Spalten
+        int from = -r + (2 * r + 1) * slice / SLICES;
+        int to = -r + (2 * r + 1) * (slice + 1) / SLICES;
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
         BlockPos.MutableBlockPos below = new BlockPos.MutableBlockPos();
-        for (int dx = -r; dx <= r; dx++) {
+        BlockPos.MutableBlockPos above = new BlockPos.MutableBlockPos();
+        for (int dx = from; dx < to; dx++) {
             for (int dz = -r; dz <= r; dz++) {
                 if (dx * dx + dz * dz > r * r) continue;
                 for (int dy = -ry; dy <= ry; dy++) {
                     pos.set(center.getX() + dx, center.getY() + dy, center.getZ() + dz);
-                    BlockState state = level.getBlockState(pos);
-                    if (!state.getCollisionShape(level, pos).isEmpty() || !state.getFluidState().isEmpty()) continue;
-                    below.set(pos.getX(), pos.getY() - 1, pos.getZ());
-                    BlockState ground = level.getBlockState(below);
-                    if (!ground.isFaceSturdy(level, below, Direction.UP)) continue;
-                    if (level.getBrightness(LightLayer.BLOCK, pos) > 0) continue;
-                    int kind = level.getBrightness(LightLayer.SKY, pos) == 0 ? 0 : 1;
-                    found.add(new int[]{pos.getX(), pos.getY(), pos.getZ(), kind});
+                    if (spawnable(level, pos, below, above)) {
+                        int kind = level.getBrightness(LightLayer.SKY, pos) == 0 ? 0 : 1;
+                        building.add(new int[]{pos.getX(), pos.getY(), pos.getZ(), kind});
+                    }
                 }
             }
         }
-        markers = found;
+        if (++slice >= SLICES) {
+            markers = building;
+            building = new ArrayList<>();
+            slice = 0;
+        }
+    }
+
+    /**
+     * Kann hier ein Monster (Zombie) spawnen? Wie Minecraft: Spawn-Block leer (keine Kollision, kein Wasser, keine Schiene
+     * o. Ä.), darüber Platz, darunter ein Block, auf dem Monster spawnen dürfen (nicht Glas, Laub, Halbstufe unten, Eis
+     * …), kein Blocklicht, kein Pilzland.
+     */
+    private static boolean spawnable(Level level, BlockPos pos, BlockPos.MutableBlockPos below, BlockPos.MutableBlockPos above) {
+        BlockState state = level.getBlockState(pos);
+        if (!NaturalSpawner.isValidEmptySpawnBlock(level, pos, state, state.getFluidState(), EntityType.ZOMBIE)) return false;
+        below.set(pos.getX(), pos.getY() - 1, pos.getZ());
+        BlockState ground = level.getBlockState(below);
+        if (!ground.isValidSpawn(level, below, EntityType.ZOMBIE)) return false;
+        if (level.getBrightness(LightLayer.BLOCK, pos) > 0) return false;
+        above.set(pos.getX(), pos.getY() + 1, pos.getZ());
+        BlockState head = level.getBlockState(above);
+        if (!head.getCollisionShape(level, above).isEmpty()) return false;
+        return !level.getBiome(pos).is(Biomes.MUSHROOM_FIELDS);
     }
 
     /** Zeichnet ein flaches X auf jeden markierten Block. */

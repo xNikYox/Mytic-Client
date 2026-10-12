@@ -10,6 +10,8 @@ import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.client.renderer.WorldRenderer;
 import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.EntityLiving;
+import net.minecraft.world.SpawnerAnimals;
 import net.minecraft.init.Items;
 import net.minecraft.util.BlockPos;
 import net.minecraft.world.EnumSkyBlock;
@@ -20,7 +22,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Light Level Overlay wie bei Lunar: markiert Blöcke, auf denen Monster spawnen können (Blocklicht 0).
+ * Light Level Overlay wie bei Lunar: markiert Blöcke, auf denen Monster spawnen können (in 1.8.9: Licht bis 7).
  * Rot = jederzeit (auch kein Himmelslicht), Gelb = nur nachts. Wird alle 10 Ticks neu berechnet.
  */
 public class LightOverlayModule extends Module {
@@ -56,11 +58,11 @@ public class LightOverlayModule extends Module {
                 if (dx * dx + dz * dz > r * r) continue;
                 for (int dy = -ry; dy <= ry; dy++) {
                     BlockPos pos = center.add(dx, dy, dz);
-                    Block block = world.getBlockState(pos).getBlock();
-                    if (block.getMaterial().blocksMovement() || block.getMaterial().isLiquid()) continue;
-                    if (!World.doesBlockHaveSolidTopSurface(world, pos.down())) continue;
-                    if (world.getLightFor(EnumSkyBlock.BLOCK, pos) > 0) continue;
-                    int kind = world.getLightFor(EnumSkyBlock.SKY, pos) == 0 ? 0 : 1;
+                    // wie Minecraft 1.8.9: Boden, auf dem Monster spawnen dürfen, Platz für zwei Blöcke, kein Wasser
+                    if (!SpawnerAnimals.canCreatureTypeSpawnAtLocation(EntityLiving.SpawnPlacementType.ON_GROUND, world, pos)) continue;
+                    // in 1.8.9 spawnen Monster bis Lichtstufe 7 (nicht erst bei 0 wie ab 1.18)
+                    if (world.getLightFor(EnumSkyBlock.BLOCK, pos) > 7) continue;
+                    int kind = world.getLightFor(EnumSkyBlock.SKY, pos) <= 7 ? 0 : 1;
                     found.add(new int[]{pos.getX(), pos.getY(), pos.getZ(), kind});
                 }
             }

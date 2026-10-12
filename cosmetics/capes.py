@@ -450,6 +450,9 @@ class Skull(Design):
     def edge(self, t): return (225, 225, 225), (25, 25, 25)
 
 DESIGNS = [Moon(), Aurora(), Inferno(), Deep(), Code(), Synth(), Storm(), Sakura(), Ice(), Galaxy(), Skull()]
+import newdesigns
+DESIGNS += newdesigns.install(sys.modules[__name__])
+
 for dsg in DESIGNS:
     if ONLY and dsg.name not in ONLY: continue
     for f in range(N):

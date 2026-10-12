@@ -439,6 +439,9 @@ class Synth(Design):
     def edge(self, t): return hx('#ff2bd6'), hx('#1a0030')
 
 DESIGNS = [Void(), Death(), Neon(), Dragon(), Galaxy(), Lava(), Frost(), Storm(), Crystal(), Skull(), Code(), Synth()]
+import newdesigns
+DESIGNS += newdesigns.install(sys.modules[__name__])
+
 NAMES = {"void": "Void", "death": "Death", "mytic": "Mytic Neon", "drache": "Drachenschuppen", "galaxie": "Galaxie", "lava": "Lava", "frost": "Frost",
          "gewitter": "Gewitter", "kristall": "Kristall", "totenkopf": "Totenkopf", "code": "Code-Regen", "synthwave": "Synthwave"}
 
