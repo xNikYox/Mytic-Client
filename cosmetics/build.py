@@ -33,7 +33,7 @@ def main():
         subprocess.run([sys.executable, os.path.join(HERE, "capes.py"), FRAMES], check=True)
     catalog = {"version": VERSION, "scale": 8, "capes": [{"id": i, "name": n, "frames": 24, "frameMs": 70} for i, n in CAPES],
                "wings": [{"id": i, "name": n, "fxFrames": 16, "fxMs": 90} for i, n in WINGS]
-                        + [{"id": i, "name": n, "fxFrames": 16, "fxMs": 90, "w": 24, "h": 20} for i, n in PIXEL_WINGS]}
+                        + [{"id": i, "name": n, "fxFrames": 16, "fxMs": 90, "w": 24, "h": 20, "feathers": True} for i, n in PIXEL_WINGS]}
     subprocess.run([sys.executable, os.path.join(HERE, "wings.py"), os.path.join(BUILD, "wings")], check=True)
     subprocess.run([sys.executable, os.path.join(HERE, "pixelwings.py"), os.path.join(BUILD, "wings")], check=True)
     # kleine, weich verkleinerte Bilder für die Vorschau im Cosmetics-Menü (große Texturen flimmern dort)
@@ -107,6 +107,8 @@ def main():
             for f in range(24):
                 name = f"{cid}_{f}.png"
                 z.write(os.path.join(small, name), f"assets/myticclient/textures/cape/{name}")
+        for wid, _ in PIXEL_WINGS:
+            z.write(os.path.join(BUILD, "wings", f"{wid}_feather.png"), f"assets/myticclient/textures/wings/{wid}_feather.png")
         for wid, _ in WINGS + PIXEL_WINGS:
             z.write(os.path.join(BUILD, "wings", f"{wid}.png"), f"assets/myticclient/textures/wings/{wid}.png")
             z.write(os.path.join(BUILD, "wings", f"{wid}_icon.png"), f"assets/myticclient/textures/wings/{wid}_icon.png")

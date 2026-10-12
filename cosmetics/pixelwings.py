@@ -243,6 +243,21 @@ def convert(src, dst, scale, canvas=None):
     subprocess.run(["convert", src, "-filter", "point", "-resize", f"{scale * 100}%", *pad, "-depth", "8", f"PNG32:{dst}"], check=True)
 
 
+def render_feather(pal):
+    """Kleine Feder 4x8 (Spitze oben) zum Herabfallen; Textur 8x8: links vorne, rechts die Rückseite."""
+    rows = [hexrgb(c) for c in pal["rows"]] if "rows" in pal else None
+    main = rows[1] if rows else hexrgb(pal["main"])
+    second = hexrgb(pal["second"])
+    shaft = mix(hexrgb(pal["edge"][2]), (255, 255, 255), 0.3)
+    band = hexrgb(pal["band1"])
+    shape = ["..M.", ".MM.", ".MSM", "MMSM", "MBSM", "MSMM", ".S2.", ".S.."]
+    colours = {"M": main, "S": shaft, "B": band, "2": second}
+    half = []
+    for line in shape:
+        half.append([colours[ch] + (255,) if ch in colours else (0, 0, 0, 0) for ch in line])
+    return half
+
+
 def main():
     out = sys.argv[1]
     tmp = os.path.join(out, "tmp-pixel")
@@ -255,6 +270,14 @@ def main():
         convert(pam, os.path.join(out, f"{wid}.png"), 8)
         write_pam(pam, rows, icon=True)
         convert(pam, os.path.join(out, f"{wid}_icon.png"), 2, "240x144")
+        feather = render_feather(pal)
+        fpam = os.path.join(tmp, f"{wid}_feather.pam")
+        with open(fpam, "wb") as fh:
+            fh.write(b"P7\nWIDTH 8\nHEIGHT 8\nDEPTH 4\nMAXVAL 255\nTUPLTYPE RGB_ALPHA\nENDHDR\n")
+            for line in feather:
+                for c in line + list(reversed(line)):
+                    fh.write(bytes(c))
+        convert(fpam, os.path.join(out, f"{wid}_feather.png"), 4)
         sp = sparkle_points(info, pal["sparkles"], wid)
         for f in range(FRAMES):
             fx = render_fx(pal, info, f, sp)

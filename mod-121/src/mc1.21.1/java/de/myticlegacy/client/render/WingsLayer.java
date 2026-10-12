@@ -2,6 +2,7 @@ package de.myticlegacy.client.render;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import de.myticlegacy.client.cosmetics.CosmeticsCore;
+import de.myticlegacy.client.cosmetics.FeatherFx;
 import de.myticlegacy.client.cosmetics.Cosmetics;
 import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.player.AbstractClientPlayer;
@@ -69,5 +70,38 @@ public class WingsLayer extends RenderLayer<AbstractClientPlayer, PlayerModel<Ab
         left.render(pose, buffers.getBuffer(RenderType.entityTranslucentEmissive(fx)), light, OverlayTexture.NO_OVERLAY);
         right.render(pose, buffers.getBuffer(RenderType.entityTranslucentEmissive(fx)), light, OverlayTexture.NO_OVERLAY);
         pose.popPose();
+        if (CosmeticsCore.wingFeathers(id)) {
+            feathers(pose, buffers, light, player.getId(), net.minecraft.util.Mth.lerp(partialTick, player.xo, player.getX()),
+                    net.minecraft.util.Mth.lerp(partialTick, player.yo, player.getY()), net.minecraft.util.Mth.lerp(partialTick, player.zo, player.getZ()),
+                    net.minecraft.util.Mth.rotLerp(partialTick, player.yBodyRotO, player.yBodyRot), flying, id);
+        }
+    }
+
+    /** Fallende Federn (Weltpositionen aus FeatherFx, hier ins Modell-Koordinatensystem umgerechnet). */
+    private static void feathers(PoseStack pose, MultiBufferSource buffers, int light, int entity, double x, double y, double z, float bodyRot,
+                                 boolean flying, String id) {
+        java.util.List<FeatherFx.Feather> list = FeatherFx.update(entity, x, y, z, bodyRot, flying);
+        if (list == null) return;
+        ResourceLocation texture = ResourceLocation.fromNamespaceAndPath("myticclient", "textures/wings/" + id + "_feather.png");
+        for (FeatherFx.Feather f : list) {
+            if (!(f.part instanceof ModelPart)) f.part = featherPart();
+            ModelPart part = (ModelPart) f.part;
+            part.setRotation(0f, (float) Math.toRadians(f.spin()), (float) Math.toRadians(f.rock()));
+            float[] at = FeatherFx.local(f, x, y, z, bodyRot, 0.9375f, 1.501f);
+            float size = f.size() * 1.6f;
+            pose.pushPose();
+            pose.translate(at[0], at[1], at[2]);
+            pose.scale(size, size, size);
+            part.render(pose, buffers.getBuffer(RenderType.entityCutoutNoCull(texture)), light, OverlayTexture.NO_OVERLAY);
+            pose.popPose();
+        }
+    }
+
+    /** Eine Feder: 4x8 Pixel, flach; Textur 8x8 mit Vorder- und Rückseite. */
+    private static ModelPart featherPart() {
+        MeshDefinition mesh = new MeshDefinition();
+        mesh.getRoot().addOrReplaceChild("f", CubeListBuilder.create().texOffs(0, 0).addBox(-2f, -4f, 0f, 4, 8, 0), PartPose.ZERO);
+        return LayerDefinition.create(mesh, 8, 8).bakeRoot().getChild("f");
     }
 }
+

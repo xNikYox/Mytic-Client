@@ -125,6 +125,84 @@ public final class Wings implements LayerRenderer<AbstractClientPlayer> {
         return tex;
     }
 
+    /** Federbilder je Flügel (aus dem Paket, im Hintergrund gelesen) */
+    private static final Map<String, ResourceLocation> FEATHER = new HashMap<String, ResourceLocation>();
+    private static final Map<String, BufferedImage> FEATHER_DECODED = new ConcurrentHashMap<String, BufferedImage>();
+    private static final Map<String, Boolean> FEATHER_LOADING = new ConcurrentHashMap<String, Boolean>();
+
+    private static ResourceLocation featherTexture(final String id) {
+        ResourceLocation tex = FEATHER.get(id);
+        if (tex != null) return tex;
+        BufferedImage image = FEATHER_DECODED.remove(id);
+        if (image != null) {
+            tex = new ResourceLocation("myticclient", "wings/" + id + "_feather");
+            Minecraft.getMinecraft().getTextureManager().loadTexture(tex, new DynamicTexture(image));
+            FEATHER.put(id, tex);
+            return tex;
+        }
+        if (FEATHER_LOADING.putIfAbsent(id, Boolean.TRUE) == null) {
+            Thread t = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        ZipFile zip = new ZipFile(CosmeticsCore.packPath());
+                        try {
+                            InputStream in = zip.getInputStream(zip.getEntry("assets/myticclient/textures/wings/" + id + "_feather.png"));
+                            try {
+                                FEATHER_DECODED.put(id, ImageIO.read(in));
+                            } finally {
+                                in.close();
+                            }
+                        } finally {
+                            zip.close();
+                        }
+                    } catch (Exception e) {
+                        MyticClient.LOG.warn("Feder " + id + " nicht geladen: " + e);
+                    }
+                }
+            }, "Mytic Feder " + id);
+            t.setDaemon(true);
+            t.start();
+        }
+        return null;
+    }
+
+    /** Fallende Federn (Weltpositionen aus FeatherFx, hier ins Modell-Koordinatensystem umgerechnet). */
+    private static void feathers(AbstractClientPlayer player, float partialTicks, boolean flying, String id) {
+        double x = player.prevPosX + (player.posX - player.prevPosX) * partialTicks;
+        double y = player.prevPosY + (player.posY - player.prevPosY) * partialTicks;
+        double z = player.prevPosZ + (player.posZ - player.prevPosZ) * partialTicks;
+        float bodyYaw = player.prevRenderYawOffset + (player.renderYawOffset - player.prevRenderYawOffset) * partialTicks;
+        java.util.List<FeatherFx.Feather> list = FeatherFx.update(player.getEntityId(), x, y, z, bodyYaw, flying);
+        ResourceLocation tex = featherTexture(id);
+        if (list == null || tex == null) return;
+        Minecraft.getMinecraft().getTextureManager().bindTexture(tex);
+        GlStateManager.disableCull();
+        GlStateManager.color(1f, 1f, 1f, 1f);
+        for (FeatherFx.Feather f : list) {
+            if (!(f.part instanceof ModelRenderer)) {
+                ModelBase base = new ModelBase() {
+                };
+                base.textureWidth = 8;
+                base.textureHeight = 8;
+                ModelRenderer part = new ModelRenderer(base, 0, 0);
+                part.addBox(-2f, -4f, 0f, 4, 8, 0);
+                f.part = part;
+            }
+            ModelRenderer part = (ModelRenderer) f.part;
+            part.rotateAngleY = (float) Math.toRadians(f.spin());
+            part.rotateAngleZ = (float) Math.toRadians(f.rock());
+            float[] at = FeatherFx.local(f, x, y, z, bodyYaw, 0.9375f, 1.5078125f);
+            float size = f.size() * 1.6f;
+            GlStateManager.pushMatrix();
+            GlStateManager.translate(at[0], at[1], at[2]);
+            GlStateManager.scale(size, size, size);
+            part.render(0.0625f);
+            GlStateManager.popMatrix();
+        }
+        GlStateManager.enableCull();
+    }
+
     private static int fxFrame() {
         return 1 + (int) ((System.currentTimeMillis() / CosmeticsCore.WING_FX_MS) % CosmeticsCore.WING_FX_FRAMES);
     }
@@ -181,6 +259,7 @@ public final class Wings implements LayerRenderer<AbstractClientPlayer> {
         OpenGlHelper.setLightmapTextureCoords(OpenGlHelper.lightmapTexUnit, lastX, lastY);
         GlStateManager.enableCull();
         GlStateManager.popMatrix();
+        if (CosmeticsCore.wingFeathers(id)) feathers(player, partialTicks, flying, id);
     }
 
     @Override

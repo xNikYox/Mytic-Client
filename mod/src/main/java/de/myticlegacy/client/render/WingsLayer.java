@@ -2,6 +2,7 @@ package de.myticlegacy.client.render;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import de.myticlegacy.client.cosmetics.CosmeticsCore;
+import de.myticlegacy.client.cosmetics.FeatherFx;
 import de.myticlegacy.client.cosmetics.WingsState;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.model.geom.PartPose;
@@ -69,5 +70,32 @@ public class WingsLayer extends RenderLayer<AvatarRenderState, PlayerModel> {
         collector.submitModelPart(left, pose, RenderTypes.entityTranslucentEmissive(fx), light, OverlayTexture.NO_OVERLAY, null);
         collector.submitModelPart(right, pose, RenderTypes.entityTranslucentEmissive(fx), light, OverlayTexture.NO_OVERLAY, null);
         pose.popPose();
+        if (CosmeticsCore.wingFeathers(id)) feathers(pose, collector, light, state, id);
+    }
+
+    /** Fallende Federn (Weltpositionen aus FeatherFx, hier ins Modell-Koordinatensystem umgerechnet). */
+    private static void feathers(PoseStack pose, SubmitNodeCollector collector, int light, AvatarRenderState state, String id) {
+        java.util.List<FeatherFx.Feather> list = FeatherFx.update(state.id, state.x, state.y, state.z, state.bodyRot, state.isFallFlying);
+        if (list == null) return;
+        Identifier texture = Identifier.fromNamespaceAndPath("myticclient", "textures/wings/" + id + "_feather.png");
+        for (FeatherFx.Feather f : list) {
+            if (!(f.part instanceof ModelPart)) f.part = featherPart();
+            ModelPart part = (ModelPart) f.part;
+            part.setRotation(0f, (float) Math.toRadians(f.spin()), (float) Math.toRadians(f.rock()));
+            float[] at = FeatherFx.local(f, state.x, state.y, state.z, state.bodyRot, 0.9375f, 1.501f);
+            float size = f.size() * 1.6f;
+            pose.pushPose();
+            pose.translate(at[0], at[1], at[2]);
+            pose.scale(size, size, size);
+            collector.submitModelPart(part, pose, RenderTypes.entityCutoutNoCull(texture), light, OverlayTexture.NO_OVERLAY, null);
+            pose.popPose();
+        }
+    }
+
+    /** Eine Feder: 4x8 Pixel, flach; Textur 8x8 mit Vorder- und Rückseite. */
+    private static ModelPart featherPart() {
+        MeshDefinition mesh = new MeshDefinition();
+        mesh.getRoot().addOrReplaceChild("f", CubeListBuilder.create().texOffs(0, 0).addBox(-2f, -4f, 0f, 4, 8, 0), PartPose.ZERO);
+        return LayerDefinition.create(mesh, 8, 8).bakeRoot().getChild("f");
     }
 }

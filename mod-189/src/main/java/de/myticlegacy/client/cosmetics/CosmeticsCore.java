@@ -95,7 +95,8 @@ public final class CosmeticsCore {
                                 // Größe des Flügels in Modell-Pixeln (Standard 20x24, breite Pixel-Flügel 24x20)
                                 String ww = o.has("w") ? o.get("w").getAsString() : "20";
                                 String wh = o.has("h") ? o.get("h").getAsString() : "24";
-                                w.add(new String[]{o.get("id").getAsString(), o.get("name").getAsString(), ww, wh});
+                                String feathers = o.has("feathers") && o.get("feathers").getAsBoolean() ? "1" : "0";
+                                w.add(new String[]{o.get("id").getAsString(), o.get("name").getAsString(), ww, wh, feathers});
                             }
                             wings = Collections.unmodifiableList(w);
                         }
@@ -129,7 +130,13 @@ public final class CosmeticsCore {
         return new int[]{20, 24};
     }
 
-    /** Flügel im Paket: {id, name, breite, höhe} */
+    /** Verlieren diese Flügel ab und zu Federn (Bild <id>_feather.png im Paket)? */
+    public static boolean wingFeathers(String id) {
+        for (String[] w : wings()) if (w[0].equals(id)) return w.length > 4 && "1".equals(w[4]);
+        return false;
+    }
+
+    /** Flügel im Paket: {id, name, breite, höhe, federn} */
     public static List<String[]> wings() {
         capes();
         return wings;
