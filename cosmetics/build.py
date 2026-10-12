@@ -17,7 +17,7 @@ FRAMES = os.path.join(BUILD, "frames")
 CAPES = [
     ("mond", "Mytic Mond"), ("nordlicht", "Nordlicht"), ("inferno", "Inferno"), ("tiefsee", "Tiefsee"),
     ("coderegen", "Code-Regen"), ("synthwave", "Synthwave"), ("gewitter", "Gewitter"),
-    ("kirschbluete", "Kirschblüte"), ("eiskristall", "Eiskristall"), ("galaxie", "Galaxie"),
+    ("kirschbluete", "Kirschblüte"), ("eiskristall", "Eiskristall"), ("galaxie", "Galaxie"), ("totenkopf", "Totenkopf"),
 ]
 
 WINGS = [("engel", "Engel"), ("inferno", "Inferno"), ("eis", "Eis"), ("neon", "Mytic Neon"), ("smaragd", "Smaragd")]

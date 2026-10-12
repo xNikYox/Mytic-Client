@@ -1,4 +1,4 @@
-# 10 animierte Mytic-Umhänge (24 Bilder, 12-fache Auflösung). Aufruf: python3 capes.py AUSGABE [name ...]
+# 11 animierte Mytic-Umhänge (24 Bilder, 12-fache Auflösung). Aufruf: python3 capes.py AUSGABE [name ...]
 import math, os, subprocess, sys
 OUT = sys.argv[1]; ONLY = sys.argv[2:]
 N = 24; K = 12; FW, FH = 10 * K, 16 * K; W, H = 64 * K, 32 * K
@@ -375,7 +375,81 @@ class Galaxy(Design):
     def draws(self, t): return stars(t, 40, 81, (255, 255, 255), 1.0, 0.9), []
     def edge(self, t): return hx('#b56bff'), hx('#1a1a6a')
 
-DESIGNS = [Moon(), Aurora(), Inferno(), Deep(), Code(), Synth(), Storm(), Sakura(), Ice(), Galaxy()]
+# 11 --------------------------------------------------------------- Totenkopf
+class Skull(Design):
+    name = "totenkopf"
+    glow_blur = 4
+    GLITCH = {7: 5, 8: -4, 17: 6}
+
+    def bg(self, x, y, t):
+        c = ramp([(0, hx('#161616')), (0.5, hx('#070707')), (1, hx('#000000'))], y / FH)
+        # Rauch steigt von unten auf
+        rise = y / 11 + TAU * t * 2
+        n = math.sin(x / 9 + rise) + math.sin(x / 17 - y / 9 + TAU * t) + math.sin((x + y) / 23 - TAU * t)
+        smoke = cl(n / 3) ** 2 * ss(0.15, 1.0, y / FH)
+        c = add(c, (170, 170, 170), smoke * 0.75)
+        # Vignette
+        v = math.hypot((x - 60) / 60, (y - 96) / 96)
+        return lerp(c, (0, 0, 0), ss(0.75, 1.25, v))
+
+    def draws(self, t):
+        f = round(t * N)
+        dx = self.GLITCH.get(f, 0)
+        jaw = 4.0 * max(0.0, math.sin(TAU * t * 2)) ** 2
+        beat = max(math.exp(-((t % 0.5) - 0.05) ** 2 / 0.002), 0.6 * math.exp(-((t % 0.5) - 0.17) ** 2 / 0.002))
+        d, g = [], []
+        white, bone, shade = '#f2f2f2', '#d9d9d9', '#9a9a9a'
+        # gekreuzte Knochen hinter dem Schädel
+        for ang in (35, -35):
+            tr = f"translate {60 + dx},132 rotate {ang} "
+            d += ["-fill", bone, "-draw", tr + "roundrectangle -46,-4.5 46,4.5 4,4",
+                  "-draw", tr + "circle -46,-5 -40,-5", "-draw", tr + "circle -46,5 -40,5",
+                  "-draw", tr + "circle 46,-5 52,-5", "-draw", tr + "circle 46,5 52,5"]
+        x = lambda v: v + dx
+        # Schädel: Kopf, Wangen, Unterkiefer
+        d += ["-fill", '#bdbdbd', "-draw", f"ellipse {x(60)},70 31,31 0,360",
+              "-draw", f"roundrectangle {x(36)},78 {x(84)},104 9,9",
+              # Licht von links oben, Schatten an Schläfen und Wangen
+              "-fill", white, "-draw", f"ellipse {x(57)},66 27,27 0,360",
+              "-draw", f"roundrectangle {x(39)},80 {x(78)},100 8,8",
+              "-fill", '#a8a8a8', "-draw", f"ellipse {x(47)},84 12.5,13 0,360", "-draw", f"ellipse {x(73)},84 12.5,13 0,360",
+              "-fill", shade, "-draw", f"roundrectangle {x(44)},{104 + jaw:.1f} {x(76)},{118 + jaw:.1f} 6,6",
+              "-fill", bone, "-draw", f"roundrectangle {x(44)},{103 + jaw:.1f} {x(76)},{116 + jaw:.1f} 6,6",
+              # Augenhöhlen, Nase
+              "-fill", '#050505', "-draw", f"ellipse {x(47)},82 9,10 0,360", "-draw", f"ellipse {x(73)},82 9,10 0,360",
+              "-draw", f"polygon {x(60)},90 {x(54)},100 {x(66)},100",
+              # Riss über dem rechten Auge
+              "-fill", "none", "-stroke", '#202020', "-strokewidth", "1.4",
+              "-draw", f"polyline {x(68)},42 {x(72)},52 {x(67)},58 {x(74)},66",
+              # Zähne oben und unten
+              "-strokewidth", "1.2"]
+        for i in range(7):
+            tx = x(46 + i * 4.7)
+            d += ["-draw", f"line {tx:.1f},97 {tx:.1f},104", "-draw", f"line {tx:.1f},{104 + jaw:.1f} {tx:.1f},{110 + jaw:.1f}"]
+        d += ["-draw", f"line {x(42)},104 {x(78)},104", "-stroke", "none"]
+        # leuchtende Augen im Herzschlag
+        for ex in (47, 73):
+            d += ["-fill", rgba((255, 255, 255), 0.25 + 0.75 * beat), "-draw", f"circle {x(ex)},84 {x(ex) + 1.3 + beat * 1.4:.1f},84"]
+            g += ["-fill", rgba((255, 255, 255), 0.25 + 0.75 * beat), "-draw", f"ellipse {x(ex)},82 {6 + 4 * beat:.1f},{7 + 4 * beat:.1f} 0,360"]
+        # Scanlinie läuft von oben nach unten
+        sy = (t * 1.25 % 1.25) * (FH + 30) - 15
+        g += ["-fill", rgba((255, 255, 255), 0.9), "-draw", f"rectangle 0,{sy:.1f} {FW},{sy + 3:.1f}"]
+        d += ["-fill", rgba((255, 255, 255), 0.55), "-draw", f"rectangle 0,{sy + 1:.1f} {FW},{sy + 1.8:.1f}"]
+        # Glitch: versetzte Streifen
+        if dx:
+            for i in range(5):
+                gy = rnd(f * 7 + i) * FH
+                gh = 1 + rnd(f * 7 + i + 50) * 4
+                gx = rnd(f * 7 + i + 80) * 40
+                d += ["-fill", rgba((255, 255, 255), 0.5 + 0.4 * rnd(i + f)), "-draw", f"rectangle {gx:.1f},{gy:.1f} {gx + 30 + rnd(i) * 60:.1f},{gy + gh:.1f}"]
+        # Licht läuft um den Rand
+        g += border_comets(t, [(255, 255, 255), (120, 120, 120)], 2, 40, 3)
+        d += border_comets(t, [(255, 255, 255), (170, 170, 170)], 2, 16, 1.3)
+        return d, g
+
+    def edge(self, t): return (225, 225, 225), (25, 25, 25)
+
+DESIGNS = [Moon(), Aurora(), Inferno(), Deep(), Code(), Synth(), Storm(), Sakura(), Ice(), Galaxy(), Skull()]
 for dsg in DESIGNS:
     if ONLY and dsg.name not in ONLY: continue
     for f in range(N):
