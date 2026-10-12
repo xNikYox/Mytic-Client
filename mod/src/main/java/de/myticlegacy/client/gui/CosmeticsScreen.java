@@ -226,7 +226,7 @@ public class CosmeticsScreen extends PanelScreen {
         Ui.rect(g, cx + 1, feet - 22, 4, 22, 1, 0xFF4A4A5C);
         if (aura == null) return;
         double t = animated ? System.currentTimeMillis() / 1000.0 : 1.3;
-        int n = 14;
+        int n = 10;
         for (int i = 0; i < n; i++) {
             double ph = (t * 0.5 + i / (double) n) % 1.0;
             double px, py;
@@ -244,7 +244,8 @@ public class CosmeticsScreen extends PanelScreen {
             int a = Math.round(alpha * 255) << 24;
             int dx = (int) Math.round(cx + px), dy = (int) Math.round(feet - py);
             if (dy < y + 1 || dy > y + h - 2) continue;
-            Ui.rect(g, dx - 1, dy - 1, 2, 2, 0, (col & 0xFFFFFF) | a);
+            int sz = alpha < 0.3f ? 4 : 7;
+            Cosmetics.drawAuraSprite(g, aura, i % aura.sprites, dx - sz / 2, dy - sz / 2, sz, (col & 0xFFFFFF) | a);
         }
     }
 

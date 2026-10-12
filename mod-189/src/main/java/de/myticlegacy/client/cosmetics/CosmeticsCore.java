@@ -55,19 +55,23 @@ public final class CosmeticsCore {
     private static List<Cape> capes;
     /** Flügel aus dem Katalog: {id, name} */
     private static List<String[]> wings = Collections.emptyList();
-    /** Aura aus dem Katalog: Bewegungsmuster, Partikel pro Sekunde, Partikel-Angaben, Farben fürs Menü */
+    /**
+     * Aura aus dem Katalog: Bewegungsmuster, Partikel pro Sekunde, Anzahl eigener Sprites (Textur aura/<id>.png),
+     * Größe in Blöcken, Farben (für 1.8.9-Menü).
+     */
     public static final class Aura {
         public final String id, name, pattern;
-        public final float rate;
-        public final String[] parts;
+        public final float rate, size;
+        public final int sprites;
         public final int[] colors;
 
-        Aura(String id, String name, String pattern, float rate, String[] parts, int[] colors) {
+        Aura(String id, String name, String pattern, float rate, int sprites, float size, int[] colors) {
             this.id = id;
             this.name = name;
             this.pattern = pattern;
             this.rate = rate;
-            this.parts = parts;
+            this.sprites = sprites;
+            this.size = size;
             this.colors = colors;
         }
     }
@@ -128,14 +132,11 @@ public final class CosmeticsCore {
                             List<Aura> list2 = new ArrayList<>();
                             for (JsonElement e : root.getAsJsonArray("auras")) {
                                 JsonObject o = e.getAsJsonObject();
-                                JsonArray ps = o.getAsJsonArray("parts");
-                                String[] parts = new String[ps.size()];
-                                for (int i = 0; i < parts.length; i++) parts[i] = ps.get(i).getAsString();
                                 JsonArray cs = o.getAsJsonArray("colors");
                                 int[] colors = new int[cs.size()];
                                 for (int i = 0; i < colors.length; i++) colors[i] = (int) Long.parseLong(cs.get(i).getAsString().substring(1), 16) | 0xFF000000;
                                 list2.add(new Aura(o.get("id").getAsString(), o.get("name").getAsString(), o.get("pattern").getAsString(),
-                                        o.get("rate").getAsFloat(), parts, colors));
+                                        o.get("rate").getAsFloat(), o.get("sprites").getAsInt(), o.get("size").getAsFloat(), colors));
                             }
                             auras = Collections.unmodifiableList(list2);
                         }

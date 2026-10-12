@@ -35,7 +35,10 @@ val renames = listOf(
     Regex("""setTooltipForNextFrame\(font, """) to "setTooltipForNextFrame(",
 )
     // ab 26.2 stehen die Entity-Typen in EntityTypes
-    .plus(if (mc.startsWith("26.1")) emptyList() else listOf(Regex("""\bEntityType\.ZOMBIE\b""") to "net.minecraft.world.entity.EntityTypes.ZOMBIE"))
+    .plus(if (mc.startsWith("26.1")) emptyList() else listOf(
+        Regex("""\bEntityType\.ZOMBIE\b""") to "net.minecraft.world.entity.EntityTypes.ZOMBIE",
+        Regex("""\.getMainCamera\(\)""") to ".mainCamera()",
+    ))
 val copyShared by tasks.registering(Sync::class) {
     inputs.property("mc", mc)
     inputs.property("renames", renames.map { it.first.pattern + "=>" + it.second })

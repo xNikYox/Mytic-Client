@@ -7,6 +7,7 @@ Das Paket ist eine reine Fabric-"Mod" ohne Code: Fabric lädt die Texturen darau
 mit -Dmytic.cosmetics=… an das Spiel weiter. Benötigt: Python 3, ImageMagick (convert) und einen Minecraft-Client ab 1.21.2 (für die Form der Elytra;
 automatisch aus dem Gradle-Cache oder über MC_CLIENT_JAR).
 """
+import aurasprites
 import glob, json, os, subprocess, sys, zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -34,30 +35,30 @@ SHIELDS = [("void", "Void"), ("death", "Death"), ("mytic", "Mytic Neon"), ("drac
            ("feuerwerk", "Feuerwerk"), ("regenbogen", "Regenbogen"), ("herzen", "Herzen"), ("gold", "Königsgold")]
 SHIELD_FRAMES = os.path.join(BUILD, "shields")
 
-# Auren: dezente Minecraft-Partikel um den Spieler. pattern: orbit, halo, feet, rise, fall, spiral, sparkle;
-# rate = Partikel pro Sekunde; parts = Partikel-Arten (oder dust:RRGGBB:größe); colors = Vorschau im Menü
+# Auren: eigene Partikel-Sprites aus aurasprites.py. pattern: orbit, halo, feet, rise, fall, spiral, sparkle;
+# rate = Partikel pro Sekunde; size = Größe in Blöcken; colors = Farben (Vorschau in 1.8.9)
 AURAS = [
-    ("schwarzweiss", "Schwarz-Weiß", "orbit", 9, ["dust:ffffff:0.9", "dust:111111:0.9", "white_ash"], ["#ffffff", "#111111"]),
-    ("sternenstaub", "Sternenstaub", "rise", 3, ["end_rod"], ["#f4f0ff", "#c8b8ff"]),
-    ("funken", "Funken", "sparkle", 7, ["electric_spark"], ["#c8f4ff", "#ffffff"]),
-    ("seelen", "Seelen", "rise", 2.5, ["soul", "dust:6fe8ff:0.8"], ["#6fe8ff", "#2a8ea8"]),
-    ("kirschbluete", "Kirschblüten", "fall", 2.5, ["cherry_leaves"], ["#ffb3cf", "#ff8fb8"]),
-    ("schneefall", "Schneefall", "fall", 4, ["snowflake"], ["#ffffff", "#bfe8ff"]),
-    ("verliebt", "Verliebt", "halo", 0.8, ["heart"], ["#ff4f6d", "#ffb3c1"]),
-    ("melodie", "Melodie", "orbit", 2, ["note"], ["#7dff6a", "#ffd23f", "#3fd0ff"]),
-    ("zauber", "Verzaubert", "sparkle", 8, ["enchant"], ["#e0d8ff", "#9b8cff"]),
-    ("enderwirbel", "Enderwirbel", "spiral", 5, ["portal", "reverse_portal"], ["#b45cff", "#5a1a8a"]),
-    ("glut", "Glut", "rise", 6, ["dust:ff7a1a:0.9", "dust:ffcf4a:0.75", "small_flame"], ["#ff7a1a", "#ffcf4a"]),
-    ("asche", "Asche", "sparkle", 9, ["ash", "white_ash"], ["#8a8a8a", "#dddddd"]),
-    ("gluehwuermchen", "Glühwürmchen", "sparkle", 5, ["dust:d8ff5a:1.0", "dust:fff28a:0.8"], ["#d8ff5a", "#fff28a"]),
-    ("sporen", "Sporen", "sparkle", 8, ["spore_blossom_air", "crimson_spore", "warped_spore"], ["#7ad8b0", "#d84a6a"]),
-    ("goldregen", "Goldregen", "fall", 3, ["falling_nectar", "dust:ffd23f:0.8"], ["#ffd23f", "#ffb000"]),
-    ("obsidian", "Obsidian-Tränen", "fall", 2, ["falling_obsidian_tear"], ["#8a2cff", "#3a0a6a"]),
-    ("totem", "Totem", "spiral", 4, ["totem"], ["#7dff6a", "#ffd23f"]),
-    ("glanz", "Glanz", "sparkle", 3, ["wax_on", "wax_off"], ["#ffcf6a", "#ffffff"]),
-    ("kupfer", "Kupfer", "orbit", 3, ["scrape", "dust:e8865a:0.8"], ["#5ad8c8", "#e8865a"]),
-    ("sculk", "Sculk", "feet", 3, ["sculk_soul"], ["#1fb3c4", "#0a3a48"]),
-    ("regenbogen", "Regenbogen", "halo", 9, ["dust:rainbow:0.85"], ["#ff4f6d", "#ffd23f", "#7dff6a", "#3fd0ff", "#d66bff"]),
+    ("schwarzweiss", "Schwarz-Weiß", "orbit", 7, 0.16, ["#ffffff", "#111111"]),
+    ("sternenstaub", "Sternenstaub", "sparkle", 6, 0.2, ["#ffffff", "#c8b8ff"]),
+    ("seelenlicht", "Seelenlicht", "rise", 3.5, 0.22, ["#4fe8ff", "#bff8ff"]),
+    ("kirschbluete", "Kirschblüten", "fall", 3, 0.2, ["#ffb3cf", "#ff8fb8"]),
+    ("frost", "Frost", "fall", 3.5, 0.2, ["#ffffff", "#9fdcff"]),
+    ("herzschlag", "Herzschlag", "orbit", 3, 0.17, ["#ff4f7a", "#ffb3c6"]),
+    ("runen", "Runen", "feet", 3, 0.22, ["#d8b8ff", "#8a3cff"]),
+    ("galaxie", "Galaxie", "spiral", 6, 0.16, ["#b56bff", "#5a8bff"]),
+    ("glut", "Glut", "rise", 5, 0.15, ["#ff7a1a", "#ffcf4a"]),
+    ("gluehwuermchen", "Glühwürmchen", "sparkle", 4, 0.18, ["#d8ff5a", "#fff28a"]),
+    ("kristall", "Kristall", "orbit", 3.5, 0.2, ["#7ff0ff", "#b8a0ff"]),
+    ("mond", "Mondschein", "halo", 4, 0.18, ["#fff2c0", "#ffd27a"]),
+    ("melodie", "Melodie", "orbit", 2.5, 0.2, ["#7dff6a", "#ffd23f", "#3fd0ff", "#ff6aa8"]),
+    ("blasen", "Blasen", "rise", 3.5, 0.18, ["#cff4ff", "#7fd8ff"]),
+    ("blitz", "Blitz", "sparkle", 3.5, 0.24, ["#e8f8ff", "#3fa0ff"]),
+    ("herbst", "Herbstlaub", "fall", 3, 0.2, ["#ff8a2a", "#e8401a", "#ffc23a"]),
+    ("schmetterlinge", "Schmetterlinge", "orbit", 2, 0.22, ["#3fb0ff", "#9b6bff"]),
+    ("goldstaub", "Goldstaub", "rise", 4.5, 0.17, ["#fff1a0", "#ffd23f"]),
+    ("schatten", "Schatten", "feet", 5, 0.2, ["#2a0a3a", "#8a3cff"]),
+    ("federn", "Federn", "fall", 2, 0.22, ["#ffffff", "#c8d0e0"]),
+    ("regenbogen", "Regenbogen", "halo", 6, 0.14, ["#ff4f6d", "#ffd23f", "#4fff8a", "#4fa8ff"]),
 ]
 
 
@@ -70,9 +71,11 @@ def main():
                "wings": [{"id": i, "name": n, "fxFrames": 16, "fxMs": 90} for i, n in WINGS]
                         + [{"id": i, "name": n, "fxFrames": 16, "fxMs": 90, "w": 24, "h": 20, "feathers": True} for i, n in PIXEL_WINGS],
                "shields": [{"id": i, "name": n, "frames": 24, "frameMs": 70} for i, n in SHIELDS],
-               "auras": [{"id": i, "name": n, "pattern": pt, "rate": r, "parts": ps, "colors": cs} for i, n, pt, r, ps, cs in AURAS]}
+               "auras": [{"id": i, "name": n, "pattern": pt, "rate": r, "size": sz, "colors": cs,
+                          "sprites": len(aurasprites.AURAS[i])} for i, n, pt, r, sz, cs in AURAS]}
     subprocess.run([sys.executable, os.path.join(HERE, "wings.py"), os.path.join(BUILD, "wings")], check=True)
     subprocess.run([sys.executable, os.path.join(HERE, "pixelwings.py"), os.path.join(BUILD, "wings")], check=True)
+    subprocess.run([sys.executable, os.path.join(HERE, "aurasprites.py"), os.path.join(BUILD, "auras")], check=True)
     # kleine, weich verkleinerte Bilder für die Vorschau im Cosmetics-Menü (große Texturen flimmern dort)
     wdir = os.path.join(BUILD, "wings")
     for wid, _ in WINGS:
@@ -151,6 +154,9 @@ def main():
             for f in range(24):
                 name = f"{cid}_{f}.png"
                 z.write(os.path.join(small, name), f"assets/myticclient/textures/cape/{name}")
+        for aid, *_ in AURAS:
+            for name in (f"{aid}.png", f"{aid}_icon.png"):
+                z.write(os.path.join(BUILD, "auras", name), f"assets/myticclient/textures/aura/{name}")
         for sid, _ in SHIELDS:
             for f in range(24):
                 name = f"{sid}_{f}.png"

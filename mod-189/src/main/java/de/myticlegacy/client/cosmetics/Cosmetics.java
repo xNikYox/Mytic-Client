@@ -210,4 +210,9 @@ public final class Cosmetics {
     /** 1.8.9 hat keine Schilde (der Reiter fehlt dort). */
     public static void drawShieldPreview(GuiGraphics g, String id, int x, int y, int w, int h, boolean animated) {
     }
+
+    /** 1.8.9: Aura-Vorschau als farbiger Punkt. */
+    public static void drawAuraSprite(GuiGraphics g, CosmeticsCore.Aura aura, int sprite, int x, int y, int size, int fallback) {
+        Gui.drawRect(x + size / 2 - 1, y + size / 2 - 1, x + size / 2 + 1, y + size / 2 + 1, fallback);
+    }
 }

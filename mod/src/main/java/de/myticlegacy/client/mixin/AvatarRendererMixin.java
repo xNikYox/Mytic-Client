@@ -31,5 +31,6 @@ abstract class AvatarRendererMixin {
     private void mytic$miniMeLayer(EntityRendererProvider.Context context, boolean slim, CallbackInfo ci) {
         ((LivingEntityRendererInvoker) this).mytic$addLayer(new MiniMeLayer((AvatarRenderer) (Object) this, context.getModelSet()));
         ((LivingEntityRendererInvoker) this).mytic$addLayer(new de.myticlegacy.client.render.WingsLayer((AvatarRenderer) (Object) this));
+        ((LivingEntityRendererInvoker) this).mytic$addLayer(new de.myticlegacy.client.render.AuraLayer((AvatarRenderer) (Object) this));
     }
 }

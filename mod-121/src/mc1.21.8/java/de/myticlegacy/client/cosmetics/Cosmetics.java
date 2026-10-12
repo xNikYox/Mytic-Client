@@ -84,6 +84,11 @@ public final class Cosmetics {
         return CosmeticsCore.wingsOf(e.getUUID().toString().replace("-", ""), e.getUUID().equals(mc.player.getUUID()));
     }
 
+    /** Ein Aura-Sprite im Menü (aus aura/<id>_icon.png: Sprites je 32x32 nebeneinander). */
+    public static void drawAuraSprite(GuiGraphics g, CosmeticsCore.Aura aura, int sprite, int x, int y, int size, int fallback) {
+        Blit.region(g, ResourceLocation.fromNamespaceAndPath("myticclient", "textures/aura/" + aura.id + "_icon.png"), x, y, size, size, sprite * 32, 0, 32, 32, 32 * aura.sprites, 32);
+    }
+
     /** Vorschau eines Schilds im Cosmetics-Menü: Vorderseite (6,6 / 72x132 in der 384x384-Textur), animiert wenn gewünscht. */
     public static void drawShieldPreview(GuiGraphics g, String id, int x, int y, int w, int h, boolean animated) {
         int frame = animated ? CosmeticsCore.shieldFrame(id) : 0;
