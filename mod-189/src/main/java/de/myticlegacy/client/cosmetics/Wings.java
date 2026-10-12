@@ -33,19 +33,31 @@ public final class Wings implements LayerRenderer<AbstractClientPlayer> {
     private static final Map<String, ResourceLocation[]> READY = new HashMap<String, ResourceLocation[]>();
     private static final Map<String, BufferedImage[]> DECODED = new ConcurrentHashMap<String, BufferedImage[]>();
     private static final Map<String, Boolean> LOADING = new ConcurrentHashMap<String, Boolean>();
-    private final ModelRenderer left;
-    private final ModelRenderer right;
+    /** Teile je Flügelgröße: {links, rechts} */
+    private final Map<Integer, ModelRenderer[]> parts = new HashMap<Integer, ModelRenderer[]>();
 
     private Wings() {
-        ModelBase base = new ModelBase() {
-        };
-        base.textureWidth = 40;
-        base.textureHeight = 24;
-        left = new ModelRenderer(base, 0, 0);
-        left.addBox(0f, -10f, 0f, 20, 24, 0);
-        right = new ModelRenderer(base, 0, 0);
-        right.mirror = true;
-        right.addBox(-20f, -10f, 0f, 20, 24, 0);
+    }
+
+    /** Ein Flügelpaar der Größe w x h Pixel (meist 20x24), Ansatz an der Wirbelsäule. */
+    private ModelRenderer[] parts(String id) {
+        int[] size = CosmeticsCore.wingSize(id);
+        int key = size[0] * 1000 + size[1];
+        ModelRenderer[] lr = parts.get(key);
+        if (lr == null) {
+            ModelBase base = new ModelBase() {
+            };
+            base.textureWidth = 2 * size[0];
+            base.textureHeight = size[1];
+            ModelRenderer left = new ModelRenderer(base, 0, 0);
+            left.addBox(0f, -10f, 0f, size[0], size[1], 0);
+            ModelRenderer right = new ModelRenderer(base, 0, 0);
+            right.mirror = true;
+            right.addBox(-size[0], -10f, 0f, size[0], size[1], 0);
+            lr = new ModelRenderer[]{left, right};
+            parts.put(key, lr);
+        }
+        return lr;
     }
 
     /** Einmal (im ersten Tick): Ebene an beiden Spieler-Renderern anmelden. */
@@ -132,6 +144,9 @@ public final class Wings implements LayerRenderer<AbstractClientPlayer> {
         float flap = (float) Math.sin(ageInTicks * (flying ? 0.55f : 0.13f)) * (flying ? 22f : 10f);
         float spread = flying ? 10f : 28f;
         float tilt = crouching ? (float) Math.toRadians(25f) : 0f;
+        ModelRenderer[] lr = parts(id);
+        ModelRenderer left = lr[0];
+        ModelRenderer right = lr[1];
         left.rotationPointX = 1f;
         left.rotateAngleX = tilt;
         left.rotateAngleY = (float) Math.toRadians(-(spread + flap));

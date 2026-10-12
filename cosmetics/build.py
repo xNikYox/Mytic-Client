@@ -32,7 +32,8 @@ def main():
     if "--skip-render" not in sys.argv:
         subprocess.run([sys.executable, os.path.join(HERE, "capes.py"), FRAMES], check=True)
     catalog = {"version": VERSION, "scale": 8, "capes": [{"id": i, "name": n, "frames": 24, "frameMs": 70} for i, n in CAPES],
-               "wings": [{"id": i, "name": n, "fxFrames": 16, "fxMs": 90} for i, n in WINGS + PIXEL_WINGS]}
+               "wings": [{"id": i, "name": n, "fxFrames": 16, "fxMs": 90} for i, n in WINGS]
+                        + [{"id": i, "name": n, "fxFrames": 16, "fxMs": 90, "w": 24, "h": 20} for i, n in PIXEL_WINGS]}
     subprocess.run([sys.executable, os.path.join(HERE, "wings.py"), os.path.join(BUILD, "wings")], check=True)
     subprocess.run([sys.executable, os.path.join(HERE, "pixelwings.py"), os.path.join(BUILD, "wings")], check=True)
     # kleine, weich verkleinerte Bilder für die Vorschau im Cosmetics-Menü (große Texturen flimmern dort)

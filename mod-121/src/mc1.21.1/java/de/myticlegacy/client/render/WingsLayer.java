@@ -19,22 +19,26 @@ import net.minecraft.resources.ResourceLocation;
 
 /** 1.21 und 1.21.1: Flügel auf dem Rücken (direkt gezeichnet, sonst wie in 1.21.11). */
 public class WingsLayer extends RenderLayer<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>> {
-    private final ModelPart left;
-    private final ModelPart right;
+    /** Teile je Flügelgröße: {links, rechts} */
+    private final java.util.Map<Integer, ModelPart[]> parts = new java.util.HashMap<>();
 
     public WingsLayer(RenderLayerParent<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>> parent) {
         super(parent);
-        left = wing(false);
-        right = wing(true);
     }
 
-    private static ModelPart wing(boolean mirror) {
+    /** Ein Flügel: w x h Pixel (meist 20x24), Ansatz an der Wirbelsäule; die Textur enthält Vorder- und Rückseite. */
+    private static ModelPart wing(boolean mirror, int w, int h) {
         MeshDefinition mesh = new MeshDefinition();
         CubeListBuilder cube = CubeListBuilder.create().texOffs(0, 0);
-        if (mirror) cube.mirror().addBox(-20f, -10f, 0f, 20, 24, 0);
-        else cube.addBox(0f, -10f, 0f, 20, 24, 0);
+        if (mirror) cube.mirror().addBox(-w, -10f, 0f, w, h, 0);
+        else cube.addBox(0f, -10f, 0f, w, h, 0);
         mesh.getRoot().addOrReplaceChild("wing", cube, PartPose.ZERO);
-        return LayerDefinition.create(mesh, 40, 24).bakeRoot().getChild("wing");
+        return LayerDefinition.create(mesh, 2 * w, h).bakeRoot().getChild("wing");
+    }
+
+    private ModelPart[] parts(String id) {
+        int[] size = CosmeticsCore.wingSize(id);
+        return parts.computeIfAbsent(size[0] * 1000 + size[1], k -> new ModelPart[]{wing(false, size[0], size[1]), wing(true, size[0], size[1])});
     }
 
     @Override
@@ -50,6 +54,9 @@ public class WingsLayer extends RenderLayer<AbstractClientPlayer, PlayerModel<Ab
         float tilt = crouching ? (float) Math.toRadians(25f) : 0f;
         pose.pushPose();
         pose.translate(0f, crouching ? 0.25f : 0.1f, 0.14f);
+        ModelPart[] lr = parts(id);
+        ModelPart left = lr[0];
+        ModelPart right = lr[1];
         left.setPos(1f, 0f, 0f);
         left.setRotation(tilt, (float) Math.toRadians(-(spread + flap)), (float) Math.toRadians(-6f));
         right.setPos(-1f, 0f, 0f);

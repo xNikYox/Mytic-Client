@@ -92,7 +92,10 @@ public final class CosmeticsCore {
                             List<String[]> w = new ArrayList<>();
                             for (JsonElement e : root.getAsJsonArray("wings")) {
                                 JsonObject o = e.getAsJsonObject();
-                                w.add(new String[]{o.get("id").getAsString(), o.get("name").getAsString()});
+                                // Größe des Flügels in Modell-Pixeln (Standard 20x24, breite Pixel-Flügel 24x20)
+                                String ww = o.has("w") ? o.get("w").getAsString() : "20";
+                                String wh = o.has("h") ? o.get("h").getAsString() : "24";
+                                w.add(new String[]{o.get("id").getAsString(), o.get("name").getAsString(), ww, wh});
                             }
                             wings = Collections.unmodifiableList(w);
                         }
@@ -112,7 +115,21 @@ public final class CosmeticsCore {
         return capes;
     }
 
-    /** Flügel im Paket: {id, name} */
+    /** Größe eines Flügels in Modell-Pixeln {Breite, Höhe}; die Textur ist doppelt so breit (beide Seiten). */
+    public static int[] wingSize(String id) {
+        for (String[] w : wings()) {
+            if (w[0].equals(id)) {
+                try {
+                    return new int[]{Integer.parseInt(w[2]), Integer.parseInt(w[3])};
+                } catch (Exception e) {
+                    break;
+                }
+            }
+        }
+        return new int[]{20, 24};
+    }
+
+    /** Flügel im Paket: {id, name, breite, höhe} */
     public static List<String[]> wings() {
         capes();
         return wings;
