@@ -14,6 +14,16 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(AvatarRenderer.class)
 abstract class AvatarRendererMixin {
+    /** Nametag: eigene Zeile über dem Namen (am Ende, wenn Name und Punkte feststehen). */
+    @Inject(method = "extractRenderState(Lnet/minecraft/world/entity/Avatar;Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;F)V", at = @At("TAIL"))
+    private void mytic$nametag(@org.spongepowered.asm.mixin.injection.Coerce Object entity, AvatarRenderState state, float partialTick, CallbackInfo ci) {
+        net.minecraft.network.chat.Component[] lines = de.myticlegacy.client.cosmetics.Nametags.decorate(entity, state.nameTag, state.scoreText);
+        if (lines != null) {
+            state.nameTag = lines[0];
+            state.scoreText = lines[1];
+        }
+    }
+
     /** Mytic-Umhänge schwingen zusätzlich im Wind (auch im Stehen). */
     @Inject(method = "extractCapeState", at = @At("TAIL"))
     private void mytic$wind(@org.spongepowered.asm.mixin.injection.Coerce Object entity, AvatarRenderState state, float partialTick, CallbackInfo ci) {

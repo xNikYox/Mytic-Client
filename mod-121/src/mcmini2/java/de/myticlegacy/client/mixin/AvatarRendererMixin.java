@@ -29,6 +29,16 @@ abstract class AvatarRendererMixin {
         state.capeFlap += wind[2];
     }
 
+    /** Nametag: eigene Zeile über dem Namen (am Ende, wenn Name und Punkte feststehen). */
+    @Inject(method = "extractRenderState(Lnet/minecraft/client/player/AbstractClientPlayer;Lnet/minecraft/client/renderer/entity/state/PlayerRenderState;F)V", at = @At("TAIL"))
+    private void mytic$nametag(AbstractClientPlayer player, PlayerRenderState state, float partialTick, CallbackInfo ci) {
+        net.minecraft.network.chat.Component[] lines = de.myticlegacy.client.cosmetics.Nametags.decorate(player, state.nameTag, state.scoreText);
+        if (lines != null) {
+            state.nameTag = lines[0];
+            state.scoreText = lines[1];
+        }
+    }
+
     /** MiniMe-Ebene (sitzt auf der Schulter) und Flügel anmelden. */
     @Inject(method = "<init>", at = @At("TAIL"))
     private void mytic$miniMeLayer(EntityRendererProvider.Context context, boolean slim, CallbackInfo ci) {

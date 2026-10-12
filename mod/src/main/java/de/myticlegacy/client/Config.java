@@ -27,6 +27,10 @@ public final class Config {
     /** Bis 2.18: ein MiniMe und seine Stelle – wird beim ersten Start nach miniMes übernommen. */
     public String miniMe;
     public String miniMePos;
+    /** Nametag: eigene Zeile über dem Namen mit &-Farbcodes, null = keiner. */
+    public String nametag;
+    /** Eigenen Namen samt Nametag in der Third-Person-Ansicht (F5) zeigen */
+    public boolean nametagSelf = true;
     /** Gewählte Aura (Cosmetics), null = keine. */
     public String aura;
     /** Gewählter Schild (Cosmetics), null = keiner. */

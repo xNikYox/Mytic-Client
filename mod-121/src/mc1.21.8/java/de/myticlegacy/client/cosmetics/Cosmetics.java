@@ -101,4 +101,9 @@ public final class Cosmetics {
         long frame = System.currentTimeMillis() / CosmeticsCore.WING_FX_MS % CosmeticsCore.WING_FX_FRAMES;
         Blit.region(g, ResourceLocation.fromNamespaceAndPath("myticclient", "textures/wings/" + id + "_icon_fx_" + frame + ".png"), x, y, w, h, 0, 0, 240, 144, 240, 144);
     }
+
+    /** Eigener Spielername (Vorschau im Nametag-Editor) */
+    public static String playerName() {
+        return Minecraft.getInstance().getUser().getName();
+    }
 }

@@ -90,6 +90,11 @@ public final class CosmeticsCore {
     /** Glanz-Animation der Flügel: Bilder und Dauer pro Bild (wie im Cosmetics-Paket). */
     public static final int WING_FX_FRAMES = 16;
     public static final long WING_FX_MS = 90;
+    /** uuid (ohne Striche) → Nametag (Rohtext mit &-Codes) oder "" (keiner). */
+    private static final Map<String, String> REMOTE_NAMETAG = new ConcurrentHashMap<>();
+    /** Höchstens so viele sichtbare Zeichen (ohne Farbcodes) bzw. Zeichen insgesamt */
+    public static final int NAMETAG_VISIBLE = 32;
+    public static final int NAMETAG_RAW = 80;
     /** uuid (ohne Striche) → Schild-ID oder "" (keiner). */
     private static final Map<String, String> REMOTE_SHIELD = new ConcurrentHashMap<>();
     /** uuid (ohne Striche) → Flügel-ID oder "" (keine). */
@@ -176,6 +181,45 @@ public final class CosmeticsCore {
             }
         }
         return new int[]{20, 24};
+    }
+
+    /**
+     * Nametag-Rohtext in Anzeige-Text umwandeln: &0–&9, &a–&f (Farben) und &k, &l, &m, &n, &o, &r (Format) werden zu
+     * Minecraft-Formatcodes; andere §-Zeichen und Steuerzeichen fallen weg. null, wenn nichts Sichtbares übrig bleibt.
+     */
+    public static String formatNametag(String raw) {
+        if (raw == null) return null;
+        StringBuilder out = new StringBuilder();
+        int visible = 0;
+        for (int i = 0; i < raw.length() && out.length() < NAMETAG_RAW * 2; i++) {
+            char c = raw.charAt(i);
+            if (c == '&' && i + 1 < raw.length() && "0123456789abcdefklmnor".indexOf(Character.toLowerCase(raw.charAt(i + 1))) >= 0) {
+                out.append('\u00a7').append(Character.toLowerCase(raw.charAt(i + 1)));
+                i++;
+            } else if (c != '\u00a7' && c >= ' ' && visible < NAMETAG_VISIBLE) {
+                out.append(c);
+                if (c != ' ') visible++;
+                else visible++;
+            }
+        }
+        return visible == 0 || raw.trim().isEmpty() ? null : out.toString();
+    }
+
+    /** Eigener Nametag (Rohtext) */
+    public static String ownNametag() {
+        String demo = System.getProperty("mytic.nametagDemo");
+        return demo != null ? demo.replace("_", " ") : MyticClient.config().nametag;
+    }
+
+    public static void selectNametag(String raw) {
+        MyticClient.config().nametag = raw == null || raw.trim().isEmpty() ? null : raw.length() > NAMETAG_RAW ? raw.substring(0, NAMETAG_RAW) : raw;
+        MyticClient.config().save();
+        push();
+    }
+
+    /** Nametag eines Spielers als Anzeige-Text (mit §-Codes) oder null. */
+    public static String nametagOf(String uuid, boolean self) {
+        return formatNametag(self ? ownNametag() : REMOTE_NAMETAG.get(uuid));
     }
 
     /** Auren im Paket */
@@ -313,6 +357,7 @@ public final class CosmeticsCore {
         final String wingsId = MyticClient.config().wings;
         final String shieldId = MyticClient.config().shield;
         final String auraId = MyticClient.config().aura;
+        final String nametag = MyticClient.config().nametag;
         Friends.background(() -> {
             try {
                 JsonObject body = new JsonObject();
@@ -323,6 +368,7 @@ public final class CosmeticsCore {
                 body.addProperty("wings", wingsId);
                 body.addProperty("shield", shieldId);
                 body.addProperty("aura", auraId);
+                body.addProperty("nametag", nametag);
                 Friends.post("api/cosmetics", body);
             } catch (Exception e) {
                 MyticClient.LOG.warn("Cosmetics nicht gespeichert: " + e.getMessage());
@@ -362,7 +408,7 @@ public final class CosmeticsCore {
      */
     public static void tick(List<String> nearby) {
         if (!Friends.available()) return;
-        if (!pushed && (MyticClient.config().cape != null || MiniMeCore.any() || MyticClient.config().wings != null || MyticClient.config().shield != null || MyticClient.config().aura != null)) push();
+        if (!pushed && (MyticClient.config().cape != null || MiniMeCore.any() || MyticClient.config().wings != null || MyticClient.config().shield != null || MyticClient.config().aura != null || MyticClient.config().nametag != null)) push();
         if (lookupRunning) return;
         long now = System.currentTimeMillis();
         final List<String> ask = new ArrayList<>();
@@ -391,6 +437,10 @@ public final class CosmeticsCore {
                         minis.put(e.getKey(), set);
                     }
                 }
+                Map<String, String> tagsFound = new HashMap<>();
+                if (answer.has("nametags")) {
+                    for (Map.Entry<String, JsonElement> e : answer.getAsJsonObject("nametags").entrySet()) tagsFound.put(e.getKey(), e.getValue().getAsString());
+                }
                 Map<String, String> aurasFound = new HashMap<>();
                 if (answer.has("auras")) {
                     for (Map.Entry<String, JsonElement> e : answer.getAsJsonObject("auras").entrySet()) aurasFound.put(e.getKey(), e.getValue().getAsString());
@@ -406,6 +456,7 @@ public final class CosmeticsCore {
                 for (String uuid : ask) {
                     REMOTE.put(uuid, found.containsKey(uuid) ? found.get(uuid) : "");
                     REMOTE_MINI.put(uuid, minis.containsKey(uuid) ? minis.get(uuid) : new HashMap<String, String>());
+                    REMOTE_NAMETAG.put(uuid, tagsFound.containsKey(uuid) ? tagsFound.get(uuid) : "");
                     REMOTE_AURA.put(uuid, aurasFound.containsKey(uuid) ? aurasFound.get(uuid) : "");
                     REMOTE_SHIELD.put(uuid, shieldsFound.containsKey(uuid) ? shieldsFound.get(uuid) : "");
                     REMOTE_WINGS.put(uuid, wingsFound.containsKey(uuid) ? wingsFound.get(uuid) : "");

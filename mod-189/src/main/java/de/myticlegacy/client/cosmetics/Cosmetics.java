@@ -215,4 +215,9 @@ public final class Cosmetics {
     public static void drawAuraSprite(GuiGraphics g, CosmeticsCore.Aura aura, int sprite, int x, int y, int size, int fallback) {
         Gui.drawRect(x + size / 2 - 1, y + size / 2 - 1, x + size / 2 + 1, y + size / 2 + 1, fallback);
     }
+
+    /** Eigener Spielername (Vorschau im Nametag-Editor) */
+    public static String playerName() {
+        return Minecraft.getMinecraft().getSession().getUsername();
+    }
 }

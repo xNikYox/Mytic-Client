@@ -17,7 +17,8 @@
     "AbstractContainerScreenAccessor",
     "CapeLayerMixin",
     "ItemModelResolverMixin",
-    "ShieldSpecialRendererMixin"
+    "ShieldSpecialRendererMixin",
+    "LivingEntityRendererMixin"
   ],
   "injectors": {
     "defaultRequire": 1

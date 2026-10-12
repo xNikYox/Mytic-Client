@@ -102,4 +102,9 @@ public final class Cosmetics {
                 x, y, w, h, k, k, 10 * k, 16 * k, 64 * k, 32 * k);
         return true;
     }
+
+    /** Eigener Spielername (Vorschau im Nametag-Editor) */
+    public static String playerName() {
+        return Minecraft.getInstance().getUser().getName();
+    }
 }

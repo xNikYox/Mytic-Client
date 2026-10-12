@@ -327,7 +327,7 @@ export function createApi(db, options = {}) {
       const me = await auth(request);
       const data = await body(request);
       // ältere Mods schicken nur "cape" (oder gar nichts für "kein Umhang")
-      if ("cape" in data || !("minime" in data || "wings" in data || "minimePos" in data || "minimes" in data || "shield" in data || "aura" in data)) {
+      if ("cape" in data || !("minime" in data || "wings" in data || "minimePos" in data || "minimes" in data || "shield" in data || "aura" in data || "nametag" in data)) {
         const cape = typeof data.cape === "string" && /^[a-z0-9_-]{1,32}$/.test(data.cape) ? data.cape : null;
         await db.run("UPDATE users SET cape = ? WHERE uuid = ?", [cape, me.uuid]);
       }
@@ -357,6 +357,12 @@ export function createApi(db, options = {}) {
         const shield = typeof data.shield === "string" && /^[a-z0-9_-]{1,32}$/.test(data.shield) ? data.shield : null;
         await db.run("UPDATE users SET shield = ? WHERE uuid = ?", [shield, me.uuid]);
       }
+      if ("nametag" in data) {
+        // Text mit &-Farbcodes; Steuerzeichen und § fallen weg, höchstens 80 Zeichen
+        let tag = typeof data.nametag === "string" ? data.nametag.replace(/\u00a7./g, "").replace(/[\u0000-\u001f\u007f\u00a7]/g, "").slice(0, 80) : "";
+        if (!tag.replace(/&[0-9a-fk-or]/gi, "").trim()) tag = null;
+        await db.run("UPDATE users SET nametag = ? WHERE uuid = ?", [tag, me.uuid]);
+      }
       if ("aura" in data) {
         const aura = typeof data.aura === "string" && /^[a-z0-9_-]{1,32}$/.test(data.aura) ? data.aura : null;
         await db.run("UPDATE users SET aura = ? WHERE uuid = ?", [aura, me.uuid]);
@@ -365,8 +371,8 @@ export function createApi(db, options = {}) {
         const wings = typeof data.wings === "string" && /^[a-z0-9_-]{1,32}$/.test(data.wings) ? data.wings : null;
         await db.run("UPDATE users SET wings = ? WHERE uuid = ?", [wings, me.uuid]);
       }
-      const row = await db.get("SELECT cape, minime, minime_pos, minime_set, wings, shield, aura FROM users WHERE uuid = ?", [me.uuid]);
-      return { cape: row.cape || null, minime: row.minime || null, minimePos: row.minime_pos || null, minimes: miniMeSet(row), wings: row.wings || null, shield: row.shield || null, aura: row.aura || null };
+      const row = await db.get("SELECT cape, minime, minime_pos, minime_set, wings, shield, aura, nametag FROM users WHERE uuid = ?", [me.uuid]);
+      return { cape: row.cape || null, minime: row.minime || null, minimePos: row.minime_pos || null, minimes: miniMeSet(row), wings: row.wings || null, shield: row.shield || null, aura: row.aura || null, nametag: row.nametag || null };
     },
 
     /** Cosmetics anderer Spieler (z. B. alle auf dem Server), höchstens 100 auf einmal. */
@@ -381,8 +387,9 @@ export function createApi(db, options = {}) {
       const wings = {};
       const shields = {};
       const auras = {};
+      const nametags = {};
       if (list.length) {
-        const rows = await db.all(`SELECT uuid, cape, minime, minime_pos, minime_set, wings, shield, aura FROM users WHERE (cape IS NOT NULL OR minime IS NOT NULL OR wings IS NOT NULL OR shield IS NOT NULL OR aura IS NOT NULL) AND uuid IN (${list.map(() => "?").join(",")})`, list);
+        const rows = await db.all(`SELECT uuid, cape, minime, minime_pos, minime_set, wings, shield, aura, nametag FROM users WHERE (cape IS NOT NULL OR minime IS NOT NULL OR wings IS NOT NULL OR shield IS NOT NULL OR aura IS NOT NULL OR nametag IS NOT NULL) AND uuid IN (${list.map(() => "?").join(",")})`, list);
         for (const row of rows) {
           if (row.cape) capes[row.uuid] = row.cape;
           if (row.minime) minimes[row.uuid] = row.minime;
@@ -391,9 +398,10 @@ export function createApi(db, options = {}) {
           if (row.wings) wings[row.uuid] = row.wings;
           if (row.shield) shields[row.uuid] = row.shield;
           if (row.aura) auras[row.uuid] = row.aura;
+          if (row.nametag) nametags[row.uuid] = row.nametag;
         }
       }
-      return { capes, minimes, minimePos, minimeSets, wings, shields, auras };
+      return { capes, minimes, minimePos, minimeSets, wings, shields, auras, nametags };
     },
 
     "POST /api/friends/request": async (request) => {

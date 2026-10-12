@@ -228,6 +228,7 @@ public final class MyticClient {
 
         CombatTracker.register();
         MinecraftForge.EVENT_BUS.register(this);
+        MinecraftForge.EVENT_BUS.register(new de.myticlegacy.client.cosmetics.Nametags());
         FMLCommonHandler.instance().bus().register(this);
         Display.setTitle(NAME + " " + Compat.versionName());
         Friends.start();

@@ -1,6 +1,7 @@
 package de.myticlegacy.client.gui;
 
 import com.mojang.blaze3d.platform.InputConstants;
+import de.myticlegacy.client.MyticClient;
 import de.myticlegacy.client.compat.Gfx;
 import de.myticlegacy.client.cosmetics.Cosmetics;
 import de.myticlegacy.client.cosmetics.CosmeticsCore;
@@ -20,7 +21,7 @@ public class CosmeticsScreen extends PanelScreen {
     private static final int PREVIEW_H = 64;
     private double scrollPos;
     private double scrollTarget;
-    private static final String[] TABS = {"Umhänge", "MiniMe", "Flügel", "Schilde", "Auren"};
+    private static final String[] TABS = {"Umhänge", "MiniMe", "Flügel", "Schilde", "Auren", "Nametag"};
     /** zuletzt offener Reiter bleibt beim nächsten Öffnen */
     private static int tab;
     /** Stelle, deren MiniMe gerade bearbeitet wird (Index in MiniMeCore.POSITIONS) */
@@ -28,6 +29,15 @@ public class CosmeticsScreen extends PanelScreen {
     private int lastHeaderX;
     private String input = "";
     private boolean inputFocused;
+    /** Nametag-Editor: Rohtext mit &-Codes */
+    private String tagInput = CosmeticsCore.ownNametag() == null ? "" : CosmeticsCore.ownNametag();
+    private boolean tagFocused;
+    /** &-Farbcodes in Minecraft-Reihenfolge und ihre Farben */
+    private static final String COLOR_CODES = "0123456789abcdef";
+    private static final int[] COLORS = {0xFF000000, 0xFF0000AA, 0xFF00AA00, 0xFF00AAAA, 0xFFAA0000, 0xFFAA00AA, 0xFFFFAA00, 0xFFAAAAAA,
+            0xFF555555, 0xFF5555FF, 0xFF55FF55, 0xFF55FFFF, 0xFFFF5555, 0xFFFF55FF, 0xFFFFFF55, 0xFFFFFFFF};
+    /** Format-Knöpfe: Beschriftung, Code */
+    private static final String[][] FORMATS = {{"\u00a7lF", "l"}, {"\u00a7oK", "o"}, {"\u00a7nU", "n"}, {"\u00a7mD", "m"}, {"\u00a7k?", "k"}, {"Reset", "r"}};
     private String message;
     private final long openedAt = System.currentTimeMillis();
 
@@ -134,6 +144,10 @@ public class CosmeticsScreen extends PanelScreen {
         int midY = py + HEADER + (ph - HEADER - FOOTER) / 2;
         if (tab == 1) {
             drawMiniMe(g, mouseX, mouseY);
+            return;
+        }
+        if (isTab("Nametag")) {
+            drawNametag(g, mouseX, mouseY);
             return;
         }
         if (!CosmeticsCore.available()) {
@@ -247,6 +261,141 @@ public class CosmeticsScreen extends PanelScreen {
             int sz = alpha < 0.3f ? 4 : 7;
             Cosmetics.drawAuraSprite(g, aura, i % aura.sprites, dx - sz / 2, dy - sz / 2, sz, (col & 0xFFFFFF) | a);
         }
+    }
+
+    // ------------------------------------------------------------------------------------------ Nametag
+
+    private int[] tagField() {
+        return new int[]{cx() + 10, cy() + 74, cw() - 20, 18};
+    }
+
+    private int[] swatch(int i) {
+        return new int[]{cx() + 10 + i * 17, cy() + 98, 14, 14};
+    }
+
+    private int[] formatButton(int i) {
+        int x = cx() + 10;
+        for (int k = 0; k < i; k++) x += font.width(FORMATS[k][0]) + 16;
+        return new int[]{x, cy() + 118, font.width(FORMATS[i][0]) + 12, 16};
+    }
+
+    private int[] tagButton(int i) {
+        int w0 = font.width("Übernehmen") + 14, w1 = font.width("Entfernen") + 14;
+        int y = cy() + 142;
+        return i == 0 ? new int[]{cx() + 10, y, w0, 16} : new int[]{cx() + 14 + w0, y, w1, 16};
+    }
+
+    private int[] ownToggle() {
+        return new int[]{cx() + 10, cy() + 166, 12, 12};
+    }
+
+    private void drawNametag(GuiGraphics g, int mouseX, int mouseY) {
+        boolean lunar = Ui.lunar();
+        int x = cx(), y = cy();
+        // Vorschau wie im Spiel: Nametag über dem Namen, halbdurchsichtiger Hintergrund
+        Ui.outline(g, x, y, cw(), 64, lunar ? 4 : 6, lunar ? 0x30FFFFFF : Ui.LINE, lunar ? Ui.L_CARD : Ui.SURFACE);
+        String shown = CosmeticsCore.formatNametag(tagInput);
+        String name = Cosmetics.playerName();
+        int mid = x + cw() / 2;
+        int nameW = font.width(name);
+        if (shown != null) {
+            int tw = font.width(shown);
+            g.fill(mid - tw / 2 - 2, y + 15, mid + tw / 2 + 2, y + 26, 0x40000000);
+            Ui.text(g, shown, mid - tw / 2, y + 17, 0xFFFFFFFF, false);
+        }
+        g.fill(mid - nameW / 2 - 2, y + 29, mid + nameW / 2 + 2, y + 40, 0x40000000);
+        Ui.text(g, name, mid - nameW / 2, y + 31, 0xFFFFFFFF, false);
+        Ui.centered(g, shown == null ? "Noch kein Nametag – schreib unten etwas" : "So sehen dich andere Mytic-Spieler", mid, y + 49, Ui.MUTED, false);
+
+        // Eingabe (Rohtext mit &-Codes)
+        int[] in = tagField();
+        boolean iHover = Ui.inside(mouseX, mouseY, in[0], in[1], in[2], in[3]);
+        if (lunar) Ui.outline(g, in[0], in[1], in[2], in[3], 4, tagFocused ? 0x90FFFFFF : iHover ? 0x50FFFFFF : Ui.L_LINE, 0xFF1C1C1C);
+        else Ui.outline(g, in[0], in[1], in[2], in[3], 8, tagFocused ? Ui.accent2() : iHover ? Ui.withAlpha(Ui.accent2(), 120) : Ui.LINE, Ui.SURFACE);
+        String raw = tagInput.isEmpty() && !tagFocused ? "Text eingeben, z. B. &b&lMytic &7| &dPro" : tagInput;
+        String visible = raw;
+        while (font.width(visible) > in[2] - 14 && visible.length() > 1) visible = visible.substring(1);
+        Ui.text(g, visible, in[0] + 6, in[1] + 5, tagInput.isEmpty() ? Ui.MUTED : Ui.TEXT, false);
+        if (tagFocused && (System.currentTimeMillis() / 500) % 2 == 0) {
+            int caret = in[0] + 6 + font.width(visible);
+            g.fill(caret, in[1] + 4, caret + 1, in[1] + 14, Ui.TEXT);
+        }
+        // Farben
+        for (int i = 0; i < 16; i++) {
+            int[] b = swatch(i);
+            boolean hover = Ui.inside(mouseX, mouseY, b[0], b[1], b[2], b[3]);
+            Ui.rect(g, b[0] - 1, b[1] - 1, b[2] + 2, b[3] + 2, 3, hover ? 0xFFFFFFFF : 0x40FFFFFF);
+            Ui.rect(g, b[0], b[1], b[2], b[3], 2, COLORS[i]);
+        }
+        // Format
+        for (int i = 0; i < FORMATS.length; i++) {
+            int[] b = formatButton(i);
+            boolean hover = Ui.inside(mouseX, mouseY, b[0], b[1], b[2], b[3]);
+            Ui.outline(g, b[0], b[1], b[2], b[3], lunar ? 4 : 6, hover ? 0x90FFFFFF : lunar ? Ui.L_LINE : Ui.LINE, lunar ? Ui.L_CARD : Ui.SURFACE);
+            Ui.centered(g, FORMATS[i][0], b[0] + b[2] / 2, b[1] + 4, Ui.TEXT, false);
+        }
+        String[] labels = {"Übernehmen", "Entfernen"};
+        for (int i = 0; i < 2; i++) {
+            int[] b = tagButton(i);
+            boolean hover = Ui.inside(mouseX, mouseY, b[0], b[1], b[2], b[3]);
+            int color = i == 0 ? (lunar ? Ui.L_GREEN : Ui.accent()) : 0xFF555555;
+            Ui.rect(g, b[0], b[1], b[2], b[3], lunar ? 4 : 8, hover ? Ui.mix(color, 0xFFFFFFFF, 0.15f) : color);
+            Ui.centered(g, labels[i], b[0] + b[2] / 2, b[1] + 4, 0xFFFFFFFF, false);
+        }
+        boolean saved = tagInput.equals(MyticClient.config().nametag == null ? "" : MyticClient.config().nametag);
+        int[] tb = tagButton(1);
+        Ui.text(g, saved ? "Gespeichert" : "Noch nicht übernommen", tb[0] + tb[2] + 10, tb[1] + 4, saved ? Ui.MUTED : 0xFFFFD23F, false);
+        int[] t = ownToggle();
+        boolean own = MyticClient.config().nametagSelf;
+        Ui.outline(g, t[0], t[1], t[2], t[3], 3, own ? (lunar ? Ui.L_GREEN : Ui.accent()) : 0x60FFFFFF, own ? (lunar ? Ui.L_GREEN : Ui.accent()) : 0x00000000);
+        if (own) Ui.scaled(g, "✓", t[0] + 2.5f, t[1] + 2f, 0.8f, 0xFFFFFFFF, false);
+        Ui.text(g, "Eigenen Namen in F5 zeigen", t[0] + 18, t[1] + 2, Ui.TEXT, false);
+
+        int fy = py + ph - FOOTER + 10;
+        String info = Friends.available() ? "Andere Mytic-Spieler sehen deinen Nametag über deinem Namen" : "Nur du siehst ihn (ohne Mytic Launcher)";
+        Ui.text(g, font.plainSubstrByWidth(info, pw - 40), px + 12, fy, Ui.MUTED, false);
+    }
+
+    private boolean clickNametag(double mx, double my) {
+        int[] in = tagField();
+        tagFocused = Ui.inside(mx, my, in[0], in[1], in[2], in[3]);
+        if (tagFocused) return true;
+        for (int i = 0; i < 16; i++) {
+            int[] b = swatch(i);
+            if (Ui.inside(mx, my, b[0], b[1], b[2], b[3])) {
+                addTag("&" + COLOR_CODES.charAt(i));
+                return true;
+            }
+        }
+        for (int i = 0; i < FORMATS.length; i++) {
+            int[] b = formatButton(i);
+            if (Ui.inside(mx, my, b[0], b[1], b[2], b[3])) {
+                addTag("&" + FORMATS[i][1]);
+                return true;
+            }
+        }
+        if (Ui.inside(mx, my, tagButton(0)[0], tagButton(0)[1], tagButton(0)[2], tagButton(0)[3])) {
+            CosmeticsCore.selectNametag(tagInput);
+            tagFocused = false;
+            return true;
+        }
+        if (Ui.inside(mx, my, tagButton(1)[0], tagButton(1)[1], tagButton(1)[2], tagButton(1)[3])) {
+            tagInput = "";
+            CosmeticsCore.selectNametag(null);
+            return true;
+        }
+        int[] t = ownToggle();
+        if (Ui.inside(mx, my, t[0] - 2, t[1] - 2, 200, t[3] + 4)) {
+            MyticClient.config().nametagSelf = !MyticClient.config().nametagSelf;
+            MyticClient.config().save();
+            return true;
+        }
+        return false;
+    }
+
+    private void addTag(String code) {
+        if (tagInput.length() + code.length() <= CosmeticsCore.NAMETAG_RAW) tagInput += code;
+        tagFocused = true;
     }
 
     // ------------------------------------------------------------------------------------------ MiniMe
@@ -430,7 +579,14 @@ public class CosmeticsScreen extends PanelScreen {
 
     @Override
     protected boolean onChar(Input.Typed event) {
-        if (tab != 1 || System.currentTimeMillis() - openedAt < 250) return false;
+        if (System.currentTimeMillis() - openedAt < 250) return false;
+        if (isTab("Nametag")) {
+            String c = event.codepointAsString();
+            if (!tagFocused || c.isEmpty() || c.charAt(0) < ' ' || c.indexOf('\u00a7') >= 0) return tagFocused;
+            if (tagInput.length() + c.length() <= CosmeticsCore.NAMETAG_RAW) tagInput += c;
+            return true;
+        }
+        if (tab != 1) return false;
         String c = event.codepointAsString();
         if (!nameChar(c)) return inputFocused;
         inputFocused = true;
@@ -441,6 +597,21 @@ public class CosmeticsScreen extends PanelScreen {
     @Override
     protected boolean onKey(Input.Key event) {
         int key = event.key();
+        if (isTab("Nametag") && tagFocused) {
+            if (key == InputConstants.KEY_BACKSPACE) {
+                if (!tagInput.isEmpty()) tagInput = event.hasControlDown() ? "" : tagInput.substring(0, tagInput.offsetByCodePoints(tagInput.length(), -1));
+                return true;
+            }
+            if (key == InputConstants.KEY_RETURN || key == InputConstants.KEY_NUMPADENTER) {
+                CosmeticsCore.selectNametag(tagInput);
+                tagFocused = false;
+                return true;
+            }
+            if (key == InputConstants.KEY_ESCAPE) {
+                tagFocused = false;
+                return true;
+            }
+        }
         if (tab == 1 && inputFocused) {
             if (key == InputConstants.KEY_BACKSPACE) {
                 if (!input.isEmpty()) input = event.hasControlDown() ? "" : input.substring(0, input.length() - 1);
@@ -467,11 +638,13 @@ public class CosmeticsScreen extends PanelScreen {
             if (Ui.inside(mx, my, tabX(i) - 4, py + 8, font.width(TABS[i]) + 8, 18)) {
                 tab = i;
                 inputFocused = false;
+                tagFocused = false;
                 scrollPos = scrollTarget = 0;
                 return true;
             }
         }
         if (tab == 1) return clickMiniMe(mx, my);
+        if (isTab("Nametag")) return clickNametag(mx, my);
         if (!CosmeticsCore.available() || !Ui.inside(mx, my, cx(), cy(), cw(), ch())) return false;
         List<CosmeticsCore.Cape> capes = CosmeticsCore.capes();
         for (int i = 0; i < count(); i++) {

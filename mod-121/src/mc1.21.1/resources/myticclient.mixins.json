@@ -20,7 +20,8 @@
     "CapeLayerMixin",
     "ItemModelResolverMixin",
     "ShieldSpecialRendererMixin",
-    "ItemInHandLayerMixin"
+    "ItemInHandLayerMixin",
+    "LivingEntityRendererMixin"
   ],
   "injectors": {
     "defaultRequire": 1
