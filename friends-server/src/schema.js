@@ -46,4 +46,5 @@ export const MIGRATIONS = [
   "ALTER TABLE users ADD COLUMN minime_pos TEXT",
   "ALTER TABLE users ADD COLUMN minime_set TEXT",
   "ALTER TABLE users ADD COLUMN shield TEXT",
+  "ALTER TABLE users ADD COLUMN aura TEXT",
 ];

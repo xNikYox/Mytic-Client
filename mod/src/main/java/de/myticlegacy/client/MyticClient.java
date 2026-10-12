@@ -294,6 +294,7 @@ public final class MyticClient implements ClientModInitializer {
         freelook.tick(mc);
         snaplook.tick(mc);
         de.myticlegacy.client.cosmetics.Shields.demoTick(mc);
+        de.myticlegacy.client.cosmetics.Auras.tick(mc);
         autoText.tick(mc);
         lightOverlay.tick(mc);
         fpsBoost.tick(mc);

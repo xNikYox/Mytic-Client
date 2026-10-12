@@ -55,6 +55,26 @@ public final class CosmeticsCore {
     private static List<Cape> capes;
     /** Flügel aus dem Katalog: {id, name} */
     private static List<String[]> wings = Collections.emptyList();
+    /** Aura aus dem Katalog: Bewegungsmuster, Partikel pro Sekunde, Partikel-Angaben, Farben fürs Menü */
+    public static final class Aura {
+        public final String id, name, pattern;
+        public final float rate;
+        public final String[] parts;
+        public final int[] colors;
+
+        Aura(String id, String name, String pattern, float rate, String[] parts, int[] colors) {
+            this.id = id;
+            this.name = name;
+            this.pattern = pattern;
+            this.rate = rate;
+            this.parts = parts;
+            this.colors = colors;
+        }
+    }
+
+    private static List<Aura> auras = Collections.emptyList();
+    /** uuid (ohne Striche) → Aura-ID oder "" (keine). */
+    private static final Map<String, String> REMOTE_AURA = new ConcurrentHashMap<>();
     /** Schilde aus dem Katalog: {id, name, bilder, ms je bild} */
     private static List<String[]> shields = Collections.emptyList();
 
@@ -104,6 +124,21 @@ public final class CosmeticsCore {
                             }
                             wings = Collections.unmodifiableList(w);
                         }
+                        if (root.has("auras")) {
+                            List<Aura> list2 = new ArrayList<>();
+                            for (JsonElement e : root.getAsJsonArray("auras")) {
+                                JsonObject o = e.getAsJsonObject();
+                                JsonArray ps = o.getAsJsonArray("parts");
+                                String[] parts = new String[ps.size()];
+                                for (int i = 0; i < parts.length; i++) parts[i] = ps.get(i).getAsString();
+                                JsonArray cs = o.getAsJsonArray("colors");
+                                int[] colors = new int[cs.size()];
+                                for (int i = 0; i < colors.length; i++) colors[i] = (int) Long.parseLong(cs.get(i).getAsString().substring(1), 16) | 0xFF000000;
+                                list2.add(new Aura(o.get("id").getAsString(), o.get("name").getAsString(), o.get("pattern").getAsString(),
+                                        o.get("rate").getAsFloat(), parts, colors));
+                            }
+                            auras = Collections.unmodifiableList(list2);
+                        }
                         if (root.has("shields")) {
                             List<String[]> sh = new ArrayList<>();
                             for (JsonElement e : root.getAsJsonArray("shields")) {
@@ -140,6 +175,40 @@ public final class CosmeticsCore {
             }
         }
         return new int[]{20, 24};
+    }
+
+    /** Auren im Paket */
+    public static List<Aura> auras() {
+        capes();
+        return auras;
+    }
+
+    public static Aura aura(String id) {
+        if (id == null) return null;
+        for (Aura a : auras()) if (a.id.equals(id)) return a;
+        return null;
+    }
+
+    /** Eigene Aura (Vorschau: -Dmytic.auraDemo=<id> oder =all, dann alle 5 Sekunden eine andere). */
+    public static String selectedAura() {
+        String demo = System.getProperty("mytic.auraDemo");
+        if ("all".equals(demo) && !auras().isEmpty()) return auras().get((int) ((System.currentTimeMillis() / 5000) % auras().size())).id;
+        if (demo != null && aura(demo) != null) return demo;
+        String id = MyticClient.config().aura;
+        return aura(id) != null ? id : null;
+    }
+
+    public static void selectAura(String id) {
+        MyticClient.config().aura = id;
+        MyticClient.config().save();
+        push();
+    }
+
+    /** Aura eines Spielers: eigene aus der Auswahl, andere vom Friends-Server. */
+    public static Aura auraOf(String uuid, boolean self) {
+        if (self) return aura(selectedAura());
+        String id = REMOTE_AURA.get(uuid);
+        return id == null || id.isEmpty() ? null : aura(id);
     }
 
     /** Schilde im Paket: {id, name, bilder, ms je bild} */
@@ -242,6 +311,7 @@ public final class CosmeticsCore {
         final Map<String, String> minis = MiniMeCore.selectedAll();
         final String wingsId = MyticClient.config().wings;
         final String shieldId = MyticClient.config().shield;
+        final String auraId = MyticClient.config().aura;
         Friends.background(() -> {
             try {
                 JsonObject body = new JsonObject();
@@ -251,6 +321,7 @@ public final class CosmeticsCore {
                 body.add("minimes", set);
                 body.addProperty("wings", wingsId);
                 body.addProperty("shield", shieldId);
+                body.addProperty("aura", auraId);
                 Friends.post("api/cosmetics", body);
             } catch (Exception e) {
                 MyticClient.LOG.warn("Cosmetics nicht gespeichert: " + e.getMessage());
@@ -290,7 +361,7 @@ public final class CosmeticsCore {
      */
     public static void tick(List<String> nearby) {
         if (!Friends.available()) return;
-        if (!pushed && (MyticClient.config().cape != null || MiniMeCore.any() || MyticClient.config().wings != null || MyticClient.config().shield != null)) push();
+        if (!pushed && (MyticClient.config().cape != null || MiniMeCore.any() || MyticClient.config().wings != null || MyticClient.config().shield != null || MyticClient.config().aura != null)) push();
         if (lookupRunning) return;
         long now = System.currentTimeMillis();
         final List<String> ask = new ArrayList<>();
@@ -319,6 +390,10 @@ public final class CosmeticsCore {
                         minis.put(e.getKey(), set);
                     }
                 }
+                Map<String, String> aurasFound = new HashMap<>();
+                if (answer.has("auras")) {
+                    for (Map.Entry<String, JsonElement> e : answer.getAsJsonObject("auras").entrySet()) aurasFound.put(e.getKey(), e.getValue().getAsString());
+                }
                 Map<String, String> shieldsFound = new HashMap<>();
                 if (answer.has("shields")) {
                     for (Map.Entry<String, JsonElement> e : answer.getAsJsonObject("shields").entrySet()) shieldsFound.put(e.getKey(), e.getValue().getAsString());
@@ -330,6 +405,7 @@ public final class CosmeticsCore {
                 for (String uuid : ask) {
                     REMOTE.put(uuid, found.containsKey(uuid) ? found.get(uuid) : "");
                     REMOTE_MINI.put(uuid, minis.containsKey(uuid) ? minis.get(uuid) : new HashMap<String, String>());
+                    REMOTE_AURA.put(uuid, aurasFound.containsKey(uuid) ? aurasFound.get(uuid) : "");
                     REMOTE_SHIELD.put(uuid, shieldsFound.containsKey(uuid) ? shieldsFound.get(uuid) : "");
                     REMOTE_WINGS.put(uuid, wingsFound.containsKey(uuid) ? wingsFound.get(uuid) : "");
                 }

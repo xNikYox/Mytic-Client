@@ -425,6 +425,7 @@ public final class MyticClient {
         de.myticlegacy.client.cosmetics.MiniMe.register(mc);
         de.myticlegacy.client.cosmetics.Wings.register(mc);
         de.myticlegacy.client.cosmetics.PhysicsCape.register(mc);
+        de.myticlegacy.client.cosmetics.Auras.tick(mc);
         CombatTracker.tick(mc);
 
         float gamma = mc.gameSettings.gammaSetting;

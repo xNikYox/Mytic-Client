@@ -34,6 +34,32 @@ SHIELDS = [("void", "Void"), ("death", "Death"), ("mytic", "Mytic Neon"), ("drac
            ("feuerwerk", "Feuerwerk"), ("regenbogen", "Regenbogen"), ("herzen", "Herzen"), ("gold", "Königsgold")]
 SHIELD_FRAMES = os.path.join(BUILD, "shields")
 
+# Auren: dezente Minecraft-Partikel um den Spieler. pattern: orbit, halo, feet, rise, fall, spiral, sparkle;
+# rate = Partikel pro Sekunde; parts = Partikel-Arten (oder dust:RRGGBB:größe); colors = Vorschau im Menü
+AURAS = [
+    ("schwarzweiss", "Schwarz-Weiß", "orbit", 9, ["dust:ffffff:0.9", "dust:111111:0.9", "white_ash"], ["#ffffff", "#111111"]),
+    ("sternenstaub", "Sternenstaub", "rise", 3, ["end_rod"], ["#f4f0ff", "#c8b8ff"]),
+    ("funken", "Funken", "sparkle", 7, ["electric_spark"], ["#c8f4ff", "#ffffff"]),
+    ("seelen", "Seelen", "rise", 2.5, ["soul", "dust:6fe8ff:0.8"], ["#6fe8ff", "#2a8ea8"]),
+    ("kirschbluete", "Kirschblüten", "fall", 2.5, ["cherry_leaves"], ["#ffb3cf", "#ff8fb8"]),
+    ("schneefall", "Schneefall", "fall", 4, ["snowflake"], ["#ffffff", "#bfe8ff"]),
+    ("verliebt", "Verliebt", "halo", 0.8, ["heart"], ["#ff4f6d", "#ffb3c1"]),
+    ("melodie", "Melodie", "orbit", 2, ["note"], ["#7dff6a", "#ffd23f", "#3fd0ff"]),
+    ("zauber", "Verzaubert", "sparkle", 8, ["enchant"], ["#e0d8ff", "#9b8cff"]),
+    ("enderwirbel", "Enderwirbel", "spiral", 5, ["portal", "reverse_portal"], ["#b45cff", "#5a1a8a"]),
+    ("glut", "Glut", "rise", 6, ["dust:ff7a1a:0.9", "dust:ffcf4a:0.75", "small_flame"], ["#ff7a1a", "#ffcf4a"]),
+    ("asche", "Asche", "sparkle", 9, ["ash", "white_ash"], ["#8a8a8a", "#dddddd"]),
+    ("gluehwuermchen", "Glühwürmchen", "sparkle", 5, ["dust:d8ff5a:1.0", "dust:fff28a:0.8"], ["#d8ff5a", "#fff28a"]),
+    ("sporen", "Sporen", "sparkle", 8, ["spore_blossom_air", "crimson_spore", "warped_spore"], ["#7ad8b0", "#d84a6a"]),
+    ("goldregen", "Goldregen", "fall", 3, ["falling_nectar", "dust:ffd23f:0.8"], ["#ffd23f", "#ffb000"]),
+    ("obsidian", "Obsidian-Tränen", "fall", 2, ["falling_obsidian_tear"], ["#8a2cff", "#3a0a6a"]),
+    ("totem", "Totem", "spiral", 4, ["totem"], ["#7dff6a", "#ffd23f"]),
+    ("glanz", "Glanz", "sparkle", 3, ["wax_on", "wax_off"], ["#ffcf6a", "#ffffff"]),
+    ("kupfer", "Kupfer", "orbit", 3, ["scrape", "dust:e8865a:0.8"], ["#5ad8c8", "#e8865a"]),
+    ("sculk", "Sculk", "feet", 3, ["sculk_soul"], ["#1fb3c4", "#0a3a48"]),
+    ("regenbogen", "Regenbogen", "halo", 9, ["dust:rainbow:0.85"], ["#ff4f6d", "#ffd23f", "#7dff6a", "#3fd0ff", "#d66bff"]),
+]
+
 
 def main():
     os.makedirs(FRAMES, exist_ok=True)
@@ -43,7 +69,8 @@ def main():
     catalog = {"version": VERSION, "scale": 8, "capes": [{"id": i, "name": n, "frames": 24, "frameMs": 70} for i, n in CAPES],
                "wings": [{"id": i, "name": n, "fxFrames": 16, "fxMs": 90} for i, n in WINGS]
                         + [{"id": i, "name": n, "fxFrames": 16, "fxMs": 90, "w": 24, "h": 20, "feathers": True} for i, n in PIXEL_WINGS],
-               "shields": [{"id": i, "name": n, "frames": 24, "frameMs": 70} for i, n in SHIELDS]}
+               "shields": [{"id": i, "name": n, "frames": 24, "frameMs": 70} for i, n in SHIELDS],
+               "auras": [{"id": i, "name": n, "pattern": pt, "rate": r, "parts": ps, "colors": cs} for i, n, pt, r, ps, cs in AURAS]}
     subprocess.run([sys.executable, os.path.join(HERE, "wings.py"), os.path.join(BUILD, "wings")], check=True)
     subprocess.run([sys.executable, os.path.join(HERE, "pixelwings.py"), os.path.join(BUILD, "wings")], check=True)
     # kleine, weich verkleinerte Bilder für die Vorschau im Cosmetics-Menü (große Texturen flimmern dort)

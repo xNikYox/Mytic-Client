@@ -27,6 +27,8 @@ public final class Config {
     /** Bis 2.18: ein MiniMe und seine Stelle – wird beim ersten Start nach miniMes übernommen. */
     public String miniMe;
     public String miniMePos;
+    /** Gewählte Aura (Cosmetics), null = keine. */
+    public String aura;
     /** Gewählter Schild (Cosmetics), null = keiner. */
     public String shield;
     /** Gewählte Flügel (Cosmetics), null = keine. */
