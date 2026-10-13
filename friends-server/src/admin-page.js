@@ -87,7 +87,8 @@ a.pick { color: var(--cyan); cursor: pointer; text-decoration: underline; }
       loadList();
     }).catch(function (e) { say($("loginMsg"), e.message === "Keine Admin-Rechte" ? "Falsches Passwort" : e.message); });
   }
-  $("loginBtn").onclick = function () { key = $("key").value.trim(); login(); };
+  // beim Kopieren mitgekommene Zeichen (Leerzeichen, Anführungszeichen, Backticks, Sternchen) entfernen
+  $("loginBtn").onclick = function () { key = $("key").value.replace(/[\\s"'\u0060*]/g, ""); login(); };
   $("key").onkeydown = function (e) { if (e.key === "Enter") $("loginBtn").click(); };
   $("logoutBtn").onclick = function () { key = ""; try { sessionStorage.removeItem("mytic-admin-key"); } catch (e) {} location.reload(); };
 
