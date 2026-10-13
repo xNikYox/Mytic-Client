@@ -91,7 +91,7 @@ function clean(value, max) {
  * options: { allowOffline, fetch, now, log }
  */
 export function createApi(db, options = {}) {
-  const adminKey = typeof options.adminKey === "string" && options.adminKey.length >= 16 ? options.adminKey : null;
+  const adminKey = typeof options.adminKey === "string" && options.adminKey.length >= 8 ? options.adminKey : null;
   const fetchImpl = options.fetch || ((...args) => fetch(...args));
   const now = options.now || (() => Date.now());
   const allowOffline = Boolean(options.allowOffline);
