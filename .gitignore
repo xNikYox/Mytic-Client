@@ -9,3 +9,4 @@ friends-server/friends.db*
 launcher/scripts/.dev-friends-site
 cosmetics/build/
 __pycache__/
+friends-server/.admin-key

@@ -31,6 +31,9 @@ public final class Config {
     public String nametag;
     /** Eigenen Namen samt Nametag in der Third-Person-Ansicht (F5) zeigen */
     public boolean nametagSelf = true;
+    /** Zuletzt bekannte Freischaltungen (falls der Friends-Server gerade nicht erreichbar ist) */
+    public java.util.List<String> ownedCache = new java.util.ArrayList<>();
+    public boolean adminCache;
     /** Gewählte Aura (Cosmetics), null = keine. */
     public String aura;
     /** Gewählter Schild (Cosmetics), null = keiner. */

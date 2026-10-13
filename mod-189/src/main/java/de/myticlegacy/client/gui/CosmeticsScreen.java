@@ -3,6 +3,7 @@ package de.myticlegacy.client.gui;
 import de.myticlegacy.client.compat.InputConstants;
 import de.myticlegacy.client.MyticClient;
 import de.myticlegacy.client.compat.Gfx;
+import de.myticlegacy.client.cosmetics.AdminCore;
 import de.myticlegacy.client.cosmetics.Cosmetics;
 import de.myticlegacy.client.cosmetics.CosmeticsCore;
 import de.myticlegacy.client.cosmetics.MiniMeCore;
@@ -22,7 +23,16 @@ public class CosmeticsScreen extends PanelScreen {
     private double scrollPos;
     private double scrollTarget;
     // 1.8.9 hat keine Schilde
-    private static final String[] TABS = {"Umhänge", "MiniMe", "Flügel", "Auren", "Nametag"};
+    private static final String[] BASE_TABS = {"Umhänge", "MiniMe", "Flügel", "Auren", "Nametag"};
+    /** Reiter; "Admin" nur für Konten mit Admin-Recht */
+    private final String[] TABS;
+    /** Zeitpunkt des letzten Klicks auf etwas Gesperrtes (Hinweis unten) */
+    private long lockedAt;
+    // Admin-Reiter
+    private String adminInput = "";
+    private boolean adminFocused;
+    private double adminScroll;
+    private double adminScrollTarget;
     /** zuletzt offener Reiter bleibt beim nächsten Öffnen */
     private static int tab;
     /** Stelle, deren MiniMe gerade bearbeitet wird (Index in MiniMeCore.POSITIONS) */
@@ -44,6 +54,14 @@ public class CosmeticsScreen extends PanelScreen {
 
     public CosmeticsScreen() {
         super("Cosmetics");
+        CosmeticsCore.refreshOwned();
+        if (CosmeticsCore.isAdmin()) {
+            TABS = java.util.Arrays.copyOf(BASE_TABS, BASE_TABS.length + 1);
+            TABS[BASE_TABS.length] = "Admin";
+        } else {
+            TABS = BASE_TABS;
+        }
+        if (tab >= TABS.length) tab = 0;
     }
 
     @Override
@@ -55,8 +73,16 @@ public class CosmeticsScreen extends PanelScreen {
 
     private int tabX(int i) {
         int x = lastHeaderX;
-        for (int k = 0; k < i; k++) x += font.width(TABS[k]) + 14;
+        for (int k = 0; k < i; k++) x += font.width(TABS[k]) + tabGap();
         return x;
+    }
+
+    /** Abstand zwischen den Reitern: 14, bei vielen Reitern enger, damit alle in die Kopfzeile passen */
+    private int tabGap() {
+        int widths = 0;
+        for (String t : TABS) widths += font.width(t);
+        int room = px + pw - 12 - lastHeaderX - widths;
+        return Math.max(6, Math.min(14, room / Math.max(1, TABS.length - 1)));
     }
 
     private int cx() {
@@ -88,12 +114,12 @@ public class CosmeticsScreen extends PanelScreen {
     }
 
     /** Reiter über den Namen (1.8.9 hat keinen Schild-Reiter, die Nummern weichen ab) */
-    private static boolean isTab(String name) {
+    private boolean isTab(String name) {
         return name.equals(TABS[tab]);
     }
 
     /** Flügel, Schilde oder Auren des Reiters als {id, name, ...} */
-    private static List<String[]> entries() {
+    private List<String[]> entries() {
         if (isTab("Schilde")) return CosmeticsCore.shields();
         if (isTab("Auren")) {
             List<String[]> out = new java.util.ArrayList<>();
@@ -143,6 +169,18 @@ public class CosmeticsScreen extends PanelScreen {
 
         int mid = px + pw / 2;
         int midY = py + HEADER + (ph - HEADER - FOOTER) / 2;
+        if (isTab("Admin")) {
+            drawAdmin(g, mouseX, mouseY);
+            return;
+        }
+        if (tab == 1 && !CosmeticsCore.owns("minime", null)) {
+            drawLockedTab(g, "MiniMe ist für dich noch nicht freigeschaltet.");
+            return;
+        }
+        if (isTab("Nametag") && !CosmeticsCore.owns("nametag", null)) {
+            drawLockedTab(g, "Der Nametag ist für dich noch nicht freigeschaltet.");
+            return;
+        }
         if (tab == 1) {
             drawMiniMe(g, mouseX, mouseY);
             return;
@@ -174,6 +212,7 @@ public class CosmeticsScreen extends PanelScreen {
             CosmeticsCore.Cape cape = i == 0 || wingTab || shieldTab || auraTab ? null : capes.get(i - 1);
             String[] wing = i == 0 || !(wingTab || shieldTab || auraTab) ? null : wings.get(i - 1);
             String id = cape != null ? cape.id : wing != null ? wing[0] : null;
+            boolean locked = id != null && !CosmeticsCore.owns(kindOfTab(), id);
             boolean active = id == null ? selected == null : id.equals(selected);
             boolean over = inContent && Ui.inside(mouseX, mouseY, c[0], c[1], CARD_W, CARD_H);
             float hv = Ui.animate("cos:" + i, over, 16f);
@@ -211,6 +250,10 @@ public class CosmeticsScreen extends PanelScreen {
                 Ui.rect(g, c[0] + CARD_W - 13, c[1] + 3, 10, 10, 5, lunar ? Ui.L_GREEN : Ui.accent());
                 Ui.scaled(g, "✓", c[0] + CARD_W - 10.5f, c[1] + 4.5f, 0.75f, 0xFFFFFFFF, false);
             }
+            if (locked) {
+                Ui.rect(g, c[0] + 1, c[1] + 1, CARD_W - 2, CARD_H - 2, lunar ? 3 : 5, 0xA0000000);
+                drawLock(g, c[0] + CARD_W / 2, c[1] + CARD_H / 2 - 10, 0xFFE8E2F5);
+            }
         }
         Gfx.noScissor(g);
         int total = contentHeight();
@@ -225,8 +268,191 @@ public class CosmeticsScreen extends PanelScreen {
         int hintW = font.width(hint);
         String info = !Friends.available() ? (wingTab || auraTab ? "Nur du siehst sie (ohne Mytic Launcher)" : "Nur du siehst ihn (ohne Mytic Launcher)")
                 : wingTab ? "Andere Mytic-Spieler sehen deine Flügel" : shieldTab ? "Andere Mytic-Spieler sehen deinen Schild" : auraTab ? "Andere Mytic-Spieler sehen deine Aura" : "Andere Mytic-Spieler sehen deinen Umhang";
-        Ui.text(g, font.plainSubstrByWidth(info, pw - 40 - hintW), px + 12, fy, Ui.MUTED, false);
+        boolean lockNote = System.currentTimeMillis() - lockedAt < 3500;
+        if (lockNote) info = "Gesperrt – ein Admin kann es freischalten";
+        Ui.text(g, font.plainSubstrByWidth(info, pw - 40 - hintW), px + 12, fy, lockNote ? 0xFFFFD23F : Ui.MUTED, false);
         Ui.text(g, hint, px + pw - 12 - hintW, fy, Ui.withAlpha(Ui.MUTED, 160), false);
+    }
+
+    /** Art der Cosmetics im aktuellen Reiter (für die Freischaltung) */
+    private String kindOfTab() {
+        return isTab("Flügel") ? "wings" : isTab("Schilde") ? "shield" : isTab("Auren") ? "aura" : "cape";
+    }
+
+    /** Kleines Schloss */
+    private static void drawLock(GuiGraphics g, int cx, int cy, int color) {
+        Ui.rect(g, cx - 5, cy - 8, 10, 2, 1, color);
+        Ui.rect(g, cx - 5, cy - 8, 2, 8, 1, color);
+        Ui.rect(g, cx + 3, cy - 8, 2, 8, 1, color);
+        Ui.rect(g, cx - 7, cy - 1, 14, 11, 2, color);
+        Ui.rect(g, cx - 1, cy + 2, 2, 4, 0, 0xFF1A1426);
+    }
+
+    private void drawLockedTab(GuiGraphics g, String text) {
+        int mid = px + pw / 2;
+        int midY = py + HEADER + (ph - HEADER - FOOTER) / 2;
+        drawLock(g, mid, midY - 26, Ui.MUTED);
+        Ui.centered(g, text, mid, midY - 4, Ui.TEXT, false);
+        Ui.centered(g, "Ein Admin kann es dir freischalten.", mid, midY + 10, Ui.MUTED, false);
+    }
+
+    // ------------------------------------------------------------------------------------------ Admin
+
+    private int[] adminField() {
+        return new int[]{cx() + 54, cy(), Math.min(170, cw() - 230), 16};
+    }
+
+    private int[] adminButton(int i) {
+        int[] f = adminField();
+        int w0 = font.width("Laden") + 14, w1 = font.width("Speichern") + 14;
+        return i == 0 ? new int[]{f[0] + f[2] + 6, f[1], w0, 16} : new int[]{f[0] + f[2] + 10 + w0, f[1], w1, 16};
+    }
+
+    /** Ein Häkchen-Feld der Admin-Liste */
+    private static final class AdminChip {
+        final String item, label;
+        final boolean head;
+        int x, y, w;
+
+        AdminChip(String item, String label, boolean head) {
+            this.item = item;
+            this.label = label;
+            this.head = head;
+        }
+    }
+
+    /** Alle Felder in Zeilen gelegt (Kopfzeilen ohne item); y relativ zum Anfang der Liste */
+    private List<AdminChip> adminLayout() {
+        List<AdminChip> out = new java.util.ArrayList<>();
+        int left = cx(), width = cw() - 8;
+        int[] pos = {0, 0};
+        java.util.function.Consumer<AdminChip> place = c -> {
+            if (c.head) {
+                pos[0] = 0;
+                pos[1] += out.isEmpty() ? 0 : 18;
+                c.x = left;
+                c.y = pos[1];
+                c.w = width;
+                pos[1] += 13;
+                out.add(c);
+                return;
+            }
+            c.w = font.width(c.label) + 22;
+            if (pos[0] + c.w > width) {
+                pos[0] = 0;
+                pos[1] += 16;
+            }
+            c.x = left + pos[0];
+            c.y = pos[1];
+            pos[0] += c.w + 4;
+            out.add(c);
+        };
+        place.accept(new AdminChip(null, "ALLGEMEIN", true));
+        place.accept(new AdminChip("*", "Alles", false));
+        place.accept(new AdminChip("admin", "Admin", false));
+        place.accept(new AdminChip("minime", "MiniMe", false));
+        place.accept(new AdminChip("nametag", "Nametag", false));
+        String[][] kinds = {{"cape", "UMHÄNGE"}, {"wings", "FLÜGEL"}, {"shield", "SCHILDE"}, {"aura", "AUREN"}};
+        for (String[] k : kinds) {
+            place.accept(new AdminChip(null, k[1], true));
+            place.accept(new AdminChip(k[0] + ":*", "Alle", false));
+            if (k[0].equals("cape")) for (CosmeticsCore.Cape c : CosmeticsCore.capes()) place.accept(new AdminChip("cape:" + c.id, c.name, false));
+            if (k[0].equals("wings")) for (String[] w : CosmeticsCore.wings()) place.accept(new AdminChip("wings:" + w[0], w[1], false));
+            if (k[0].equals("shield")) for (String[] w : CosmeticsCore.shields()) place.accept(new AdminChip("shield:" + w[0], w[1], false));
+            if (k[0].equals("aura")) for (CosmeticsCore.Aura a : CosmeticsCore.auras()) place.accept(new AdminChip("aura:" + a.id, a.name, false));
+        }
+        return out;
+    }
+
+    private int adminTop() {
+        return cy() + 40;
+    }
+
+    private void drawAdmin(GuiGraphics g, int mouseX, int mouseY) {
+        boolean lunar = Ui.lunar();
+        Ui.text(g, "Spieler", cx(), cy() + 4, Ui.MUTED, false);
+        int[] f = adminField();
+        boolean hover = Ui.inside(mouseX, mouseY, f[0], f[1], f[2], f[3]);
+        if (lunar) Ui.outline(g, f[0], f[1], f[2], f[3], 4, adminFocused ? 0x90FFFFFF : hover ? 0x50FFFFFF : Ui.L_LINE, 0xFF1C1C1C);
+        else Ui.outline(g, f[0], f[1], f[2], f[3], 8, adminFocused ? Ui.accent2() : hover ? Ui.withAlpha(Ui.accent2(), 120) : Ui.LINE, Ui.SURFACE);
+        String shown = adminInput.isEmpty() && !adminFocused ? "Minecraft-Name" : adminInput;
+        Ui.text(g, font.plainSubstrByWidth(shown, f[2] - 12), f[0] + 6, f[1] + 4, adminInput.isEmpty() ? Ui.MUTED : Ui.TEXT, false);
+        if (adminFocused && (System.currentTimeMillis() / 500) % 2 == 0) {
+            int caret = f[0] + 6 + font.width(adminInput);
+            g.fill(caret, f[1] + 3, caret + 1, f[1] + 13, Ui.TEXT);
+        }
+        String[] labels = {"Laden", "Speichern"};
+        for (int i = 0; i < 2; i++) {
+            int[] b = adminButton(i);
+            boolean h = Ui.inside(mouseX, mouseY, b[0], b[1], b[2], b[3]);
+            boolean enabled = i == 0 || (AdminCore.uuid != null && AdminCore.dirty);
+            int color = !enabled ? 0xFF3A3A44 : i == 1 ? (lunar ? Ui.L_GREEN : Ui.accent()) : 0xFF555566;
+            Ui.rect(g, b[0], b[1], b[2], b[3], lunar ? 4 : 8, h && enabled ? Ui.mix(color, 0xFFFFFFFF, 0.15f) : color);
+            Ui.centered(g, labels[i], b[0] + b[2] / 2, b[1] + 4, enabled ? 0xFFFFFFFF : Ui.MUTED, false);
+        }
+        String status = AdminCore.message;
+        if (status == null && AdminCore.uuid != null) status = AdminCore.name + (AdminCore.dirty ? " – Änderungen noch nicht gespeichert" : " – " + AdminCore.ITEMS.size() + " Freischaltungen");
+        if (status == null) status = "Name eingeben und laden, dann Häkchen setzen und speichern.";
+        Ui.text(g, font.plainSubstrByWidth(status, cw()), cx(), cy() + 24, AdminCore.error ? Ui.RED : AdminCore.dirty ? 0xFFFFD23F : Ui.MUTED, false);
+        if (AdminCore.uuid == null) return;
+
+        adminScroll += (adminScrollTarget - adminScroll) * 0.35;
+        List<AdminChip> chips = adminLayout();
+        int top = adminTop(), bottom = py + ph - FOOTER - 4;
+        int total = chips.isEmpty() ? 0 : chips.get(chips.size() - 1).y + 16;
+        adminScrollTarget = Math.max(0, Math.min(adminScrollTarget, Math.max(0, total - (bottom - top))));
+        int off = (int) Math.round(adminScroll);
+        Gfx.scissor(g, cx(), top, cx() + cw(), bottom);
+        for (AdminChip c : chips) {
+            int y = top + c.y - off;
+            if (y + 14 < top || y > bottom) continue;
+            if (c.head) {
+                Ui.scaled(g, c.label, c.x, y + 2, 0.75f, Ui.MUTED, false);
+                continue;
+            }
+            boolean on = AdminCore.has(c.item);
+            boolean h = Ui.inside(mouseX, mouseY, c.x, y, c.w, 13) && mouseY >= top && mouseY <= bottom;
+            int accent = lunar ? Ui.L_GREEN : Ui.accent();
+            Ui.outline(g, c.x, y, c.w, 13, 6, on ? accent : h ? 0x80FFFFFF : 0x40FFFFFF, on ? Ui.withAlpha(accent, 70) : 0x20FFFFFF);
+            Ui.rect(g, c.x + 4, y + 3, 7, 7, 2, on ? accent : 0x40FFFFFF);
+            Ui.scaled(g, c.label, c.x + 15, y + 3, 0.8f, on ? 0xFFFFFFFF : Ui.TEXT, false);
+        }
+        Gfx.noScissor(g);
+        if (total > bottom - top) {
+            int barH = Math.max(18, (bottom - top) * (bottom - top) / total);
+            int barY = top + (int) ((bottom - top - barH) * (adminScroll / Math.max(1, total - (bottom - top))));
+            Ui.rect(g, px + pw - 6, barY, 3, barH, 1, lunar ? 0x60FFFFFF : Ui.withAlpha(Ui.accent2(), 200));
+        }
+        int fy = py + ph - FOOTER + 10;
+        Ui.text(g, "Admin: Cosmetics für Spieler freischalten", px + 12, fy, Ui.MUTED, false);
+    }
+
+    private boolean clickAdmin(double mx, double my) {
+        int[] f = adminField();
+        adminFocused = Ui.inside(mx, my, f[0], f[1], f[2], f[3]);
+        if (adminFocused) return true;
+        int[] b0 = adminButton(0), b1 = adminButton(1);
+        if (Ui.inside(mx, my, b0[0], b0[1], b0[2], b0[3])) {
+            AdminCore.load(adminInput);
+            adminScroll = adminScrollTarget = 0;
+            return true;
+        }
+        if (Ui.inside(mx, my, b1[0], b1[1], b1[2], b1[3])) {
+            if (AdminCore.dirty) AdminCore.save();
+            return true;
+        }
+        if (AdminCore.uuid == null) return false;
+        int top = adminTop(), bottom = py + ph - FOOTER - 4;
+        if (my < top || my > bottom) return false;
+        int off = (int) Math.round(adminScroll);
+        for (AdminChip c : adminLayout()) {
+            if (c.head) continue;
+            if (Ui.inside(mx, my, c.x, top + c.y - off, c.w, 13)) {
+                AdminCore.toggle(c.item);
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Vorschau einer Aura: kleine Figur, um die Punkte in den Farben und im Muster der Aura laufen. */
@@ -581,13 +807,19 @@ public class CosmeticsScreen extends PanelScreen {
     @Override
     protected boolean onChar(Input.Typed event) {
         if (System.currentTimeMillis() - openedAt < 250) return false;
+        if (isTab("Admin")) {
+            String c = event.codepointAsString();
+            if (!adminFocused || !nameChar(c)) return adminFocused;
+            if (adminInput.length() < 32) adminInput += c;
+            return true;
+        }
         if (isTab("Nametag")) {
             String c = event.codepointAsString();
             if (!tagFocused || c.isEmpty() || c.charAt(0) < ' ' || c.indexOf('\u00a7') >= 0) return tagFocused;
             if (tagInput.length() + c.length() <= CosmeticsCore.NAMETAG_RAW) tagInput += c;
             return true;
         }
-        if (tab != 1) return false;
+        if (tab != 1 || !CosmeticsCore.owns("minime", null)) return false;
         String c = event.codepointAsString();
         if (!nameChar(c)) return inputFocused;
         inputFocused = true;
@@ -598,6 +830,21 @@ public class CosmeticsScreen extends PanelScreen {
     @Override
     protected boolean onKey(Input.Key event) {
         int key = event.key();
+        if (isTab("Admin") && adminFocused) {
+            if (key == InputConstants.KEY_BACKSPACE) {
+                if (!adminInput.isEmpty()) adminInput = event.hasControlDown() ? "" : adminInput.substring(0, adminInput.length() - 1);
+                return true;
+            }
+            if (key == InputConstants.KEY_RETURN || key == InputConstants.KEY_NUMPADENTER) {
+                AdminCore.load(adminInput);
+                adminFocused = false;
+                return true;
+            }
+            if (key == InputConstants.KEY_ESCAPE) {
+                adminFocused = false;
+                return true;
+            }
+        }
         if (isTab("Nametag") && tagFocused) {
             if (key == InputConstants.KEY_BACKSPACE) {
                 if (!tagInput.isEmpty()) tagInput = event.hasControlDown() ? "" : tagInput.substring(0, tagInput.offsetByCodePoints(tagInput.length(), -1));
@@ -640,17 +887,24 @@ public class CosmeticsScreen extends PanelScreen {
                 tab = i;
                 inputFocused = false;
                 tagFocused = false;
+                adminFocused = false;
                 scrollPos = scrollTarget = 0;
                 return true;
             }
         }
-        if (tab == 1) return clickMiniMe(mx, my);
-        if (isTab("Nametag")) return clickNametag(mx, my);
+        if (isTab("Admin")) return clickAdmin(mx, my);
+        if (tab == 1) return CosmeticsCore.owns("minime", null) && clickMiniMe(mx, my);
+        if (isTab("Nametag")) return CosmeticsCore.owns("nametag", null) && clickNametag(mx, my);
         if (!CosmeticsCore.available() || !Ui.inside(mx, my, cx(), cy(), cw(), ch())) return false;
         List<CosmeticsCore.Cape> capes = CosmeticsCore.capes();
         for (int i = 0; i < count(); i++) {
             int[] c = card(i);
             if (Ui.inside(mx, my, c[0], c[1], CARD_W, CARD_H)) {
+                String id = i == 0 ? null : isTab("Umhänge") ? capes.get(i - 1).id : entries().get(i - 1)[0];
+                if (id != null && !CosmeticsCore.owns(kindOfTab(), id)) {
+                    lockedAt = System.currentTimeMillis();
+                    return true;
+                }
                 if (isTab("Flügel")) CosmeticsCore.selectWings(i == 0 ? null : CosmeticsCore.wings().get(i - 1)[0]);
                 else if (isTab("Schilde")) CosmeticsCore.selectShield(i == 0 ? null : CosmeticsCore.shields().get(i - 1)[0]);
                 else if (isTab("Auren")) CosmeticsCore.selectAura(i == 0 ? null : CosmeticsCore.auras().get(i - 1).id);
@@ -663,6 +917,10 @@ public class CosmeticsScreen extends PanelScreen {
 
     @Override
     protected boolean scroll(double mouseX, double mouseY, double amount) {
+        if (isTab("Admin")) {
+            adminScrollTarget = Math.max(0, adminScrollTarget - amount * 30);
+            return true;
+        }
         scrollTarget -= amount * 30;
         clampScroll();
         return true;

@@ -30,6 +30,11 @@ CREATE TABLE IF NOT EXISTS friends (
   created INTEGER NOT NULL,
   PRIMARY KEY (a, b)
 );
+CREATE TABLE IF NOT EXISTS grants (
+  uuid TEXT NOT NULL,
+  item TEXT NOT NULL,
+  PRIMARY KEY (uuid, item)
+);
 CREATE TABLE IF NOT EXISTS requests (
   sender TEXT NOT NULL,
   target TEXT NOT NULL,

@@ -85,6 +85,14 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   const port = Number(arg("--port", process.env.PORT || 8766));
   const file = arg("--db", process.env.MYTIC_FRIENDS_DB || path.join(here, "..", "friends.db"));
   const allowOffline = process.argv.includes("--offline") || process.env.MYTIC_FRIENDS_OFFLINE === "1";
-  const api = createApi(openDb(file), { allowOffline, log: (line) => console.log(new Date().toISOString(), line) });
+  // Admin-Passwort: MYTIC_ADMIN_KEY oder Datei .admin-key neben dem Server (nicht im Repository)
+  const keyFile = new URL("../.admin-key", import.meta.url);
+  let adminKey = process.env.MYTIC_ADMIN_KEY || "";
+  try {
+    if (!adminKey) adminKey = (await import("node:fs")).readFileSync(keyFile, "utf8").trim();
+  } catch {
+    // keine Admin-Seite
+  }
+  const api = createApi(openDb(file), { allowOffline, adminKey, log: (line) => console.log(new Date().toISOString(), line) });
   createServer(api).listen(port, () => console.log(`Mytic Friends-Server auf Port ${port} (Offline-Konten: ${allowOffline ? "ja" : "nein"}, DB: ${file})`));
 }

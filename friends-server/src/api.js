@@ -6,6 +6,8 @@
 import { headFromPng } from "./skin.js";
 import { verifyLogin } from "./mojang.js";
 import { MOJANG_KEYS } from "./mojang-keys.js";
+import { CATALOG } from "./catalog.js";
+import { ADMIN_PAGE } from "./admin-page.js";
 
 /** Ab wann ein Spieler als offline gilt (Mod und Launcher melden sich jede Minute). */
 export const ONLINE_MS = 150 * 1000;
@@ -19,6 +21,16 @@ const NAME = /^[A-Za-z0-9_]{3,16}$/;
 /** Wo der MiniMe sitzt (ohne Angabe: Schulter). */
 const MINIME_POS = ["shoulder", "head", "arm", "leg"];
 const UUID = /^[0-9a-f]{32}$/;
+/** Freischaltungen: alles (*), Admin, MiniMe, Nametag oder ein Teil bzw. eine ganze Art (cape:*). */
+const GRANT = /^(\*|admin|minime|nametag|(cape|wings|shield|aura):([a-z0-9_-]{1,32}|\*))$/;
+const ID = /^[a-z0-9_-]{1,32}$/;
+
+/** Darf jemand mit diesen Freischaltungen das haben? kind: cape, wings, shield, aura, minime, nametag. */
+function owns(items, kind, id) {
+  if (items.has("*")) return true;
+  if (kind === "minime" || kind === "nametag" || kind === "admin") return items.has(kind);
+  return items.has(`${kind}:*`) || items.has(`${kind}:${id}`);
+}
 
 /** MiniMes eines Nutzers je Stelle ({ shoulder: "Name", ... }), auch aus den alten Feldern (ein MiniMe + Position). */
 function miniMeSet(row) {
@@ -79,6 +91,7 @@ function clean(value, max) {
  * options: { allowOffline, fetch, now, log }
  */
 export function createApi(db, options = {}) {
+  const adminKey = typeof options.adminKey === "string" && options.adminKey.length >= 16 ? options.adminKey : null;
   const fetchImpl = options.fetch || ((...args) => fetch(...args));
   const now = options.now || (() => Date.now());
   const allowOffline = Boolean(options.allowOffline);
@@ -116,6 +129,42 @@ export function createApi(db, options = {}) {
       log(`Skin nicht lesbar: ${error.message}`);
       return null;
     }
+  }
+
+  async function grantsOf(uuid) {
+    return new Set((await db.all("SELECT item FROM grants WHERE uuid = ?", [uuid])).map((r) => r.item));
+  }
+
+  /** Gewähltes entfernen, das jemand nicht (mehr) freigeschaltet hat. */
+  async function dropUnowned(uuid) {
+    const items = await grantsOf(uuid);
+    const row = await db.get("SELECT cape, wings, shield, aura FROM users WHERE uuid = ?", [uuid]);
+    if (!row) return;
+    for (const [column, kind] of [["cape", "cape"], ["wings", "wings"], ["shield", "shield"], ["aura", "aura"]]) {
+      if (row[column] && !owns(items, kind, row[column])) await db.run(`UPDATE users SET ${column} = NULL WHERE uuid = ?`, [uuid]);
+    }
+    if (!owns(items, "minime")) await db.run("UPDATE users SET minime = NULL, minime_pos = NULL, minime_set = NULL WHERE uuid = ?", [uuid]);
+    if (!owns(items, "nametag")) await db.run("UPDATE users SET nametag = NULL WHERE uuid = ?", [uuid]);
+  }
+
+  /** Admin: entweder mit dem Admin-Passwort (Kopfzeile x-admin-key) oder angemeldet mit Admin-Freischaltung. */
+  async function adminAuth(request) {
+    const key = request.headers.get("x-admin-key");
+    if (key && adminKey && key.length === adminKey.length) {
+      let diff = 0;
+      for (let i = 0; i < key.length; i++) diff |= key.charCodeAt(i) ^ adminKey.charCodeAt(i);
+      if (diff === 0) return { admin: true };
+    }
+    if (request.headers.get("authorization")) {
+      const me = await auth(request);
+      if (owns(await grantsOf(me.uuid), "admin")) return me;
+    }
+    throw new HttpError(403, "Keine Admin-Rechte");
+  }
+
+  async function grantView(uuid) {
+    const user = await db.get("SELECT uuid, name FROM users WHERE uuid = ?", [uuid]);
+    return { uuid, name: user ? user.name : null, items: [...(await grantsOf(uuid))].sort() };
   }
 
   async function upsertUser(uuid, name, offline, head) {
@@ -326,6 +375,16 @@ export function createApi(db, options = {}) {
     "POST /api/cosmetics": async (request) => {
       const me = await auth(request);
       const data = await body(request);
+      const items = await grantsOf(me.uuid);
+      // nicht freigeschaltete Teile gelten als "keins"
+      for (const [field, kind] of [["cape", "cape"], ["wings", "wings"], ["shield", "shield"], ["aura", "aura"]]) {
+        if (typeof data[field] === "string" && !owns(items, kind, data[field])) data[field] = null;
+      }
+      if (!owns(items, "minime")) {
+        if ("minimes" in data) data.minimes = {};
+        if ("minime" in data) data.minime = null;
+      }
+      if (!owns(items, "nametag") && "nametag" in data) data.nametag = null;
       // ältere Mods schicken nur "cape" (oder gar nichts für "kein Umhang")
       if ("cape" in data || !("minime" in data || "wings" in data || "minimePos" in data || "minimes" in data || "shield" in data || "aura" in data || "nametag" in data)) {
         const cape = typeof data.cape === "string" && /^[a-z0-9_-]{1,32}$/.test(data.cape) ? data.cape : null;
@@ -372,7 +431,58 @@ export function createApi(db, options = {}) {
         await db.run("UPDATE users SET wings = ? WHERE uuid = ?", [wings, me.uuid]);
       }
       const row = await db.get("SELECT cape, minime, minime_pos, minime_set, wings, shield, aura, nametag FROM users WHERE uuid = ?", [me.uuid]);
-      return { cape: row.cape || null, minime: row.minime || null, minimePos: row.minime_pos || null, minimes: miniMeSet(row), wings: row.wings || null, shield: row.shield || null, aura: row.aura || null, nametag: row.nametag || null };
+      return { cape: row.cape || null, minime: row.minime || null, minimePos: row.minime_pos || null, minimes: miniMeSet(row), wings: row.wings || null, shield: row.shield || null, aura: row.aura || null, nametag: row.nametag || null, owned: [...items].sort() };
+    },
+
+    /** Eigene Freischaltungen (für das Cosmetics-Menü). */
+    "POST /api/cosmetics/owned": async (request) => {
+      const me = await auth(request);
+      const items = await grantsOf(me.uuid);
+      return { items: [...items].sort(), admin: owns(items, "admin") };
+    },
+
+    // ------------------------------------------------------------------ Admin: Cosmetics freischalten
+    "GET /api/admin/catalog": async (request) => {
+      await adminAuth(request);
+      return { catalog: CATALOG };
+    },
+
+    /** Spieler suchen (Name oder UUID); unbekannte Namen werden wie bei Freundschaftsanfragen angelegt. */
+    "POST /api/admin/user": async (request) => {
+      await adminAuth(request);
+      const { name } = await body(request);
+      const key = String(name || "").replace(/-/g, "").toLowerCase();
+      let user = UUID.test(key) ? await db.get("SELECT uuid, name FROM users WHERE uuid = ?", [key]) : null;
+      if (!user) user = (await findUser(name)) || (await placeholder(name));
+      if (!user) throw new HttpError(404, "Spieler nicht gefunden");
+      return grantView(user.uuid);
+    },
+
+    /** Freischaltungen eines Spielers festlegen (ersetzt die bisherigen). */
+    "POST /api/admin/grants": async (request) => {
+      const admin = await adminAuth(request);
+      const { uuid, items } = await body(request);
+      const id = String(uuid || "").replace(/-/g, "").toLowerCase();
+      if (!UUID.test(id) || !(await db.get("SELECT uuid FROM users WHERE uuid = ?", [id]))) throw new HttpError(404, "Spieler nicht gefunden");
+      const list = [...new Set((Array.isArray(items) ? items : []).map(String).filter((i) => GRANT.test(i)))].slice(0, 500);
+      // sich selbst die Admin-Rechte nehmen geht nur mit dem Passwort
+      if (admin.uuid === id && !list.includes("admin") && !list.includes("*")) throw new HttpError(400, "Du kannst dir die Admin-Rechte nicht selbst nehmen");
+      await db.run("DELETE FROM grants WHERE uuid = ?", [id]);
+      for (const item of list) await db.run("INSERT INTO grants (uuid, item) VALUES (?, ?)", [id, item]);
+      await dropUnowned(id);
+      return grantView(id);
+    },
+
+    /** Alle Spieler mit Freischaltungen. */
+    "GET /api/admin/users": async (request) => {
+      await adminAuth(request);
+      const rows = await db.all("SELECT g.uuid AS uuid, u.name AS name, g.item AS item FROM grants g LEFT JOIN users u ON u.uuid = g.uuid ORDER BY u.name_lower");
+      const map = new Map();
+      for (const r of rows) {
+        if (!map.has(r.uuid)) map.set(r.uuid, { uuid: r.uuid, name: r.name, items: [] });
+        map.get(r.uuid).items.push(r.item);
+      }
+      return { users: [...map.values()] };
     },
 
     /** Cosmetics anderer Spieler (z. B. alle auf dem Server), höchstens 100 auf einmal. */
@@ -390,7 +500,20 @@ export function createApi(db, options = {}) {
       const nametags = {};
       if (list.length) {
         const rows = await db.all(`SELECT uuid, cape, minime, minime_pos, minime_set, wings, shield, aura, nametag FROM users WHERE (cape IS NOT NULL OR minime IS NOT NULL OR wings IS NOT NULL OR shield IS NOT NULL OR aura IS NOT NULL OR nametag IS NOT NULL) AND uuid IN (${list.map(() => "?").join(",")})`, list);
+        const grantRows = await db.all(`SELECT uuid, item FROM grants WHERE uuid IN (${list.map(() => "?").join(",")})`, list);
+        const grantMap = new Map();
+        for (const g of grantRows) {
+          if (!grantMap.has(g.uuid)) grantMap.set(g.uuid, new Set());
+          grantMap.get(g.uuid).add(g.item);
+        }
         for (const row of rows) {
+          const items = grantMap.get(row.uuid) || new Set();
+          if (row.cape && !owns(items, "cape", row.cape)) row.cape = null;
+          if (row.wings && !owns(items, "wings", row.wings)) row.wings = null;
+          if (row.shield && !owns(items, "shield", row.shield)) row.shield = null;
+          if (row.aura && !owns(items, "aura", row.aura)) row.aura = null;
+          if (!owns(items, "minime")) row.minime = row.minime_set = row.minime_pos = null;
+          if (!owns(items, "nametag")) row.nametag = null;
           if (row.cape) capes[row.uuid] = row.cape;
           if (row.minime) minimes[row.uuid] = row.minime;
           if (row.minime && row.minime_pos) minimePos[row.uuid] = row.minime_pos;
@@ -454,11 +577,14 @@ export function createApi(db, options = {}) {
   return async function handle(request) {
     const url = new URL(request.url);
     if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, content-type", "access-control-allow-methods": "GET, POST" } });
+      return new Response(null, { status: 204, headers: { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, content-type, x-admin-key", "access-control-allow-methods": "GET, POST" } });
     }
     // Pfad ab "/api/" – so funktioniert der Server auch hinter einem Proxy mit Präfix
     const index = url.pathname.indexOf("/api/");
     const path = index >= 0 ? url.pathname.slice(index).replace(/\/+$/, "") : url.pathname;
+    if (request.method === "GET" && /\/admin\/?$/.test(url.pathname)) {
+      return new Response(ADMIN_PAGE, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-frame-options": "DENY" } });
+    }
     const route = routes[`${request.method} ${path}`];
     if (!route) return json({ error: "Nicht gefunden" }, 404);
     try {

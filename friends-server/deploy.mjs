@@ -50,13 +50,21 @@ form.append("metadata", new Blob([JSON.stringify({
   compatibility_date: "2026-09-01",
   compatibility_flags: ["nodejs_compat"],
   bindings: [{ type: "durable_object_namespace", name: "FRIENDS", class_name: "FriendsStore" }],
+  // gesetzte Geheimnisse (ADMIN_KEY) beim Hochladen behalten
+  keep_bindings: ["secret_text"],
   ...(exists ? {} : { migrations: { new_tag: "v1", new_sqlite_classes: ["FriendsStore"] } }),
 })], { type: "application/json" }));
-for (const file of ["worker.js", "api.js", "skin.js", "schema.js", "mojang.js", "mojang-keys.js"]) {
+for (const file of ["worker.js", "api.js", "skin.js", "schema.js", "mojang.js", "mojang-keys.js", "catalog.js", "admin-page.js"]) {
   form.append(file, new Blob([fs.readFileSync(path.join(here, "src", file))], { type: "application/javascript+module" }), file);
 }
 await api("PUT", `/workers/scripts/${NAME}`, form);
 console.log(`Worker ${NAME} hochgeladen`);
+
+// 2b. Admin-Passwort als Geheimnis setzen (nur wenn ADMIN_KEY angegeben ist)
+if (process.env.ADMIN_KEY) {
+  await api("PUT", `/workers/scripts/${NAME}/secrets`, { name: "ADMIN_KEY", text: process.env.ADMIN_KEY, type: "secret_text" });
+  console.log("Admin-Passwort gesetzt");
+}
 
 // 3. Worker unter workers.dev erreichbar machen
 await api("POST", `/workers/scripts/${NAME}/subdomain`, { enabled: true, previews_enabled: false });

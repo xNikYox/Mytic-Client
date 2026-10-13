@@ -84,6 +84,7 @@ public final class MiniMeCore {
 
     /** Eigener MiniMe an einer Stelle (Minecraft-Name) oder null. Vorschau: -Dmytic.miniMeDemo=true zeigt den ersten überall. */
     public static String selected(String pos) {
+        if (!CosmeticsCore.owns("minime", null) && !Boolean.getBoolean("mytic.miniMeDemo")) return null;
         Map<String, String> own = own();
         String name = own.get(pos);
         if (name == null && Boolean.getBoolean("mytic.miniMeDemo")) {

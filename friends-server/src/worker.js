@@ -21,7 +21,7 @@ export class FriendsStore extends DurableObject {
       get: async (query, params = []) => sql.exec(query, ...params).toArray()[0] || null,
       run: async (query, params = []) => sql.exec(query, ...params),
     };
-    this.api = createApi(db, { allowOffline: env.ALLOW_OFFLINE === "1", log: (line) => console.log(line) });
+    this.api = createApi(db, { allowOffline: env.ALLOW_OFFLINE === "1", adminKey: env.ADMIN_KEY, log: (line) => console.log(line) });
   }
 
   async fetch(request) {

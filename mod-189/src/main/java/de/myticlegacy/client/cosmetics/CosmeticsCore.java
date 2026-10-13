@@ -90,6 +90,60 @@ public final class CosmeticsCore {
     /** Glanz-Animation der Flügel: Bilder und Dauer pro Bild (wie im Cosmetics-Paket). */
     public static final int WING_FX_FRAMES = 16;
     public static final long WING_FX_MS = 90;
+    // ------------------------------------------------------------------------------------------ Freischaltungen
+    /** Eigene Freischaltungen vom Friends-Server, z. B. "cape:galaxie", "wings:*", "minime", "nametag", "admin", "*" */
+    private static volatile java.util.Set<String> owned;
+    private static volatile boolean admin;
+    private static volatile long ownedAt;
+    private static volatile boolean ownedLoading;
+
+    private static java.util.Set<String> ownedSet() {
+        if (owned == null) {
+            owned = new java.util.HashSet<String>(MyticClient.config().ownedCache == null ? new ArrayList<String>() : MyticClient.config().ownedCache);
+            admin = MyticClient.config().adminCache;
+        }
+        return owned;
+    }
+
+    /** Darf ich das benutzen? kind: cape, wings, shield, aura, minime, nametag. */
+    public static boolean owns(String kind, String id) {
+        java.util.Set<String> items = ownedSet();
+        if (items.contains("*")) return true;
+        if ("minime".equals(kind) || "nametag".equals(kind)) return items.contains(kind);
+        return items.contains(kind + ":*") || items.contains(kind + ":" + id);
+    }
+
+    public static boolean isAdmin() {
+        ownedSet();
+        return admin;
+    }
+
+    /** Freischaltungen neu laden (beim Start, alle 3 Minuten, nach Admin-Änderungen). */
+    public static void refreshOwned() {
+        if (!Friends.available() || ownedLoading) return;
+        ownedLoading = true;
+        Friends.background(() -> {
+            try {
+                JsonObject answer = Friends.post("api/cosmetics/owned", new JsonObject());
+                java.util.Set<String> set = new java.util.HashSet<String>();
+                for (JsonElement e : answer.getAsJsonArray("items")) set.add(e.getAsString());
+                boolean changed = !set.equals(owned);
+                owned = set;
+                admin = answer.has("admin") && answer.get("admin").getAsBoolean();
+                MyticClient.config().ownedCache = new ArrayList<String>(set);
+                MyticClient.config().adminCache = admin;
+                MyticClient.config().save();
+                // neu freigeschaltet: die eigene Auswahl wieder an den Server melden
+                if (changed) push();
+            } catch (Exception e) {
+                // alter Stand bleibt; nächster Versuch beim nächsten Durchgang
+            } finally {
+                ownedAt = System.currentTimeMillis();
+                ownedLoading = false;
+            }
+        });
+    }
+
     /** uuid (ohne Striche) → Nametag (Rohtext mit &-Codes) oder "" (keiner). */
     private static final Map<String, String> REMOTE_NAMETAG = new ConcurrentHashMap<>();
     /** Höchstens so viele sichtbare Zeichen (ohne Farbcodes) bzw. Zeichen insgesamt */
@@ -208,7 +262,8 @@ public final class CosmeticsCore {
     /** Eigener Nametag (Rohtext) */
     public static String ownNametag() {
         String demo = System.getProperty("mytic.nametagDemo");
-        return demo != null ? demo.replace("_", " ") : MyticClient.config().nametag;
+        if (demo != null) return demo.replace("_", " ");
+        return owns("nametag", null) ? MyticClient.config().nametag : null;
     }
 
     public static void selectNametag(String raw) {
@@ -240,7 +295,7 @@ public final class CosmeticsCore {
         if ("all".equals(demo) && !auras().isEmpty()) return auras().get((int) ((System.currentTimeMillis() / 5000) % auras().size())).id;
         if (demo != null && aura(demo) != null) return demo;
         String id = MyticClient.config().aura;
-        return aura(id) != null ? id : null;
+        return aura(id) != null && owns("aura", id) ? id : null;
     }
 
     public static void selectAura(String id) {
@@ -285,7 +340,7 @@ public final class CosmeticsCore {
         String demo = System.getProperty("mytic.shieldDemo");
         if (demo != null && hasShield(demo)) return demo;
         String id = MyticClient.config().shield;
-        return hasShield(id) ? id : null;
+        return hasShield(id) && owns("shield", id) ? id : null;
     }
 
     public static void selectShield(String id) {
@@ -323,7 +378,7 @@ public final class CosmeticsCore {
     public static String selectedWings() {
         if (Boolean.getBoolean("mytic.wingsDemo") && !wings().isEmpty()) return wings().get((int) ((System.currentTimeMillis() / 4000) % wings().size()))[0];
         String id = MyticClient.config().wings;
-        return hasWings(id) ? id : null;
+        return hasWings(id) && owns("wings", id) ? id : null;
     }
 
     public static Cape byId(String id) {
@@ -340,7 +395,7 @@ public final class CosmeticsCore {
 
     public static String selected() {
         String id = MyticClient.config().cape;
-        return byId(id) != null ? id : null;
+        return byId(id) != null && owns("cape", id) ? id : null;
     }
 
     public static void select(String id) {
@@ -378,7 +433,7 @@ public final class CosmeticsCore {
 
     /** Umhang eines Spielers: eigener aus der Auswahl, andere vom Friends-Server. */
     public static Cape capeOf(String uuid, boolean self) {
-        if (self) return byId(MyticClient.config().cape);
+        if (self) return byId(selected());
         String id = REMOTE.get(uuid);
         return id == null || id.isEmpty() ? null : byId(id);
     }
@@ -408,6 +463,7 @@ public final class CosmeticsCore {
      */
     public static void tick(List<String> nearby) {
         if (!Friends.available()) return;
+        if (System.currentTimeMillis() - ownedAt > 3 * 60 * 1000) refreshOwned();
         if (!pushed && (MyticClient.config().cape != null || MiniMeCore.any() || MyticClient.config().wings != null || MyticClient.config().shield != null || MyticClient.config().aura != null || MyticClient.config().nametag != null)) push();
         if (lookupRunning) return;
         long now = System.currentTimeMillis();

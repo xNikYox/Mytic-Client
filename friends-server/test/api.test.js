@@ -92,11 +92,11 @@ function setup(opts = {}) {
     }
     throw new Error(`unerwartet: ${url}`);
   };
-  const api = createApi(openDb(":memory:"), { fetch: fakeFetch, now: () => clock, allowOffline: opts.allowOffline, mojangKeys: MOJANG_KEYS });
-  const call = async (method, path, data, token) => {
+  const api = createApi(openDb(":memory:"), { fetch: fakeFetch, now: () => clock, allowOffline: opts.allowOffline, mojangKeys: MOJANG_KEYS, adminKey: ADMIN_KEY });
+  const call = async (method, path, data, token, adminKey) => {
     const res = await api(new Request(`http://x/proxy/8766${path}`, {
       method,
-      headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}), ...(adminKey ? { "x-admin-key": adminKey } : {}) },
       body: data ? JSON.stringify(data) : undefined,
     }));
     return { status: res.status, data: await res.json() };
@@ -107,8 +107,16 @@ function setup(opts = {}) {
     assert.equal(res.status, 200, JSON.stringify(res.data));
     return res.data.token;
   };
-  return { call, login, tick: (ms) => { clock += ms; }, clock: () => clock };
+  /** Freischaltungen setzen (mit dem Admin-Passwort) */
+  const grant = async (uuid, items) => {
+    const res = await call("POST", "/api/admin/grants", { uuid, items }, null, ADMIN_KEY);
+    assert.equal(res.status, 200, JSON.stringify(res.data));
+    return res.data;
+  };
+  return { call, login, grant, api, tick: (ms) => { clock += ms; }, clock: () => clock };
 }
+
+const ADMIN_KEY = "test-admin-key-1234567890";
 
 test("Kopf aus Skin: Gesicht mit Hut-Ebene", async () => {
   const head = await headFromPng(skinPng());
@@ -198,6 +206,7 @@ test("Offline-Konten nur wenn erlaubt", async () => {
 test("Cosmetics: wählen und für andere abfragen", async () => {
   const s = setup();
   const a = await s.login("Alice");
+  await s.grant(ALICE, ["*"]);
   const b = await s.login("Bob");
   assert.equal((await s.call("POST", "/api/cosmetics", { cape: "galaxie" }, a)).data.cape, "galaxie");
   assert.equal((await s.call("POST", "/api/cosmetics", { cape: "../böse" }, b)).data.cape, null);
@@ -210,18 +219,19 @@ test("Cosmetics: wählen und für andere abfragen", async () => {
 test("Cosmetics: MiniMe wählen, Umhang bleibt; alte Mods ohne Felder löschen nur den Umhang", async () => {
   const s = setup();
   const a = await s.login("Alice");
+  await s.grant(ALICE, ["*"]);
   const b = await s.login("Bob");
   await s.call("POST", "/api/cosmetics", { cape: "inferno" }, a);
   // Mods bis 2.18: ein MiniMe mit Position
   let res = await s.call("POST", "/api/cosmetics", { minime: "Technoblade" }, a);
-  assert.deepEqual(res.data, { cape: "inferno", minime: "Technoblade", minimePos: null, minimes: { shoulder: "Technoblade" }, wings: null, shield: null, aura: null, nametag: null });
+  assert.deepEqual(res.data, { cape: "inferno", minime: "Technoblade", minimePos: null, minimes: { shoulder: "Technoblade" }, wings: null, shield: null, aura: null, nametag: null, owned: ["*"] });
   res = await s.call("POST", "/api/cosmetics", { cape: null, minime: "x y" }, a);
-  assert.deepEqual(res.data, { cape: null, minime: null, minimePos: null, minimes: {}, wings: null, shield: null, aura: null, nametag: null });
+  assert.deepEqual(res.data, { cape: null, minime: null, minimePos: null, minimes: {}, wings: null, shield: null, aura: null, nametag: null, owned: ["*"] });
   await s.call("POST", "/api/cosmetics", { cape: "galaxie", minime: "Dream" }, a);
   res = await s.call("POST", "/api/cosmetics", {}, a);
-  assert.deepEqual(res.data, { cape: null, minime: "Dream", minimePos: null, minimes: { shoulder: "Dream" }, wings: null, shield: null, aura: null, nametag: null });
+  assert.deepEqual(res.data, { cape: null, minime: "Dream", minimePos: null, minimes: { shoulder: "Dream" }, wings: null, shield: null, aura: null, nametag: null, owned: ["*"] });
   res = await s.call("POST", "/api/cosmetics", { wings: "neon", minimePos: "head" }, a);
-  assert.deepEqual(res.data, { cape: null, minime: "Dream", minimePos: "head", minimes: { head: "Dream" }, wings: "neon", shield: null, aura: null, nametag: null });
+  assert.deepEqual(res.data, { cape: null, minime: "Dream", minimePos: "head", minimes: { head: "Dream" }, wings: "neon", shield: null, aura: null, nametag: null, owned: ["*"] });
   res = await s.call("POST", "/api/cosmetics", { minimePos: "bauch" }, a);
   assert.equal(res.data.minimePos, null);
 
@@ -257,4 +267,55 @@ test("Cosmetics: MiniMe wählen, Umhang bleibt; alte Mods ohne Felder löschen n
   assert.equal(res.data.minime, null);
   look = await s.call("POST", "/api/cosmetics/lookup", { uuids: [ALICE] }, b);
   assert.deepEqual(look.data.minimeSets, {});
+});
+
+test("Cosmetics gesperrt: nur Freigeschaltetes, Admin über Passwort oder Admin-Konto", async () => {
+  const s = setup();
+  const a = await s.login("Alice");
+  const b = await s.login("Bob");
+  // ohne Freischaltung bleibt alles leer
+  let res = await s.call("POST", "/api/cosmetics", { cape: "galaxie", wings: "rabe", nametag: "&aHi", minimes: { head: "Dream" } }, a);
+  assert.equal(res.data.cape, null);
+  assert.equal(res.data.wings, null);
+  assert.equal(res.data.nametag, null);
+  assert.deepEqual(res.data.minimes, {});
+  // Admin ohne Passwort oder mit falschem: verboten
+  assert.equal((await s.call("POST", "/api/admin/grants", { uuid: ALICE, items: ["*"] }, b)).status, 403);
+  assert.equal((await s.call("GET", "/api/admin/users", null, null, "falsch-falsch-falsch")).status, 403);
+  // einzelne Teile und ganze Arten
+  await s.grant(ALICE, ["cape:galaxie", "wings:*", "nametag", "quatsch", "cape:BÖSE"]);
+  res = await s.call("POST", "/api/cosmetics", { cape: "galaxie", wings: "rabe", shield: "death", nametag: "&aHi" }, a);
+  assert.equal(res.data.cape, "galaxie");
+  assert.equal(res.data.wings, "rabe");
+  assert.equal(res.data.shield, null);
+  assert.equal(res.data.nametag, "&aHi");
+  assert.deepEqual(res.data.owned, ["cape:galaxie", "nametag", "wings:*"]);
+  res = await s.call("POST", "/api/cosmetics", { cape: "totenkopf" }, a);
+  assert.equal(res.data.cape, null);
+  // andere sehen nur Freigeschaltetes; Entziehen löscht die Auswahl
+  await s.call("POST", "/api/cosmetics", { cape: "galaxie" }, a);
+  let look = await s.call("POST", "/api/cosmetics/lookup", { uuids: [ALICE] }, b);
+  assert.equal(look.data.capes[ALICE], "galaxie");
+  await s.grant(ALICE, ["wings:*"]);
+  look = await s.call("POST", "/api/cosmetics/lookup", { uuids: [ALICE] }, b);
+  assert.equal(look.data.capes[ALICE], undefined);
+  assert.equal(look.data.nametags[ALICE], undefined);
+  assert.equal(look.data.wings[ALICE], "rabe");
+  // eigene Freischaltungen und Admin-Konto
+  assert.deepEqual((await s.call("POST", "/api/cosmetics/owned", {}, b)).data, { items: [], admin: false });
+  await s.grant(BOB, ["admin"]);
+  assert.equal((await s.call("POST", "/api/cosmetics/owned", {}, b)).data.admin, true);
+  res = await s.call("POST", "/api/admin/grants", { uuid: ALICE, items: ["aura:*"] }, b);
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.data.items, ["aura:*"]);
+  assert.equal((await s.call("POST", "/api/admin/grants", { uuid: BOB, items: [] }, b)).status, 400);
+  const user = await s.call("POST", "/api/admin/user", { name: "alice" }, b);
+  assert.equal(user.data.uuid, ALICE);
+  const users = await s.call("GET", "/api/admin/users", null, b);
+  assert.equal(users.data.users.length, 2);
+  assert.equal((await s.call("GET", "/api/admin/catalog", null, b)).data.catalog.cape.length > 10, true);
+  // Admin-Seite wird ausgeliefert
+  const page = await s.api(new Request("http://x/proxy/8766/admin"));
+  assert.equal(page.status, 200);
+  assert.match(await page.text(), /Mytic Admin/);
 });

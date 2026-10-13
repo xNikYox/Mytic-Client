@@ -168,5 +168,11 @@ def main():
                 for name in (f"{wid}_fx_{f}.png", f"{wid}_icon_fx_{f}.png"):
                     z.write(os.path.join(BUILD, "wings", name), f"assets/myticclient/textures/wings/{name}")
     print(f"{jar} ({os.path.getsize(jar) // 1024} KB)")
+    # Katalog für die Admin-Seite des Friends-Servers (danach Server neu deployen)
+    server_catalog = {"cape": [[i, n] for i, n in CAPES], "wings": [[i, n] for i, n in WINGS + PIXEL_WINGS],
+                      "shield": [[i, n] for i, n in SHIELDS], "aura": [[a[0], a[1]] for a in AURAS]}
+    with open(os.path.join(HERE, "..", "friends-server", "src", "catalog.js"), "w", encoding="utf-8") as fh:
+        fh.write("// Cosmetics-Katalog (IDs und Namen) für die Admin-Seite – wird von cosmetics/build.py geschrieben.\n")
+        fh.write("export const CATALOG = " + json.dumps(server_catalog, ensure_ascii=False, indent=1) + ";\n")
 
 main()
