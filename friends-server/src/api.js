@@ -224,7 +224,9 @@ export function createApi(db, options = {}) {
     const outgoing = await db.all("SELECT u.*, r.created AS at FROM requests r JOIN users u ON u.uuid = r.target WHERE r.sender = ? ORDER BY r.created DESC", [me.uuid]);
     const list = friends.map(publicUser).sort((x, y) => (y.online - x.online) || (y.place === "game") - (x.place === "game") || y.lastSeen - x.lastSeen || x.name.localeCompare(y.name));
     const short = (row) => ({ uuid: row.uuid, name: row.name, head: row.head || null, at: row.at });
-    return { me: { uuid: me.uuid, name: me.name, head: me.head || null, cape: me.cape || null }, friends: list, incoming: incoming.map(short), outgoing: outgoing.map(short), serverTime: now() };
+    const playing = me.place === "game" && me.last_seen > now() - ONLINE_MS;
+    return { me: { uuid: me.uuid, name: me.name, head: me.head || null, cape: me.cape || null, place: playing ? "game" : me.place || null,
+      server: playing ? me.server || null : null, version: playing ? me.version || null : null }, friends: list, incoming: incoming.map(short), outgoing: outgoing.map(short), serverTime: now() };
   }
 
   async function body(request) {

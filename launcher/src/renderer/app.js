@@ -420,6 +420,7 @@ function renderSettings() {
   $("height").value = s.height;
   $("fullscreen").checked = s.fullscreen;
   $("after-launch").value = s.afterLaunch;
+  $("discord-presence").checked = s.discordPresence !== false;
   $("jvm-args").value = s.jvmArgs;
   $("client-id").value = s.customClientId || "";
   $("server").value = s.server;
@@ -453,6 +454,7 @@ $("width").addEventListener("change", () => save({ width: Number($("width").valu
 $("height").addEventListener("change", () => save({ height: Number($("height").value) || 720 }));
 $("fullscreen").addEventListener("change", () => save({ fullscreen: $("fullscreen").checked }));
 $("after-launch").addEventListener("change", () => save({ afterLaunch: $("after-launch").value }));
+$("discord-presence").addEventListener("change", () => save({ discordPresence: $("discord-presence").checked }));
 $("jvm-args").addEventListener("change", () => save({ jvmArgs: $("jvm-args").value.trim() }));
 $("server").addEventListener("change", () => save({ server: $("server").value.trim() }));
 $("client-id").addEventListener("change", () => save({ customClientId: $("client-id").value.trim() }));

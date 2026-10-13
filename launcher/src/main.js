@@ -16,6 +16,7 @@ const auth = require("./core/auth");
 const updater = require("./core/updater");
 const { ModBrowser } = require("./core/modrinth");
 const profiles = require("./core/profiles");
+const { DiscordPresence } = require("./core/discord");
 const { spawn } = require("node:child_process");
 
 const DIRS = makeDirs();
@@ -97,6 +98,46 @@ const GAME_MODULES = [
 
 let win;
 let game = null;
+
+// ------------------------------------------------------------------------------ Discord: "Spielt Mytic Client"
+const DISCORD_APP = "1559647258943954994";
+const DISCORD_LOGO = "https://raw.githubusercontent.com/xNikYox/Mytic-Client/main/launcher/build/icon.png";
+const launcherStart = Date.now();
+/** Laufendes Spiel für Discord: { version, start, server } */
+let discordGame = null;
+const discord = new DiscordPresence({ clientId: DISCORD_APP, log: (line) => emit("log", line) });
+
+function updateDiscord() {
+  const assets = { large_image: DISCORD_LOGO, large_text: `Mytic Client ${app.getVersion()}` };
+  const buttons = [{ label: "Mytic Client holen", url: "https://myticclient.vercel.app" }];
+  if (discordGame) {
+    const server = discordGame.server;
+    discord.set({
+      details: `Spielt Minecraft ${discordGame.version}`,
+      state: !server ? "Im Spiel" : server === "Einzelspieler" ? "Einzelspieler" : `auf ${server}`.slice(0, 128),
+      timestamps: { start: discordGame.start },
+      assets,
+      buttons,
+    });
+  } else {
+    discord.set({ details: "Im Launcher", state: "Bereit für eine Runde", timestamps: { start: launcherStart }, assets, buttons });
+  }
+}
+
+/** Während das Spiel läuft: Server und Version aus der Freundesliste holen (meldet die Mod). */
+setInterval(async () => {
+  if (!discordGame || !friends.configured || !discord.enabled) return;
+  try {
+    const data = await friends.call(await activeAccount(), "GET", "api/friends");
+    const me = data && data.me;
+    if (me && me.place === "game") {
+      discordGame.server = me.server || null;
+      updateDiscord();
+    }
+  } catch {
+    // ohne Freundesliste bleibt "Im Spiel"
+  }
+}, 30000);
 let busy = false;
 let pendingUpdate = null;
 let profilesReady = null;
@@ -178,6 +219,7 @@ function defaultSettings() {
     customClientId: "",
     recentServers: [],
     verifyNext: false,
+    discordPresence: true,
   };
 }
 
@@ -576,6 +618,7 @@ ipcMain.handle("state", () => ({
 ipcMain.handle("settings:set", async (e, patch) => {
   const { clientId, ...current } = settings();
   await writeJson(SETTINGS_FILE, { ...current, ...patch });
+  if ("discordPresence" in patch) discord.setEnabled(patch.discordPresence !== false);
   return settings();
 });
 
@@ -731,6 +774,8 @@ ipcMain.handle("game:launch", async () => {
       reported = true;
       detectCrash({ code, log: recent.join("\n"), crashReport, profile, modsDir: profileMods, gameDir: install.gameDir || DIRS.game, startedAt });
     };
+    discordGame = { version: profile.mcVersion, start: Date.now(), server: null };
+    updateDiscord();
     game = launch(command, DIRS, {
       onLog: (line) => {
         emit("log", line);
@@ -743,6 +788,8 @@ ipcMain.handle("game:launch", async () => {
       },
       onExit: (code) => {
         game = null;
+        discordGame = null;
+        updateDiscord();
         emit("game", { running: false, code });
         report(code);
         if (win && !win.isDestroyed()) {
@@ -785,7 +832,10 @@ app.whenReady().then(async () => {
   // bereitliegendes Update vor dem Öffnen des Fensters einspielen (wie bei Lunar)
   if (await applyReadyUpdate()) return;
   createWindow();
+  updateDiscord();
+  discord.setEnabled(settings().discordPresence !== false);
 });
+app.on("before-quit", () => discord.close());
 app.on("window-all-closed", () => {
   if (!game) app.quit();
 });

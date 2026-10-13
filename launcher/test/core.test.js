@@ -525,3 +525,43 @@ test("Freunde: Launcher meldet Microsoft-Konto mit Zertifikat an (ohne Token an 
   // das Minecraft-Token ging nur an Mojang, nie an den Friends-Server
   assert.ok(seen.filter((r) => r.url.startsWith("http://friends.test/")).every((r) => !r.body.includes(accessToken)));
 });
+
+test("Discord-Status: Handshake und Aktivität über die lokale Discord-Schnittstelle", async () => {
+  const net = require("node:net");
+  const os = require("node:os");
+  const fs = require("node:fs");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "discord-"));
+  const oldEnv = process.env.XDG_RUNTIME_DIR;
+  process.env.XDG_RUNTIME_DIR = dir;
+  const { DiscordPresence, encode, socketPath } = require("../src/core/discord");
+  const frames = [];
+  const server = net.createServer((socket) => {
+    let buf = Buffer.alloc(0);
+    socket.on("data", (chunk) => {
+      buf = Buffer.concat([buf, chunk]);
+      while (buf.length >= 8 && buf.length >= 8 + buf.readInt32LE(4)) {
+        const op = buf.readInt32LE(0);
+        const len = buf.readInt32LE(4);
+        const data = JSON.parse(buf.subarray(8, 8 + len).toString());
+        buf = buf.subarray(8 + len);
+        frames.push({ op, data });
+        if (op === 0) socket.write(encode(1, { cmd: "DISPATCH", evt: "READY", data: {} }));
+      }
+    });
+  });
+  await new Promise((r) => server.listen(socketPath(0), r));
+  const presence = new DiscordPresence({ clientId: "123" });
+  presence.set({ details: "Im Launcher" });
+  presence.setEnabled(true);
+  for (let i = 0; i < 50 && frames.length < 2; i++) await new Promise((r) => setTimeout(r, 20));
+  presence.set({ details: "Spielt Minecraft 1.21.11", state: "auf hypixel.net" });
+  for (let i = 0; i < 50 && frames.length < 3; i++) await new Promise((r) => setTimeout(r, 20));
+  presence.setEnabled(false);
+  server.close();
+  process.env.XDG_RUNTIME_DIR = oldEnv;
+  assert.equal(frames[0].op, 0);
+  assert.equal(frames[0].data.client_id, "123");
+  assert.equal(frames[1].data.cmd, "SET_ACTIVITY");
+  assert.equal(frames[1].data.args.activity.details, "Im Launcher");
+  assert.equal(frames[2].data.args.activity.state, "auf hypixel.net");
+});
