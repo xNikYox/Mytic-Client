@@ -50,6 +50,9 @@ body {
 .rail { background: linear-gradient(180deg, rgba(var(--base-rgb), .9), rgba(var(--base-rgb), .95)); border-right: 1px solid rgba(var(--c2-rgb), .18); box-shadow: 1px 0 30px rgba(var(--c2-rgb), .08); }
 .rail-logo { background: conic-gradient(from 0deg, var(--neon-cyan), var(--neon-violet), var(--neon-pink), var(--neon-cyan)); box-shadow: 0 0 22px rgba(var(--c2-rgb), .6), 0 0 40px rgba(var(--c3-rgb), .25); }
 .rail-logo span { background: var(--bg-deep); text-shadow: 0 0 10px var(--neon-pink), 0 0 2px #fff; }
+/* App-Icon statt des Buchstabens: nur das Leuchten bleibt */
+.rail-logo:has(img) { background: none; }
+.rail-logo img { width: 44px; height: 44px; display: block; border-radius: 12px; -webkit-user-drag: none; pointer-events: none; }
 .rail-item.active {
   color: #fff;
   background: linear-gradient(145deg, rgba(var(--c2-rgb), .4), rgba(var(--c1-rgb), .08));
