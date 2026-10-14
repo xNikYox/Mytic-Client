@@ -41,4 +41,8 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$TAG" dist/MyticClient-Setup-*.exe --clobber --repo "${{ github.repository }}"
+        run: |
+          gh release upload "$TAG" dist/MyticClient-Setup-*.exe --clobber --repo "${{ github.repository }}"
+          # zusätzlich unter festem Namen: Website lädt direkt über releases/latest/download/MyticClient-Setup.exe
+          cp dist/MyticClient-Setup-*.exe dist/MyticClient-Setup.exe
+          gh release upload "$TAG" dist/MyticClient-Setup.exe --clobber --repo "${{ github.repository }}"
