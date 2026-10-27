@@ -42,6 +42,15 @@ public final class Config {
     public String wings;
     /** Grafik-Optionen vor dem Einschalten von FPS-Boost (Name → Wert als Text), werden beim Ausschalten zurückgesetzt. */
     public Map<String, String> savedOptions = new LinkedHashMap<>();
+    /** HUD-Profile (Name → Positionen, an/aus und Einstellungen der HUD-Module) und das aktive Profil */
+    public Map<String, HudProfile> hudProfiles = new LinkedHashMap<>();
+    public String hudProfile;
+
+    public static final class HudProfile {
+        public Map<String, int[]> positions = new LinkedHashMap<>();
+        public Map<String, Boolean> enabled = new LinkedHashMap<>();
+        public Map<String, Object> settings = new LinkedHashMap<>();
+    }
 
     private static Path file() {
         return FabricLoader.getInstance().getConfigDir().resolve("myticclient.json");
@@ -56,6 +65,7 @@ public final class Config {
                     if (config.positions == null) config.positions = new LinkedHashMap<>();
                     if (config.settings == null) config.settings = new LinkedHashMap<>();
                     if (config.savedOptions == null) config.savedOptions = new LinkedHashMap<>();
+                    if (config.hudProfiles == null) config.hudProfiles = new LinkedHashMap<>();
                     return config;
                 }
             }

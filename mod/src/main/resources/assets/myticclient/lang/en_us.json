@@ -10,5 +10,9 @@
   "key.myticclient.autotext5": "Auto Text 5",
   "key.myticclient.autotext6": "Auto Text 6",
   "key.myticclient.snaplook": "Snaplook (hold)",
-  "key.myticclient.streamer": "Toggle streamer mode"
+  "key.myticclient.streamer": "Toggle streamer mode",
+  "key.myticclient.screenshots": "Open screenshot gallery",
+  "key.myticclient.hudprofile1": "HUD profile 1",
+  "key.myticclient.hudprofile2": "HUD profile 2",
+  "key.myticclient.hudprofile3": "HUD profile 3"
 }

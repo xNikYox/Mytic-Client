@@ -83,7 +83,9 @@ public final class MyticClient implements ClientModInitializer {
     public static de.myticlegacy.client.module.ChatModule chat;
     public static de.myticlegacy.client.module.StreamerModule streamer;
     public static de.myticlegacy.client.module.PvpModule pvp;
-    private static KeyMapping streamerKey;
+    private static KeyMapping streamerKey, galleryKey;
+    private static final KeyMapping[] profileKeys = new KeyMapping[3];
+    public static de.myticlegacy.client.hud.ScreenshotModule screenshot;
     public static ShulkerPreviewModule shulkerPreview;
     public static FriendsModule friends;
 
@@ -120,6 +122,8 @@ public final class MyticClient implements ClientModInitializer {
         hud(new KeystrokesModule());
         hud(new ArmorModule());
         hud(new PotionModule());
+        screenshot = new de.myticlegacy.client.hud.ScreenshotModule();
+        hud(screenshot);
         hud(new TextModule("coords", "Koordinaten", "X, Y und Z deiner Position", () -> Items.COMPASS, true, 10000, 4, "XYZ", p -> {
             if (mc.player == null) return p ? "120 64 -35" : "";
             if (de.myticlegacy.client.module.StreamerModule.hidesCoords()) return "??? ??? ???";
@@ -207,6 +211,8 @@ public final class MyticClient implements ClientModInitializer {
         freelookKey = Compat.registerKey("key.myticclient.freelook", InputConstants.KEY_LALT);
         snaplookKey = Compat.registerKey("key.myticclient.snaplook", InputConstants.KEY_V);
         streamerKey = Compat.registerKey("key.myticclient.streamer", InputConstants.UNKNOWN.getValue());
+        galleryKey = Compat.registerKey("key.myticclient.screenshots", InputConstants.UNKNOWN.getValue());
+        for (int i = 0; i < profileKeys.length; i++) profileKeys[i] = Compat.registerKey("key.myticclient.hudprofile" + (i + 1), InputConstants.UNKNOWN.getValue());
         for (int i = 0; i < AutoTextModule.SLOTS; i++) autoTextKeys[i] = Compat.registerKey("key.myticclient.autotext" + (i + 1), -1);
 
         Compat.registerHud();
@@ -307,6 +313,14 @@ public final class MyticClient implements ClientModInitializer {
         lightOverlay.tick(mc);
         fpsBoost.tick(mc);
         pvp.tick();
+        screenshot.tick();
+        while (galleryKey.consumeClick()) if (Compat.screen(mc) == null) Compat.setScreen(new de.myticlegacy.client.gui.ScreenshotsScreen());
+        for (int i = 0; i < profileKeys.length; i++) {
+            while (profileKeys[i].consumeClick()) {
+                String name = de.myticlegacy.client.hud.HudProfiles.switchToIndex(i);
+                if (name != null) de.myticlegacy.client.module.Msg.actionBar("HUD-Profil: " + name);
+            }
+        }
         while (streamerKey.consumeClick()) {
             streamer.toggle();
             de.myticlegacy.client.module.Msg.actionBar("Streamer-Modus " + (streamer.enabled() ? "an" : "aus"));

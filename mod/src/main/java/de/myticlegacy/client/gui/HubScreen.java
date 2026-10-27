@@ -11,13 +11,15 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
-/** Übersicht wie bei NRC (Rechts-Shift): drei große Knöpfe – Freunde, Mods, Cosmetics. */
+/** Übersicht wie bei NRC (Rechts-Shift): große Knöpfe – Freunde, Mods, Cosmetics, Screenshots. */
 public class HubScreen extends MyticScreen {
     private static final int TILE_W = 96;
     private static final int TILE_H = 108;
     private static final int GAP = 12;
-    private static final String[] LABELS = {"Freunde", "Mods", "Cosmetics"};
+    private static final String[] LABELS = {"Freunde", "Mods", "Cosmetics", "Screenshots"};
+    private static final int N = LABELS.length;
     private final long openedAt = System.currentTimeMillis();
+    private final int shotCount = Shots.list().size(); // einmal beim Öffnen zählen, nicht in jedem Bild
     private int tx, ty;
 
     public HubScreen() {
@@ -26,12 +28,12 @@ public class HubScreen extends MyticScreen {
 
     @Override
     protected int pixelScale() {
-        return fit(3 * TILE_W + 2 * GAP + 40, TILE_H + 90, 0.62, 0.62);
+        return fit(N * TILE_W + (N - 1) * GAP + 40, TILE_H + 90, 0.62, 0.62);
     }
 
     @Override
     protected void layout() {
-        tx = (vw - (3 * TILE_W + 2 * GAP)) / 2;
+        tx = (vw - (N * TILE_W + (N - 1) * GAP)) / 2;
         ty = (vh - TILE_H) / 2 + 6;
     }
 
@@ -52,6 +54,10 @@ public class HubScreen extends MyticScreen {
             int on = 0;
             for (Module m : MyticClient.MODULES) if (m.enabled()) on++;
             return on + " aktiv";
+        }
+        if (i == 3) {
+            int n = shotCount;
+            return n + (n == 1 ? " Bild" : " Bilder");
         }
         de.myticlegacy.client.cosmetics.CosmeticsCore.Cape cape = de.myticlegacy.client.cosmetics.CosmeticsCore.byId(de.myticlegacy.client.cosmetics.CosmeticsCore.selected());
         return cape != null ? cape.name : "Kein Umhang";
@@ -76,7 +82,7 @@ public class HubScreen extends MyticScreen {
         }
         Gfx.pop(g);
 
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < N; i++) {
             int x = tx + i * (TILE_W + GAP);
             float appear = Math.max(0f, Math.min(1f, (System.currentTimeMillis() - openedAt - i * 40) / 200f));
             float e = 1f - (1f - appear) * (1f - appear) * (1f - appear);
@@ -128,20 +134,21 @@ public class HubScreen extends MyticScreen {
     private static ItemStack[] icons;
 
     private static ItemStack icon(int i) {
-        if (icons == null || icons[i].isEmpty()) icons = new ItemStack[]{Module.stack(Items.PLAYER_HEAD), Module.stack(Items.COMPARATOR), Module.stack(Items.ELYTRA)};
+        if (icons == null || icons[i].isEmpty()) icons = new ItemStack[]{Module.stack(Items.PLAYER_HEAD), Module.stack(Items.COMPARATOR), Module.stack(Items.ELYTRA), Module.stack(Items.PAINTING)};
         return icons[i];
     }
 
     private void open(int i) {
         if (i == 0) Compat.setScreen(new FriendsScreen());
         else if (i == 1) Compat.setScreen(new ModMenuScreen(null));
-        else Compat.setScreen(new CosmeticsScreen());
+        else if (i == 2) Compat.setScreen(new CosmeticsScreen());
+        else Compat.setScreen(new ScreenshotsScreen());
     }
 
     @Override
     protected boolean click(Input.Click event, boolean doubleClick) {
         if (event.button() != 0) return false;
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < N; i++) {
             if (Ui.inside(event.x(), event.y(), tx + i * (TILE_W + GAP), ty, TILE_W, TILE_H)) {
                 open(i);
                 return true;
@@ -153,7 +160,7 @@ public class HubScreen extends MyticScreen {
     @Override
     protected boolean onKey(Input.Key event) {
         int key = event.key();
-        if (key == InputConstants.KEY_1 || key == InputConstants.KEY_2 || key == InputConstants.KEY_3) {
+        if (key == InputConstants.KEY_1 || key == InputConstants.KEY_2 || key == InputConstants.KEY_3 || key == InputConstants.KEY_4) {
             open(key - InputConstants.KEY_1);
             return true;
         }

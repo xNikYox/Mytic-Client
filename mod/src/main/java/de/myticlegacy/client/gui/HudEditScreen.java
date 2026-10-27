@@ -58,6 +58,33 @@ public class HudEditScreen extends InputScreen {
         return (float) k / Compat.guiScale();
     }
 
+    private String renaming, renameText = "", armedDelete;
+    private long armedAt;
+
+    /** Profil-Knöpfe über der Werkzeugleiste: {x, y, w, Index}; Index = Anzahl Profile → „+ Neu“ */
+    private java.util.List<int[]> chips() {
+        int[] bar = toolbar();
+        java.util.List<String> names = de.myticlegacy.client.hud.HudProfiles.names();
+        java.util.List<int[]> out = new java.util.ArrayList<>();
+        int total = 0;
+        for (int i = 0; i <= names.size(); i++) total += chipWidth(i < names.size() ? chipLabel(names.get(i)) : "+ Neu") + 4;
+        int x = bar[0] + bar[2] / 2 - (total - 4) / 2, y = bar[1] - 36;
+        for (int i = 0; i <= names.size(); i++) {
+            int w = chipWidth(i < names.size() ? chipLabel(names.get(i)) : "+ Neu");
+            out.add(new int[]{x, y, w, i});
+            x += w + 4;
+        }
+        return out;
+    }
+
+    private String chipLabel(String name) {
+        return name.equals(renaming) ? renameText + "_" : name;
+    }
+
+    private int chipWidth(String label) {
+        return font.width(label) + 14;
+    }
+
     /** Werkzeugleiste in kompakten Koordinaten. */
     private int[] toolbar() {
         float s = ui();
@@ -134,6 +161,20 @@ public class HudEditScreen extends InputScreen {
             Ui.rect(g, bx, bar[1] + 2, bw, 14, 7, h ? Ui.mix(bg, 0xFFFFFFFF, 0.15f) : bg);
             Ui.centered(g, labels[i], bx + bw / 2, bar[1] + 5, 0xFFFFFFFF, false);
         }
+        // HUD-Profile
+        java.util.List<String> names = de.myticlegacy.client.hud.HudProfiles.names();
+        String active = de.myticlegacy.client.hud.HudProfiles.active();
+        for (int[] c : chips()) {
+            boolean add = c[3] >= names.size();
+            String name = add ? "+ Neu" : names.get(c[3]);
+            boolean on = !add && name.equals(active), h = Ui.inside(mx, my, c[0], c[1], c[2], 14);
+            boolean armed = !add && name.equals(armedDelete) && System.currentTimeMillis() - armedAt < 3000;
+            int bg = armed ? Ui.RED : on ? Ui.accent() : (Ui.lunar() ? 0xE0222222 : Ui.SURFACE);
+            Ui.rect(g, c[0], c[1], c[2], 14, 7, h ? Ui.mix(bg, 0xFFFFFFFF, 0.15f) : bg);
+            Ui.centered(g, armed ? "Löschen?" : add ? name : chipLabel(name), c[0] + c[2] / 2, c[1] + 3, 0xFFFFFFFF, false);
+        }
+        String ph = renaming != null ? "Namen tippen · Enter = speichern · Esc = abbrechen" : "Profil: Klick = wechseln · aktives anklicken = umbenennen · Rechtsklick = löschen";
+        Ui.scaled(g, ph, bar[0] + bar[2] / 2f - font.width(ph) * 0.35f, bar[1] - 46, 0.7f, 0xFFD9D2EA, true);
         Gfx.pop(g);
     }
 
@@ -144,6 +185,33 @@ public class HudEditScreen extends InputScreen {
         int[] bar = toolbar();
         double tx = mx / ui();
         double ty = my / ui();
+        for (int[] c : chips()) {
+            if (!Ui.inside(tx, ty, c[0], c[1], c[2], 14)) continue;
+            java.util.List<String> names = de.myticlegacy.client.hud.HudProfiles.names();
+            if (c[3] >= names.size()) {
+                if (event.button() == 0) de.myticlegacy.client.hud.HudProfiles.create();
+                return true;
+            }
+            String name = names.get(c[3]);
+            if (event.button() == 1) {
+                if (name.equals(armedDelete) && System.currentTimeMillis() - armedAt < 3000) {
+                    de.myticlegacy.client.hud.HudProfiles.delete(name);
+                    armedDelete = null;
+                } else {
+                    armedDelete = name;
+                    armedAt = System.currentTimeMillis();
+                }
+                return true;
+            }
+            if (name.equals(de.myticlegacy.client.hud.HudProfiles.active())) {
+                renaming = name;
+                renameText = name;
+            } else {
+                renaming = null;
+                de.myticlegacy.client.hud.HudProfiles.switchTo(name);
+            }
+            return true;
+        }
         if (Ui.inside(tx, ty, bar[0], bar[1], bar[2], bar[3])) {
             int bw = (bar[2] - 16) / 3;
             int index = (int) ((tx - bar[0] - 4) / (bw + 4));
@@ -237,7 +305,24 @@ public class HudEditScreen extends InputScreen {
     }
 
     @Override
+    protected boolean onChar(Input.Typed event) {
+        if (renaming == null) return false;
+        String c = event.codepointAsString();
+        if (c.length() == 1 && (Character.isLetterOrDigit(c.charAt(0)) || " -_".indexOf(c.charAt(0)) >= 0) && renameText.length() < 20) renameText += c;
+        return true;
+    }
+
+    @Override
     protected boolean onKey(Input.Key event) {
+        if (renaming != null) {
+            int k = event.key();
+            if (k == InputConstants.KEY_BACKSPACE && !renameText.isEmpty()) renameText = renameText.substring(0, renameText.length() - 1);
+            else if (k == InputConstants.KEY_RETURN || k == InputConstants.KEY_NUMPADENTER) {
+                de.myticlegacy.client.hud.HudProfiles.rename(renaming, renameText);
+                renaming = null;
+            } else if (k == InputConstants.KEY_ESCAPE) renaming = null;
+            return true;
+        }
         if (event.key() == InputConstants.KEY_RSHIFT) {
             onClose();
             return true;
@@ -247,6 +332,7 @@ public class HudEditScreen extends InputScreen {
 
     @Override
     public void onClose() {
+        de.myticlegacy.client.hud.HudProfiles.saveActive(); // Verschiebungen gehören zum aktiven Profil
         MyticClient.config().save();
         Compat.setScreen(parent);
     }
