@@ -92,7 +92,7 @@ public class ScreenshotsScreen extends PanelScreen {
             boolean hover = Ui.inside(mx, my, c[0], c[1], CARD_W, CARD_H) && my >= cy() && my < cy() + ch();
             Ui.rect(g, c[0] - 1, c[1] - 1, CARD_W + 2, CARD_H + 2, 4, hover ? Ui.accent() : (Ui.lunar() ? Ui.L_LINE : Ui.LINE));
             Ui.rect(g, c[0], c[1], CARD_W, CARD_H, 3, 0xFF101010);
-            Shots.Thumb t = Shots.thumb(shots.get(i), 256);
+            Shots.Thumb t = Shots.thumb(shots.get(i), Shots.px(CARD_W));
             if (t != null) {
                 int h = Math.min(CARD_H, t.h() * CARD_W / t.w());
                 Tex.draw(g, t.texture(), c[0], c[1] + (CARD_H - h) / 2, CARD_W, h, t.w(), t.h());
@@ -101,7 +101,7 @@ public class ScreenshotsScreen extends PanelScreen {
     }
 
     private void drawLarge(GuiGraphics g, int mx, int my) {
-        Shots.Thumb t = Shots.thumb(selected, 1024);
+        Shots.Thumb t = Shots.thumb(selected, Shots.px(cw()));
         int w = cw(), h = ch();
         if (t != null) {
             int dw = w, dh = t.h() * w / t.w();

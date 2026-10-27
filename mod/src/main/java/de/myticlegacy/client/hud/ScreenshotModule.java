@@ -47,7 +47,7 @@ public class ScreenshotModule extends HudModule {
         int h = baseHeight();
         panel(g, W, h);
         if (!background.get()) g.fill(0, 0, W, h, 0x99000000);
-        Shots.Thumb t = showing() ? Shots.thumb(Shots.latest, 256) : null;
+        Shots.Thumb t = showing() ? Shots.thumb(Shots.latest, Shots.px((W - 6) * scaleFactor())) : null;
         int ix = 3, iy = 3, iw = W - 6, ih = IMG_H - 4;
         if (t != null) {
             int dh = Math.min(ih, t.h() * iw / t.w());

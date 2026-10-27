@@ -1,6 +1,7 @@
 package de.myticlegacy.client.gui;
 
 import de.myticlegacy.client.MyticClient;
+import de.myticlegacy.client.compat.Compat;
 import de.myticlegacy.client.compat.Tex;
 import net.fabricmc.loader.api.FabricLoader;
 
@@ -15,6 +16,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -36,8 +39,10 @@ public final class Shots {
         t.setDaemon(true);
         return t;
     });
-    private static final Map<Path, Thumb> thumbs = new HashMap<>();
-    private static final Map<Path, Boolean> loading = new HashMap<>();
+    /** Schlüssel: Datei + Pixelbreite; zuletzt benutzte zuerst behalten, Rest freigeben */
+    private static final LinkedHashMap<String, Thumb> thumbs = new LinkedHashMap<>(64, 0.75f, true);
+    private static final Map<String, Boolean> loading = new HashMap<>();
+    private static final int MAX_THUMBS = 80;
     private static final ConcurrentLinkedQueue<Object[]> ready = new ConcurrentLinkedQueue<>();
     private static int counter;
     private static long lastCheck, newestSeen = -1;
@@ -70,47 +75,96 @@ public final class Shots {
         }
     }
 
-    /** Vorschaubild oder null (wird dann im Hintergrund erzeugt) */
-    public static Thumb thumb(Path p, int maxW) {
+    /** Pixelbreite für eine Zeichenbreite in GUI-Einheiten (z. B. 120 × GUI-Scale 3 = 360 px) */
+    public static int px(double guiWidth) {
+        return (int) Math.ceil(guiWidth * Math.max(1, Compat.guiScale()));
+    }
+
+    /** Genau die gezeigte Pixelbreite (auf 8 gerundet): so wird beim Zeichnen nichts mehr gestreckt oder gestaucht */
+    private static int bucket(int px) {
+        return Math.max(16, Math.min(4096, (px + 7) / 8 * 8));
+    }
+
+    private static String key(Path p, int w) {
+        return w + "@" + p;
+    }
+
+    /**
+     * Vorschaubild mit mindestens {@code pixels} Breite (höchstens Originalgröße). Solange das scharfe Bild noch im
+     * Hintergrund entsteht, gibt es eine schon vorhandene kleinere Fassung zurück, sonst null.
+     */
+    public static Thumb thumb(Path p, int pixels) {
         pump();
-        Thumb t = thumbs.get(p);
-        if (t != null || loading.containsKey(p)) return t;
-        loading.put(p, true);
-        worker.submit(() -> {
-            try {
-                BufferedImage img = ImageIO.read(p.toFile());
-                if (img == null) return;
-                int w = Math.min(maxW, img.getWidth()), h = Math.max(1, img.getHeight() * w / img.getWidth());
-                BufferedImage small = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
-                Graphics2D g = small.createGraphics();
-                g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-                g.drawImage(img, 0, 0, w, h, null);
-                g.dispose();
-                ByteArrayOutputStream out = new ByteArrayOutputStream();
-                ImageIO.write(small, "png", out);
-                ready.add(new Object[]{p, out.toByteArray(), w, h});
-            } catch (Exception e) {
-                MyticClient.LOG.warn("Screenshot-Vorschau nicht möglich: {}", p.getFileName());
-            }
-        });
-        return null;
+        int want = bucket(pixels);
+        String k = key(p, want);
+        Thumb t = thumbs.get(k);
+        if (t != null) return t;
+        if (!loading.containsKey(k)) {
+            loading.put(k, true);
+            worker.submit(() -> {
+                try {
+                    BufferedImage img = ImageIO.read(p.toFile());
+                    if (img == null) return;
+                    ByteArrayOutputStream out = new ByteArrayOutputStream();
+                    BufferedImage small = shrink(img, want);
+                    ImageIO.write(small, "png", out);
+                    ready.add(new Object[]{k, out.toByteArray(), small.getWidth(), small.getHeight()});
+                } catch (Exception e) {
+                    MyticClient.LOG.warn("Screenshot-Vorschau nicht möglich: {}", p.getFileName());
+                }
+            });
+        }
+        // Übergang: beste schon fertige Fassung dieses Bildes
+        Thumb best = null;
+        String suffix = "@" + p;
+        for (Map.Entry<String, Thumb> e : thumbs.entrySet())
+            if (e.getKey().endsWith(suffix) && (best == null || e.getValue().w() > best.w())) best = e.getValue();
+        return best;
+    }
+
+    /** Verkleinern in Halbierungs-Schritten: scharf und ohne Treppen (ein einziger großer Schritt wird pixelig) */
+    private static BufferedImage shrink(BufferedImage img, int maxW) {
+        int tw = Math.min(maxW, img.getWidth()), th = Math.max(1, (int) Math.round(img.getHeight() * (double) tw / img.getWidth()));
+        BufferedImage cur = img;
+        int w = img.getWidth(), h = img.getHeight();
+        do {
+            w = Math.max(tw, w / 2);
+            h = w == tw ? th : Math.max(th, h / 2);
+            BufferedImage next = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D g = next.createGraphics();
+            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+            g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            g.drawImage(cur, 0, 0, w, h, null);
+            g.dispose();
+            cur = next;
+        } while (w > tw);
+        return cur;
     }
 
     /** fertige Vorschaubilder auf dem Render-Thread als Textur anmelden */
     private static void pump() {
         Object[] r;
         while ((r = ready.poll()) != null) {
-            Path p = (Path) r[0];
+            String k = (String) r[0];
             Object tex = Tex.upload("shot" + (counter++), (byte[]) r[1]);
-            thumbs.put(p, new Thumb(tex, (int) r[2], (int) r[3]));
-            loading.remove(p);
+            thumbs.put(k, new Thumb(tex, (int) r[2], (int) r[3]));
+            loading.remove(k);
+        }
+        while (thumbs.size() > MAX_THUMBS) {
+            Iterator<Map.Entry<String, Thumb>> it = thumbs.entrySet().iterator();
+            Tex.release(it.next().getValue().texture());
+            it.remove();
         }
     }
 
     public static void forget(Path p) {
-        Thumb t = thumbs.remove(p);
-        if (t != null) Tex.release(t.texture());
-        loading.remove(p);
+        String suffix = "@" + p;
+        thumbs.entrySet().removeIf(e -> {
+            if (!e.getKey().endsWith(suffix)) return false;
+            Tex.release(e.getValue().texture());
+            return true;
+        });
+        loading.keySet().removeIf(k -> k.endsWith(suffix));
     }
 
     public static boolean delete(Path p) {
