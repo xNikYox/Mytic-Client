@@ -69,7 +69,8 @@ public class ScreenshotsScreen extends PanelScreen {
             button(g, "‹ Alle Bilder", x, fy, mx, my);
         } else {
             drawGrid(g, mx, my);
-            button(g, "Ordner öffnen", cx(), fy, mx, my);
+            int bw = button(g, "Ordner öffnen", cx(), fy, mx, my);
+            button(g, "Clips-Ordner", cx() + bw + 6, fy, mx, my);
         }
         if (!note.isEmpty() && System.currentTimeMillis() - noteAt < 2500) {
             int w = Ui.font().width(note) + 12;
@@ -115,6 +116,21 @@ public class ScreenshotsScreen extends PanelScreen {
         Ui.text(g, Ui.font().plainSubstrByWidth(name, pw - 200), px + pw - 14 - Math.min(Ui.font().width(name), pw - 200), py + 13, Ui.MUTED, false);
     }
 
+    /** Clips-Ordner zeigen (neuester Clip markiert) */
+    private static void openClips() {
+        java.nio.file.Path dir = de.myticlegacy.client.clips.ClipRecorder.clipsDir();
+        try {
+            java.nio.file.Files.createDirectories(dir);
+            try (java.util.stream.Stream<java.nio.file.Path> s = java.nio.file.Files.list(dir)) {
+                java.nio.file.Path newest = s.filter(p -> p.toString().endsWith(".mp4"))
+                        .max(java.util.Comparator.comparingLong(p -> p.toFile().lastModified())).orElse(null);
+                Shots.reveal(newest != null ? newest : dir);
+            }
+        } catch (java.io.IOException e) {
+            Shots.reveal(dir);
+        }
+    }
+
     private int button(GuiGraphics g, String label, int x, int y, int mx, int my) {
         int w = Ui.font().width(label) + 14;
         boolean h = Ui.inside(mx, my, x, y, w, 14);
@@ -145,6 +161,10 @@ public class ScreenshotsScreen extends PanelScreen {
         }
         if (hit("Ordner öffnen", cx(), fy, mx, my)) {
             Shots.reveal(Shots.dir());
+            return true;
+        }
+        if (hit("Clips-Ordner", cx() + Ui.font().width("Ordner öffnen") + 14 + 6, fy, mx, my)) {
+            openClips();
             return true;
         }
         if (my < cy() || my > cy() + ch()) return false;

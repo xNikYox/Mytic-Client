@@ -17,7 +17,8 @@
     "OutlineMixin",
     "FireMixin",
     "ShieldMixin",
-    "CritMixin"
+    "CritMixin",
+    "ClipCaptureMixin"
   ],
   "injectors": {
     "defaultRequire": 0
