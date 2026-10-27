@@ -73,7 +73,10 @@ public final class MyticClient implements ClientModInitializer {
     public static KeyMapping menuKey;
     public static KeyMapping zoomKey;
     public static KeyMapping freelookKey;
-    public static KeyMapping snaplookKey;
+    public static KeyMapping snaplookKey, secondPersonKey;
+    private static KeyMapping pitchLockKey;
+    public static de.myticlegacy.client.module.SecondPersonModule secondPerson;
+    public static de.myticlegacy.client.module.PitchLockModule pitchLock;
     public static SnaplookModule snaplook;
     /** Tasten für Auto Text (anfangs unbelegt). */
     public static final KeyMapping[] autoTextKeys = new KeyMapping[AutoTextModule.SLOTS];
@@ -181,12 +184,17 @@ public final class MyticClient implements ClientModInitializer {
         }));
         hud(new ItemCounterModule());
         hud(new TargetHudModule());
+        hud(new de.myticlegacy.client.hud.PitchModule());
+        de.myticlegacy.client.hud.VanillaHudModule.createAll();
+        for (var v : de.myticlegacy.client.hud.VanillaHudModule.all()) hud(v);
         hud(new TextModule("watermark", "Wasserzeichen", "Mytic-Client-Schriftzug im HUD", () -> Items.AMETHYST_SHARD, false, 10000, 175, "", p -> "Mytic Client"));
 
         // ------------------------------------------------------------------------------ Mechanik & Visuell
         zoom = module(new ZoomModule());
         freelook = module(new FreelookModule());
         snaplook = module(new SnaplookModule());
+        secondPerson = module(new de.myticlegacy.client.module.SecondPersonModule());
+        pitchLock = module(new de.myticlegacy.client.module.PitchLockModule());
         toggleSprint = module(SimpleModules.toggleSprint());
         toggleSneak = module(SimpleModules.toggleSneak());
         crosshair = module(new CrosshairModule());
@@ -212,6 +220,8 @@ public final class MyticClient implements ClientModInitializer {
         zoomKey = Compat.registerKey("key.myticclient.zoom", InputConstants.KEY_C);
         freelookKey = Compat.registerKey("key.myticclient.freelook", InputConstants.KEY_LALT);
         snaplookKey = Compat.registerKey("key.myticclient.snaplook", InputConstants.KEY_V);
+        secondPersonKey = Compat.registerKey("key.myticclient.secondperson", InputConstants.KEY_F6);
+        pitchLockKey = Compat.registerKey("key.myticclient.pitchlock", InputConstants.UNKNOWN.getValue());
         streamerKey = Compat.registerKey("key.myticclient.streamer", InputConstants.UNKNOWN.getValue());
         galleryKey = Compat.registerKey("key.myticclient.screenshots", InputConstants.UNKNOWN.getValue());
         clipKey = Compat.registerKey("key.myticclient.clip", InputConstants.KEY_F8);
@@ -311,6 +321,9 @@ public final class MyticClient implements ClientModInitializer {
         zoom.tick(mc);
         freelook.tick(mc);
         snaplook.tick(mc);
+        secondPerson.tick(mc);
+        pitchLock.tick(mc);
+        while (pitchLockKey.consumeClick()) pitchLock.toggle(mc);
         de.myticlegacy.client.cosmetics.Shields.demoTick(mc);
         autoText.tick(mc);
         lightOverlay.tick(mc);

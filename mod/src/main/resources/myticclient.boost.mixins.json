@@ -18,7 +18,9 @@
     "FireMixin",
     "ShieldMixin",
     "CritMixin",
-    "ClipCaptureMixin"
+    "ClipCaptureMixin",
+    "VanillaHudMixin",
+    "BossBarMixin"
   ],
   "injectors": {
     "defaultRequire": 0

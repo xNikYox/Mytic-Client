@@ -12,6 +12,8 @@
   "key.myticclient.snaplook": "Snaplook (hold)",
   "key.myticclient.streamer": "Toggle streamer mode",
   "key.myticclient.screenshots": "Open screenshot gallery",
+  "key.myticclient.secondperson": "2nd person (front view)",
+  "key.myticclient.pitchlock": "Lock/unlock pitch",
   "key.myticclient.clip": "Save clip (last seconds)",
   "key.myticclient.hudprofile1": "HUD profile 1",
   "key.myticclient.hudprofile2": "HUD profile 2",
