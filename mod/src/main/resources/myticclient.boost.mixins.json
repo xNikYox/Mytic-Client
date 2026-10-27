@@ -9,7 +9,15 @@
     "ClientLevelTickMixin",
     "ItemAmountMixin",
     "ChatComponentAccessor",
-    "ChatComponentMixin"
+    "ChatComponentMixin",
+    "PlayerNameMixin",
+    "TabNameMixin",
+    "F3Mixin",
+    "OverlayTextureMixin",
+    "OutlineMixin",
+    "FireMixin",
+    "ShieldMixin",
+    "CritMixin"
   ],
   "injectors": {
     "defaultRequire": 0

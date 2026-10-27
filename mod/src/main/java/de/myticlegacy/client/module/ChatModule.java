@@ -37,6 +37,7 @@ public class ChatModule extends Module {
 
     public static Component decorate(ChatComponent chat, Component message) {
         ChatModule m = instance;
+        message = StreamerModule.filter(message); // Streamer-Modus gilt auch ohne Chat-Modul
         if (m == null || !m.enabled() || message == null) return message;
         String text = message.getString();
         Component shown = message;

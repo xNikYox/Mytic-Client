@@ -81,6 +81,9 @@ public final class MyticClient implements ClientModInitializer {
     public static LightOverlayModule lightOverlay;
     public static FpsBoostModule fpsBoost;
     public static de.myticlegacy.client.module.ChatModule chat;
+    public static de.myticlegacy.client.module.StreamerModule streamer;
+    public static de.myticlegacy.client.module.PvpModule pvp;
+    private static KeyMapping streamerKey;
     public static ShulkerPreviewModule shulkerPreview;
     public static FriendsModule friends;
 
@@ -119,6 +122,7 @@ public final class MyticClient implements ClientModInitializer {
         hud(new PotionModule());
         hud(new TextModule("coords", "Koordinaten", "X, Y und Z deiner Position", () -> Items.COMPASS, true, 10000, 4, "XYZ", p -> {
             if (mc.player == null) return p ? "120 64 -35" : "";
+            if (de.myticlegacy.client.module.StreamerModule.hidesCoords()) return "??? ??? ???";
             return mc.player.getBlockX() + " " + mc.player.getBlockY() + " " + mc.player.getBlockZ();
         }));
         hud(new TextModule("direction", "Richtung", "Himmelsrichtung, in die du schaust", () -> Items.MAP, true, 10000, 23, "", p -> {
@@ -143,7 +147,7 @@ public final class MyticClient implements ClientModInitializer {
             return Math.round(used * 100.0 / rt.maxMemory()) + "% · " + used / 1048576 + " MB";
         }));
         hud(new TextModule("server", "Server-IP", "Adresse des Servers, auf dem du spielst", () -> Items.NAME_TAG, false, 10000, 99, "", p -> {
-            if (mc.getCurrentServer() != null) return mc.getCurrentServer().ip;
+            if (mc.getCurrentServer() != null) return de.myticlegacy.client.module.StreamerModule.hidesIp() ? "versteckt" : mc.getCurrentServer().ip;
             if (mc.hasSingleplayerServer()) return "Einzelspieler";
             return p ? "play.myticlegacy.de" : "";
         }));
@@ -192,6 +196,8 @@ public final class MyticClient implements ClientModInitializer {
         lightOverlay = module(new LightOverlayModule());
         fpsBoost = module(new FpsBoostModule());
         chat = module(new de.myticlegacy.client.module.ChatModule());
+        streamer = module(new de.myticlegacy.client.module.StreamerModule());
+        pvp = module(new de.myticlegacy.client.module.PvpModule());
         shulkerPreview = module(new ShulkerPreviewModule());
         friends = module(new FriendsModule());
         theme = module(new SimpleModules.Theme());
@@ -200,6 +206,7 @@ public final class MyticClient implements ClientModInitializer {
         zoomKey = Compat.registerKey("key.myticclient.zoom", InputConstants.KEY_C);
         freelookKey = Compat.registerKey("key.myticclient.freelook", InputConstants.KEY_LALT);
         snaplookKey = Compat.registerKey("key.myticclient.snaplook", InputConstants.KEY_V);
+        streamerKey = Compat.registerKey("key.myticclient.streamer", InputConstants.UNKNOWN.getValue());
         for (int i = 0; i < AutoTextModule.SLOTS; i++) autoTextKeys[i] = Compat.registerKey("key.myticclient.autotext" + (i + 1), -1);
 
         Compat.registerHud();
@@ -299,6 +306,11 @@ public final class MyticClient implements ClientModInitializer {
         autoText.tick(mc);
         lightOverlay.tick(mc);
         fpsBoost.tick(mc);
+        pvp.tick();
+        while (streamerKey.consumeClick()) {
+            streamer.toggle();
+            de.myticlegacy.client.module.Msg.actionBar("Streamer-Modus " + (streamer.enabled() ? "an" : "aus"));
+        }
         de.myticlegacy.client.cosmetics.Cosmetics.tick(mc);
         CombatTracker.tick(mc);
 
