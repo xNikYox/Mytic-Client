@@ -21,6 +21,7 @@ val sharedFiltered = layout.buildDirectory.dir("shared-src")
 // Umbenennungen von 1.21.11 → 26.x (Zeichen-API heißt jetzt "extract", Eingabe über SDL statt GLFW)
 val renames = listOf(
     Regex("""\bGuiGraphics\b""") to "GuiGraphicsExtractor",
+    Regex("""net\.minecraft\.client\.GuiMessage\b""") to "net.minecraft.client.multiplayer.chat.GuiMessage",
     Regex("""\.drawString\(""") to ".text(",
     Regex("""\.drawCenteredString\(""") to ".centeredText(",
     Regex("""\.renderItem\(""") to ".item(",

@@ -1,0 +1,17 @@
+{
+  "required": false,
+  "package": "de.myticlegacy.client.mixin.boost",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "EntityRenderDispatcherCullMixin",
+    "BlockEntityCullMixin",
+    "ParticleLimitMixin",
+    "ClientLevelTickMixin",
+    "ItemAmountMixin",
+    "ChatComponentAccessor",
+    "ChatComponentMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}

@@ -25,10 +25,16 @@ public class FpsBoostModule extends Module {
     public final BoolSetting background;
     public final BoolSetting autoDistance;
     public final SliderSetting targetFps;
+    public final BoolSetting culling;
+    public final SliderSetting mobDistance;
+    public final SliderSetting blockEntityDistance;
+    public final BoolSetting itemStacks;
+    public final BoolSetting farTicks;
+    public final SliderSetting particleLimit;
     private long lastAdjust;
 
     public FpsBoostModule() {
-        super("fpsboost", "FPS-Boost", "Mehr FPS: teure Grafik herunterdrehen, Sichtweite anpassen, im Hintergrund drosseln", Category.VISUELL, () -> Items.BLAZE_POWDER, false);
+        super("fpsboost", "FPS-Boost", "Mehr FPS: Verdecktes nicht zeichnen, teure Grafik herunterdrehen, im Hintergrund drosseln", Category.VISUELL, () -> Items.BLAZE_POWDER, false);
         clouds = new BoolSetting(this, "clouds", "Wolken aus", true);
         particles = new BoolSetting(this, "particles", "Partikel minimal", true);
         shadows = new BoolSetting(this, "shadows", "Schatten von Entities aus", true);
@@ -39,6 +45,12 @@ public class FpsBoostModule extends Module {
         background = new BoolSetting(this, "background", "Im Hintergrund nur 15 FPS", true);
         autoDistance = new BoolSetting(this, "autoDistance", "Sichtweite automatisch anpassen", false);
         targetFps = new SliderSetting(this, "targetFps", "Ziel-FPS", 30, 240, 10, 60, " FPS");
+        culling = new BoolSetting(this, "culling", "Verdecktes & Fernes nicht zeichnen", true);
+        mobDistance = new SliderSetting(this, "mobDistance", "Mobs zeichnen bis", 16, 128, 8, 64, " Blöcke");
+        blockEntityDistance = new SliderSetting(this, "blockEntityDistance", "Truhen & Schilder zeichnen bis", 16, 96, 8, 48, " Blöcke");
+        itemStacks = new BoolSetting(this, "itemStacks", "Item-Stapel als ein Modell", true);
+        farTicks = new BoolSetting(this, "farTicks", "Ferne Mobs seltener berechnen", true);
+        particleLimit = new SliderSetting(this, "particleLimit", "Partikel pro Sekunde höchstens", 200, 10000, 200, 2000, "");
     }
 
     public void tick(Minecraft mc) {

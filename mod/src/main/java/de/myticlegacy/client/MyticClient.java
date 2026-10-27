@@ -80,6 +80,7 @@ public final class MyticClient implements ClientModInitializer {
     public static AutoTextModule autoText;
     public static LightOverlayModule lightOverlay;
     public static FpsBoostModule fpsBoost;
+    public static de.myticlegacy.client.module.ChatModule chat;
     public static ShulkerPreviewModule shulkerPreview;
     public static FriendsModule friends;
 
@@ -190,6 +191,7 @@ public final class MyticClient implements ClientModInitializer {
         autoText = module(new AutoTextModule());
         lightOverlay = module(new LightOverlayModule());
         fpsBoost = module(new FpsBoostModule());
+        chat = module(new de.myticlegacy.client.module.ChatModule());
         shulkerPreview = module(new ShulkerPreviewModule());
         friends = module(new FriendsModule());
         theme = module(new SimpleModules.Theme());
