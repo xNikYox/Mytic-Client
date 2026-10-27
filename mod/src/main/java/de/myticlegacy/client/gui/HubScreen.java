@@ -87,7 +87,9 @@ public class HubScreen extends MyticScreen {
 
             if (lunar) {
                 Ui.rect(g, x - 2, y + 2, TILE_W + 4, TILE_H + 2, 8, 0x45000000);
-                Ui.outline(g, x, y, TILE_W, TILE_H, 6, Ui.mix(0x2EFFFFFF, 0x70FFFFFF, hv), Ui.mix(0xF2181818, 0xF2262626, hv));
+                // Kachel-Fläche folgt Menü-Stil und Deckkraft (Design → Menü-Deckkraft)
+                Ui.outline(g, x, y, TILE_W, TILE_H, 6, Ui.mix(Ui.glass() ? 0x40FFFFFF : 0x2EFFFFFF, 0x70FFFFFF, hv), Ui.mix(Ui.L_PANEL, Ui.glass() ? 0x8C2A2A3A : Ui.L_CARD, hv));
+                if (Ui.glass()) g.fillGradient(x + 6, y + 1, x + TILE_W - 6, y + 2, 0x70FFFFFF, 0x70FFFFFF);
             } else {
                 Ui.glow(g, x, y, TILE_W, TILE_H, 8, i == 1 ? Ui.accent() : Ui.accent2(), 5, 0.35f + hv * 0.65f);
                 Ui.neonPanel(g, x, y, TILE_W, TILE_H, 8, 1f);

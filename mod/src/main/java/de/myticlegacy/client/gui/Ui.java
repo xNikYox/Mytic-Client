@@ -11,9 +11,10 @@ import java.util.Map;
 
 /** Zeichen-Helfer für das Mytic-Design: abgerundete Flächen, Farben, weiche Übergänge. */
 public final class Ui {
-    public static final int PANEL = 0xF20A0716;
-    public static final int SURFACE = 0xFF130D24;
-    public static final int SURFACE_HOVER = 0xFF1F1638;
+    // Flächen-Farben: nicht final, Deckkraft und Stil (Design → Menü-Deckkraft / Menü-Stil) werden in refreshPalette() eingerechnet
+    public static int PANEL = 0xF20A0716;
+    public static int SURFACE = 0xFF130D24;
+    public static int SURFACE_HOVER = 0xFF1F1638;
     public static final int LINE = 0xFF2C2050;
     public static final int TEXT = 0xFFF1EEF9;
     public static final int MUTED = 0xFF9A93B4;
@@ -138,29 +139,82 @@ public final class Ui {
     /** Schalter wie bei Lunar: Pille mit Knopf, animiert. */
     // ------------------------------------------------------------------ Lunar-Stil
 
-    public static final int L_PANEL = 0xF2141414;
-    public static final int L_CARD = 0xFF222222;
-    public static final int L_CARD_HOVER = 0xFF2C2C2C;
-    public static final int L_LINE = 0x22FFFFFF;
-    public static final int L_GREEN = 0xFF33B45A;
+    public static int L_PANEL = 0xF2141414;
+    public static int L_CARD = 0xFF222222;
+    public static int L_CARD_HOVER = 0xFF2C2C2C;
+    public static int L_LINE = 0x22FFFFFF;
+    public static int L_GREEN = 0xFF33B45A;
+    private static String paletteKey = "";
     public static final int L_RED = 0xFFD8434B;
 
     /** Menü im Lunar-Stil (Design → Menü-Stil, Standard) statt Neon. */
     public static boolean lunar() {
-        return MyticClient.theme == null || MyticClient.theme.menuStyle.is("Lunar");
+        refreshPalette();
+        return MyticClient.theme == null || !MyticClient.theme.menuStyle.is("Neon"); // Glas nutzt das Lunar-Layout
+    }
+
+    /** Menü-Stil „Glas“: milchig durchsichtig, helle Kanten, Akzentfarbe statt Grün */
+    public static boolean glass() {
+        return MyticClient.theme != null && MyticClient.theme.menuStyle.is("Glas");
+    }
+
+    private static int a(int rgb, float alpha) {
+        return (Math.round(Math.max(0, Math.min(1, alpha)) * 255) << 24) | (rgb & 0xFFFFFF);
+    }
+
+    /** Farben nach Stil und Deckkraft neu berechnen (nur wenn sich etwas geändert hat) */
+    public static void refreshPalette() {
+        if (MyticClient.theme == null) return;
+        float op = (float) (MyticClient.theme.menuOpacity.get() / 100.0);
+        String style = MyticClient.theme.menuStyle.get();
+        int acc = accent();
+        String key = style + op + acc;
+        if (key.equals(paletteKey)) return;
+        paletteKey = key;
+        if (style.equals("Glas")) {
+            L_PANEL = a(0x0C0C14, 0.62f * op);
+            L_CARD = a(0xFFFFFF, 0.07f + 0.05f * op);
+            L_CARD_HOVER = a(0xFFFFFF, 0.13f + 0.07f * op);
+            L_LINE = 0x33FFFFFF;
+            L_GREEN = acc | 0xFF000000;
+        } else {
+            L_PANEL = a(0x141414, 0.95f * op);
+            L_CARD = a(0x222222, Math.min(1f, op + 0.15f));
+            L_CARD_HOVER = a(0x2C2C2C, Math.min(1f, op + 0.2f));
+            L_LINE = 0x22FFFFFF;
+            L_GREEN = 0xFF33B45A;
+        }
+        PANEL = a(0x0A0716, 0.95f * op);
+        SURFACE = a(0x130D24, Math.min(1f, op + 0.15f));
+        SURFACE_HOVER = a(0x1F1638, Math.min(1f, op + 0.2f));
     }
 
     /** Schlichtes Panel wie bei Lunar: dunkelgrau, feiner heller Rand, keine Leuchteffekte. */
     public static void lunarPanel(GuiGraphics g, int x, int y, int w, int h, int r) {
+        if (glass()) {
+            glassPanel(g, x, y, w, h, r);
+            return;
+        }
         rect(g, x - 2, y + 2, w + 4, h + 2, r + 2, 0x45000000);
         rect(g, x, y, w, h, r, 0x2EFFFFFF);
         rect(g, x + 1, y + 1, w - 2, h - 2, Math.max(0, r - 1), L_PANEL);
     }
 
+    /** Glas-Panel: weicher Schatten, helle Kante (oben heller), milchige Fläche, Lichtreflex und Akzent-Schimmer */
+    public static void glassPanel(GuiGraphics g, int x, int y, int w, int h, int r) {
+        rect(g, x - 3, y + 3, w + 6, h + 3, r + 3, 0x30000000);
+        rect(g, x, y, w, h, r, 0x40FFFFFF);
+        rect(g, x + 1, y + 1, w - 2, h - 2, Math.max(0, r - 1), L_PANEL);
+        g.fillGradient(x + r, y + 1, x + w - r, y + 2, 0x80FFFFFF, 0x80FFFFFF);          // Lichtkante oben
+        g.fillGradient(x + 1, y + 2, x + w - 1, y + Math.min(h - 2, 44), 0x16FFFFFF, 0x00FFFFFF); // Reflex
+        g.fillGradient(x + 1, y + h - 40, x + w - 1, y + h - 1, 0x00000000, withAlpha(accent(), 34)); // Akzent-Schimmer unten
+    }
+
     public static void toggle(GuiGraphics g, Object key, int x, int y, boolean on) {
         float t = animate(key, on, 14f);
         if (lunar()) {
-            rect(g, x, y, 20, 10, 5, mix(0xFF4A4A4A, L_GREEN, t));
+            if (glass() && t > 0.01f) glow(g, x, y, 20, 10, 5, withAlpha(accent(), Math.round(120 * t)), 2, 0.6f);
+            rect(g, x, y, 20, 10, 5, mix(glass() ? 0x55FFFFFF : 0xFF4A4A4A, L_GREEN, t));
             rect(g, x + 1 + Math.round(10 * t), y + 1, 8, 8, 4, 0xFFFFFFFF);
             return;
         }
