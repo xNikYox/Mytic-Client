@@ -95,6 +95,8 @@ public final class MyticClient implements ClientModInitializer {
     public static de.myticlegacy.client.module.ServerProfilesModule serverProfiles;
     public static de.myticlegacy.client.module.PackOverlayModule packOverlays;
     public static de.myticlegacy.client.module.CloudSyncModule cloudSync;
+    public static de.myticlegacy.client.module.ProfileCodeModule profileCode;
+    public static de.myticlegacy.client.module.TotemPopModule totemPops;
     public static final KeyMapping[] packKeys = new KeyMapping[de.myticlegacy.client.module.PackOverlayModule.SLOTS];
     public static ShulkerPreviewModule shulkerPreview;
     public static FriendsModule friends;
@@ -227,6 +229,8 @@ public final class MyticClient implements ClientModInitializer {
         serverProfiles = module(new de.myticlegacy.client.module.ServerProfilesModule());
         packOverlays = module(new de.myticlegacy.client.module.PackOverlayModule());
         cloudSync = module(new de.myticlegacy.client.module.CloudSyncModule());
+        profileCode = module(new de.myticlegacy.client.module.ProfileCodeModule());
+        totemPops = module(new de.myticlegacy.client.module.TotemPopModule());
 
         menuKey = Compat.registerKey("key.myticclient.menu", InputConstants.KEY_RSHIFT);
         zoomKey = Compat.registerKey("key.myticclient.zoom", InputConstants.KEY_C);
@@ -363,6 +367,7 @@ public final class MyticClient implements ClientModInitializer {
         serverProfiles.tick(mc);
         packOverlays.tick(mc);
         cloudSync.tick(mc);
+        totemPops.tick(mc);
 
         if (toggleSprint.enabled() && mc.player != null && Compat.screen(mc) == null
                 && mc.options.keyUp.isDown() && !mc.player.isShiftKeyDown() && !mc.player.isUsingItem()) {

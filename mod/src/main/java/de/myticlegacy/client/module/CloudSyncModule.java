@@ -40,19 +40,24 @@ public class CloudSyncModule extends Module {
         return new java.text.SimpleDateFormat("dd.MM. HH:mm").format(new java.util.Date(t));
     }
 
-    /** Aktueller Stand als JSON: Konfigurationsfelder + Tastenbelegung */
     private static JsonObject snapshot() {
+        return snapshot(true);
+    }
+
+    /** Aktueller Stand als JSON: Konfigurationsfelder + (wenn keys) Tastenbelegung – auch für Profil-Codes */
+    public static JsonObject snapshot(boolean withKeys) {
         JsonObject all = GSON.toJsonTree(MyticClient.config()).getAsJsonObject();
         JsonObject out = new JsonObject();
         for (String f : FIELDS) if (all.has(f)) out.add(f, all.get(f));
+        if (!withKeys) return out;
         JsonObject keys = new JsonObject();
         for (KeyMapping km : Minecraft.getInstance().options.keyMappings) keys.addProperty(km.getName(), km.saveString());
         out.add("keys", keys);
         return out;
     }
 
-    /** Gesicherten Stand übernehmen (im Render-Thread) */
-    private static void apply(JsonObject data) {
+    /** Gesicherten Stand übernehmen (im Render-Thread) – auch für Profil-Codes */
+    public static void apply(JsonObject data) {
         Minecraft mc = Minecraft.getInstance();
         JsonObject all = GSON.toJsonTree(MyticClient.config()).getAsJsonObject();
         for (String f : FIELDS) if (data.has(f)) all.add(f, data.get(f));

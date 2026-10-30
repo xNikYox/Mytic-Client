@@ -19,6 +19,7 @@
     "ShieldMixin",
     "CritMixin",
     "HurtOverlayMixin",
+    "TotemPopMixin",
     "ClipCaptureMixin",
     "VanillaHudMixin",
     "BossBarMixin"

@@ -19,7 +19,7 @@ import java.util.Set;
  */
 public class ServerProfilesModule extends Module {
     /** Gehören nicht zum Server-Profil (Client-weit) */
-    private static final Set<String> GLOBAL = Set.of("serverprofiles", "theme", "friends", "keyconflicts", "cloudsync");
+    private static final Set<String> GLOBAL = Set.of("serverprofiles", "theme", "friends", "keyconflicts", "cloudsync", "profilecode");
 
     private final BoolSetting auto;
     private String server;
