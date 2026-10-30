@@ -25,6 +25,7 @@
     <button class="rail-item" data-page="mods" aria-label="Mods"><svg viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg><span class="tip">Mods</span></button>
     <button class="rail-item" data-page="browser" aria-label="Mod-Browser"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M16.5 16.5L21 21M11 8v6M8 11h6"/></svg><span class="tip">Mod-Browser</span></button>
     <button class="rail-item" data-page="friends" aria-label="Freunde"><svg viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3.5"/><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5"/><path d="M15.5 5.2a3.5 3.5 0 0 1 0 6.6M18 14.8c2 .7 3.2 2.4 3.5 5.2"/></svg><span class="rail-badge" id="friends-badge" hidden></span><span class="tip">Freunde</span></button>
+    <button class="rail-item" data-page="shots" aria-label="Screenshots"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="14" rx="3"/><path d="M8.5 6l1.5-2.5h4L15.5 6"/><circle cx="12" cy="13" r="3.5"/></svg><span class="tip">Screenshots</span></button>
     <button class="rail-item" data-page="settings" aria-label="Einstellungen"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.2"/><circle cx="10" cy="17" r="2.2"/></svg><span class="tip">Einstellungen</span></button>
     <button class="rail-item" data-page="console" aria-label="Konsole"><svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="3"/><path d="M7.5 10l2.5 2-2.5 2M12.5 14.5h4"/></svg><span class="tip">Konsole</span></button>
     <div class="rail-spacer"></div>
@@ -215,6 +216,18 @@
           <p class="sub friends-hint">Im Spiel: <kbd>Rechts-Shift</kbd> → Freunde</p>
         </aside>
       </div>
+    </section>
+
+    <!-- Screenshots -->
+    <section class="page" id="page-shots">
+      <section class="glass shots-main">
+        <div class="friends-head">
+          <h3>Screenshots <span id="shots-count"></span></h3>
+          <button class="ghost small" id="shots-folder">Ordner öffnen</button>
+        </div>
+        <p class="sub" id="shots-empty" hidden>Noch keine Screenshots – im Spiel mit <kbd>F2</kbd> aufnehmen.</p>
+        <div class="shots-grid" id="shots-grid"></div>
+      </section>
     </section>
 
     <!-- Einstellungen -->

@@ -14,6 +14,9 @@ export const ONLINE_MS = 150 * 1000;
 const CHALLENGE_MS = 2 * 60 * 1000;
 const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
 const HEAD_MS = 24 * 60 * 60 * 1000;
+const SETTINGS_MAX = 256 * 1024;      // Cloud-Einstellungen (JSON-Text)
+const SHOT_MAX = 1900 * 1024;         // Screenshot als Base64 (≈ 1,4 MB JPEG; SQLite-Zeile max. 2 MB)
+const SHOTS_PER_USER = 100;           // ältere Uploads werden gelöscht
 const MAX_FRIENDS = 300;
 const MAX_PENDING = 50;
 
@@ -567,6 +570,44 @@ export function createApi(db, options = {}) {
     },
 
     /** Freund entfernen oder eigene Anfrage zurückziehen. */
+    /** Cloud-Einstellungen: Mods, HUD, Profile und Tasten eines Kontos (vom Spiel gesichert, auf anderen PCs wiederhergestellt) */
+    "GET /api/settings": async (request) => {
+      const me = await auth(request);
+      const row = await db.get("SELECT data, updated FROM cloud_settings WHERE uuid = ?", [me.uuid]);
+      return { data: row ? JSON.parse(row.data) : null, updated: row ? row.updated : 0 };
+    },
+
+    "POST /api/settings": async (request) => {
+      const me = await auth(request);
+      const { data } = await body(request);
+      if (!data || typeof data !== "object" || Array.isArray(data)) throw new HttpError(400, "Keine Einstellungen");
+      const text = JSON.stringify(data);
+      if (text.length > SETTINGS_MAX) throw new HttpError(413, "Einstellungen zu groß");
+      const t = now();
+      await db.run("INSERT INTO cloud_settings (uuid, data, updated) VALUES (?, ?, ?) ON CONFLICT(uuid) DO UPDATE SET data = excluded.data, updated = excluded.updated", [me.uuid, text, t]);
+      return { updated: t };
+    },
+
+    /** Screenshot hochladen (JPEG als Base64, vom Launcher verkleinert) → öffentlicher Link */
+    "POST /api/shots": async (request) => {
+      const me = await auth(request);
+      const { image } = await body(request);
+      if (typeof image !== "string" || !image.startsWith("/9j/") || !/^[A-Za-z0-9+/]+=*$/.test(image)) throw new HttpError(400, "Kein JPEG");
+      if (image.length > SHOT_MAX) throw new HttpError(413, "Bild zu groß");
+      const id = randomHex(8);
+      await db.run("INSERT INTO shots (id, uuid, created, data) VALUES (?, ?, ?, ?)", [id, me.uuid, now(), image]);
+      // nur die neuesten SHOTS_PER_USER behalten
+      await db.run("DELETE FROM shots WHERE uuid = ? AND id NOT IN (SELECT id FROM shots WHERE uuid = ? ORDER BY created DESC LIMIT ?)", [me.uuid, me.uuid, SHOTS_PER_USER]);
+      return { id, url: new URL(request.url).origin + "/api/shots/" + id + ".jpg" };
+    },
+
+    "POST /api/shots/delete": async (request) => {
+      const me = await auth(request);
+      const { id } = await body(request);
+      await db.run("DELETE FROM shots WHERE id = ? AND uuid = ?", [String(id), me.uuid]);
+      return { ok: true };
+    },
+
     "POST /api/friends/remove": async (request) => {
       const me = await auth(request);
       const { uuid } = await body(request);
@@ -586,6 +627,15 @@ export function createApi(db, options = {}) {
     const path = index >= 0 ? url.pathname.slice(index).replace(/\/+$/, "") : url.pathname;
     if (request.method === "GET" && /\/admin\/?$/.test(url.pathname)) {
       return new Response(ADMIN_PAGE, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-frame-options": "DENY" } });
+    }
+    // öffentlicher Screenshot-Link: /api/shots/<id>.jpg
+    const shot = request.method === "GET" && path.match(/^\/api\/shots\/([0-9a-f]{16})(?:\.jpg)?$/);
+    if (shot) {
+      const row = await db.get("SELECT data FROM shots WHERE id = ?", [shot[1]]);
+      if (!row) return json({ error: "Nicht gefunden" }, 404);
+      const bin = atob(row.data), bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return new Response(bytes, { headers: { "content-type": "image/jpeg", "cache-control": "public, max-age=31536000, immutable", "access-control-allow-origin": "*", "x-content-type-options": "nosniff" } });
     }
     const route = routes[`${request.method} ${path}`];
     if (!route) return json({ error: "Nicht gefunden" }, 404);

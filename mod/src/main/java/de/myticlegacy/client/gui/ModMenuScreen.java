@@ -367,7 +367,14 @@ public class ModMenuScreen extends MyticScreen {
             if (over && !Ui.lunar()) Ui.rect(g, x, row + 4, 2, ROW_H - 8, 1, Ui.accent2());
             Ui.text(g, setting.label, x + 8, row + 7, Ui.TEXT, false);
             int right = x + w - 8;
-            if (setting instanceof BoolSetting b) {
+            if (setting instanceof de.myticlegacy.client.setting.ActionSetting a) {
+                // Knopf (z. B. „Merken“) rechts in der Zeile
+                String label = a.button();
+                int bw = font.width(label) + 16;
+                boolean ls = Ui.lunar(), overBtn = Ui.inside(mouseX, mouseY, right - bw, row + 3, bw, 16);
+                Ui.outline(g, right - bw, row + 3, bw, 16, ls ? 4 : 8, overBtn ? 0xB0FFFFFF : ls ? 0x30FFFFFF : Ui.withAlpha(Ui.accent(), 150), ls ? 0xFF2A2A2A : 0xFF1C1433);
+                Ui.centered(g, label, right - bw / 2, row + 7, Ui.TEXT, false);
+            } else if (setting instanceof BoolSetting b) {
                 Ui.toggle(g, "set:" + m.id + "." + b.key, right - 20, row + 6, b.get());
             } else if (setting instanceof SliderSetting sl) {
                 int trackW = 100;
@@ -529,7 +536,9 @@ public class ModMenuScreen extends MyticScreen {
             }
             if (Ui.inside(mx, my, x, row, w, ROW_H)) {
                 int right = x + w - 8;
-                if (setting instanceof BoolSetting b) {
+                if (setting instanceof de.myticlegacy.client.setting.ActionSetting a) {
+                    if (mx >= right - font.width(a.button()) - 16) a.run();
+                } else if (setting instanceof BoolSetting b) {
                     b.toggle();
                 } else if (setting instanceof SliderSetting sl) {
                     int tx = right - 100;

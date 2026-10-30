@@ -35,6 +35,18 @@ CREATE TABLE IF NOT EXISTS grants (
   item TEXT NOT NULL,
   PRIMARY KEY (uuid, item)
 );
+CREATE TABLE IF NOT EXISTS cloud_settings (
+  uuid TEXT PRIMARY KEY,
+  data TEXT NOT NULL,
+  updated INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS shots (
+  id TEXT PRIMARY KEY,
+  uuid TEXT NOT NULL,
+  created INTEGER NOT NULL,
+  data TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS shots_uuid ON shots (uuid, created);
 CREATE TABLE IF NOT EXISTS requests (
   sender TEXT NOT NULL,
   target TEXT NOT NULL,

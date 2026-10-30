@@ -444,3 +444,15 @@ select option { background: #15101f; }
 .friend-requests .friend-head { width: 26px; height: 26px; }
 .friends-hint { margin-top: 6px; }
 @media (max-width: 900px) { .friends-layout { grid-template-columns: 1fr; } }
+
+/* Screenshots */
+.shots-main { padding: 14px 18px 18px; }
+.shots-main h3 { margin: 4px 0 10px; font: 700 13px "Outfit", sans-serif; letter-spacing: .14em; text-transform: uppercase; color: var(--accent-2); }
+.shots-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.shot { display: flex; flex-direction: column; border: 1px solid var(--glass-line); border-radius: 12px; overflow: hidden; background: rgba(0, 0, 0, .18); }
+.shot img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; background: rgba(255, 255, 255, .04); cursor: zoom-in; display: block; }
+.shot img.broken { opacity: .3; }
+.shot-info { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 8px 10px 0; }
+.shot-info b { font-size: 12.5px; font-weight: 600; }
+.shot-info small { font-size: 11.5px; opacity: .6; }
+.shot-actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px 10px; }

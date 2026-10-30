@@ -9,10 +9,14 @@ public final class PvpCompat {
     private PvpCompat() {
     }
 
-    public static boolean recolorHurt(int argb) {
+    /** split = untere Zeilen (5–7) bleiben Minecraft-Rot für Nicht-Spieler (Treffer-Farbe „Nur Spieler“) */
+    public static boolean recolorHurt(int argb, boolean split) {
         if (overlay == null || overlay.getPixels() == null) return false;
-        int abgr = (argb & 0xFF00FF00) | ((argb >> 16) & 0xFF) | ((argb & 0xFF) << 16);
-        for (int y = 0; y < 8; y++) for (int x = 0; x < 16; x++) overlay.getPixels().setPixelRGBA(x, y, abgr);
+        for (int y = 0; y < 8; y++) {
+            int c = split && y >= 5 ? 0xB2FF0000 : argb;
+            int abgr = (c & 0xFF00FF00) | ((c >> 16) & 0xFF) | ((c & 0xFF) << 16);
+            for (int x = 0; x < 16; x++) overlay.getPixels().setPixelRGBA(x, y, abgr);
+        }
         overlay.upload();
         return true;
     }

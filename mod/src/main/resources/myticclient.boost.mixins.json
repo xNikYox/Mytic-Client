@@ -18,6 +18,7 @@
     "FireMixin",
     "ShieldMixin",
     "CritMixin",
+    "HurtOverlayMixin",
     "ClipCaptureMixin",
     "VanillaHudMixin",
     "BossBarMixin"

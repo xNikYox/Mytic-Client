@@ -19,7 +19,7 @@ let logLevel = "all";
 const logLines = [];
 
 const avatar = (uuid) => `https://mc-heads.net/avatar/${uuid}/64`;
-const PAGE_TITLES = { home: "Start", friends: "Freunde", mods: "Mods", browser: "Mod-Browser", settings: "Einstellungen", console: "Konsole" };
+const PAGE_TITLES = { home: "Start", friends: "Freunde", shots: "Screenshots", mods: "Mods", browser: "Mod-Browser", settings: "Einstellungen", console: "Konsole" };
 
 // Einfache Linien-Icons pro Kategorie
 const ICONS = {
@@ -162,6 +162,7 @@ function showPage(name) {
   if (name === "console") renderLog(true);
   if (name === "browser" && !browserLoaded) loadBrowser(true);
   if (name === "friends") loadFriends();
+  if (name === "shots") loadShots();
 }
 document.querySelectorAll(".rail-item").forEach((b) => b.addEventListener("click", () => showPage(b.dataset.page)));
 document.querySelectorAll("[data-goto]").forEach((b) => b.addEventListener("click", () => showPage(b.dataset.goto)));
@@ -1329,3 +1330,89 @@ $("friend-add").addEventListener("submit", (e) => {
     return data;
   });
 });
+
+// ---------------------------------------------------------------------------------------------- Screenshots
+
+/** Vorschaubilder werden erst geladen, wenn die Karte sichtbar wird */
+const shotObserver = new IntersectionObserver((entries) => {
+  for (const entry of entries) {
+    if (!entry.isIntersecting) continue;
+    const img = entry.target;
+    shotObserver.unobserve(img);
+    api.shotThumb(img.dataset.file).then((url) => { img.src = url; }).catch(() => img.classList.add("broken"));
+  }
+}, { rootMargin: "200px" });
+
+async function loadShots() {
+  const grid = $("shots-grid");
+  let list;
+  try {
+    list = await api.shots();
+  } catch (error) {
+    toast(errorText(error), true);
+    return;
+  }
+  $("shots-count").textContent = list.length ? `(${list.length})` : "";
+  $("shots-empty").hidden = list.length > 0;
+  grid.replaceChildren(...list.map(shotCard));
+}
+
+function shotCard(shot) {
+  const card = document.createElement("div");
+  card.className = "shot";
+  const img = document.createElement("img");
+  img.alt = shot.name;
+  img.dataset.file = shot.file;
+  img.addEventListener("click", () => api.shotOpen(shot.file));
+  shotObserver.observe(img);
+  const info = document.createElement("div");
+  info.className = "shot-info";
+  const date = new Date(shot.time).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" });
+  info.innerHTML = `<b></b><small></small>`;
+  info.querySelector("b").textContent = date + (shot.legacy ? " · 1.8.9" : "");
+  info.querySelector("small").textContent = `${(shot.size / 1048576).toFixed(1)} MB`;
+  const actions = document.createElement("div");
+  actions.className = "shot-actions";
+  const button = (label, title, run, cls = "") => {
+    const b = document.createElement("button");
+    b.className = `ghost small ${cls}`;
+    b.textContent = label;
+    b.title = title;
+    b.addEventListener("click", async () => {
+      b.disabled = true;
+      try {
+        await run(b);
+      } catch (error) {
+        toast(errorText(error), true);
+      } finally {
+        b.disabled = false;
+      }
+    });
+    return b;
+  };
+  actions.append(
+    button("Link", "Hochladen und Link kopieren", async (b) => {
+      b.textContent = "…";
+      const { url } = await api.shotUpload(shot.file);
+      b.textContent = "Link";
+      toast(`Link kopiert: ${url}`);
+    }),
+    button("Kopieren", "Bild in die Zwischenablage", async () => { await api.shotCopy(shot.file); toast("Bild kopiert"); }),
+    button("Ordner", "Im Ordner zeigen", () => api.shotFolder(shot.file)),
+    button("Löschen", "In den Papierkorb", async (b) => {
+      if (b.dataset.armed !== "1") {
+        b.dataset.armed = "1";
+        b.textContent = "Sicher?";
+        setTimeout(() => { b.dataset.armed = ""; b.textContent = "Löschen"; }, 3000);
+        return;
+      }
+      await api.shotDelete(shot.file);
+      card.remove();
+      toast("In den Papierkorb verschoben");
+    }, "danger"),
+  );
+  card.append(img, info, actions);
+  return card;
+}
+
+$("shots-folder").addEventListener("click", () => api.shotFolder());

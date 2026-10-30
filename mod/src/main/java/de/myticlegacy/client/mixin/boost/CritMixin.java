@@ -18,7 +18,7 @@ public abstract class CritMixin {
     @Inject(method = "createTrackingEmitter(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/core/particles/ParticleOptions;)V", at = @At("HEAD"), cancellable = true, require = 0)
     private void mytic$crits(Entity entity, ParticleOptions options, CallbackInfo ci) {
         if (mytic$inside || (options.getType() != ParticleTypes.CRIT && options.getType() != ParticleTypes.ENCHANTED_HIT)) return;
-        int n = PvpModule.crits();
+        int n = options.getType() == ParticleTypes.CRIT ? PvpModule.crits() : PvpModule.sharps();
         if (n == 1) return;
         if (n <= 0) {
             ci.cancel();

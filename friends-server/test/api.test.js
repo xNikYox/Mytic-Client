@@ -319,3 +319,39 @@ test("Cosmetics gesperrt: nur Freigeschaltetes, Admin über Passwort oder Admin-
   assert.equal(page.status, 200);
   assert.match(await page.text(), /Mytic Admin/);
 });
+
+test("Cloud-Einstellungen: sichern und auf anderem PC holen", async () => {
+  const s = setup();
+  const a = await s.login("Alice");
+  assert.equal((await s.call("GET", "/api/settings", null, a)).data.data, null);
+  assert.equal((await s.call("GET", "/api/settings")).status, 401);
+  const saved = await s.call("POST", "/api/settings", { data: { enabled: { zoom: true }, keys: { "key.myticclient.zoom": "key.keyboard.c" } } }, a);
+  assert.equal(saved.status, 200);
+  const again = await s.login("Alice"); // neue Anmeldung = anderer PC
+  const got = await s.call("GET", "/api/settings", null, again);
+  assert.equal(got.data.data.enabled.zoom, true);
+  assert.equal(got.data.updated, saved.data.updated);
+  assert.equal((await s.call("GET", "/api/settings", null, await s.login("Bob"))).data.data, null, "pro Konto");
+  assert.equal((await s.call("POST", "/api/settings", { data: [1] }, a)).status, 400);
+  assert.equal((await s.call("POST", "/api/settings", { data: { x: "y".repeat(300 * 1024) } }, a)).status, 413);
+});
+
+test("Screenshots: hochladen, öffentlicher Link, löschen nur eigene", async () => {
+  const s = setup();
+  const a = await s.login("Alice");
+  const b = await s.login("Bob");
+  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4, 0xff, 0xd9]).toString("base64");
+  assert.equal((await s.call("POST", "/api/shots", { image: "iVBORw0KGgo=" }, a)).status, 400, "nur JPEG");
+  assert.equal((await s.call("POST", "/api/shots", { image: jpeg })).status, 401);
+  const up = await s.call("POST", "/api/shots", { image: jpeg }, a);
+  assert.equal(up.status, 200);
+  assert.match(up.data.url, /\/api\/shots\/[0-9a-f]{16}\.jpg$/);
+  const img = await s.api(new Request(up.data.url));
+  assert.equal(img.status, 200);
+  assert.equal(img.headers.get("content-type"), "image/jpeg");
+  assert.deepEqual(Buffer.from(await img.arrayBuffer()), Buffer.from(jpeg, "base64"));
+  await s.call("POST", "/api/shots/delete", { id: up.data.id }, b);
+  assert.equal((await s.api(new Request(up.data.url))).status, 200, "fremder Löschversuch ohne Wirkung");
+  await s.call("POST", "/api/shots/delete", { id: up.data.id }, a);
+  assert.equal((await s.api(new Request(up.data.url))).status, 404);
+});

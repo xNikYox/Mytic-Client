@@ -17,5 +17,8 @@
   "key.myticclient.clip": "Save clip (last seconds)",
   "key.myticclient.hudprofile1": "HUD profile 1",
   "key.myticclient.hudprofile2": "HUD profile 2",
-  "key.myticclient.hudprofile3": "HUD profile 3"
+  "key.myticclient.hudprofile3": "HUD profile 3",
+  "key.myticclient.pack1": "Toggle pack overlay 1",
+  "key.myticclient.pack2": "Toggle pack overlay 2",
+  "key.myticclient.pack3": "Toggle pack overlay 3"
 }

@@ -17,5 +17,8 @@
   "key.myticclient.clip": "Clip speichern (letzte Sekunden)",
   "key.myticclient.hudprofile1": "HUD-Profil 1",
   "key.myticclient.hudprofile2": "HUD-Profil 2",
-  "key.myticclient.hudprofile3": "HUD-Profil 3"
+  "key.myticclient.hudprofile3": "HUD-Profil 3",
+  "key.myticclient.pack1": "Pack-Overlay 1 umschalten",
+  "key.myticclient.pack2": "Pack-Overlay 2 umschalten",
+  "key.myticclient.pack3": "Pack-Overlay 3 umschalten"
 }

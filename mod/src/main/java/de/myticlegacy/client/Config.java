@@ -46,6 +46,14 @@ public final class Config {
     public Map<String, HudProfile> hudProfiles = new LinkedHashMap<>();
     public String hudProfile;
 
+    /** Server-Profile: Server-Adresse → HUD-Profil und an/aus der übrigen Mods, beim Betreten automatisch gesetzt */
+    public Map<String, ServerProfile> serverProfiles = new LinkedHashMap<>();
+
+    public static final class ServerProfile {
+        public String hudProfile;
+        public Map<String, Boolean> modules = new LinkedHashMap<>();
+    }
+
     public static final class HudProfile {
         public Map<String, int[]> positions = new LinkedHashMap<>();
         public Map<String, Boolean> enabled = new LinkedHashMap<>();
@@ -66,6 +74,7 @@ public final class Config {
                     if (config.settings == null) config.settings = new LinkedHashMap<>();
                     if (config.savedOptions == null) config.savedOptions = new LinkedHashMap<>();
                     if (config.hudProfiles == null) config.hudProfiles = new LinkedHashMap<>();
+                    if (config.serverProfiles == null) config.serverProfiles = new LinkedHashMap<>();
                     return config;
                 }
             }

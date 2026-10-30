@@ -266,6 +266,11 @@ public final class Friends {
         return call("POST", path, body, 10000);
     }
 
+    /** Abfrage am Friends-Server (blockierend, nur aus Hintergrund-Threads). */
+    public static JsonObject get(String path) throws Exception {
+        return call("GET", path, null, 10000);
+    }
+
     /** Aufgabe im Hintergrund-Thread der Freundesliste ausführen. */
     public static void background(Runnable task) {
         if (worker != null) worker.execute(task);

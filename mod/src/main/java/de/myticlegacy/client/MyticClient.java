@@ -90,6 +90,12 @@ public final class MyticClient implements ClientModInitializer {
     private static KeyMapping streamerKey, galleryKey, clipKey;
     private static final KeyMapping[] profileKeys = new KeyMapping[3];
     public static de.myticlegacy.client.hud.ScreenshotModule screenshot;
+    public static de.myticlegacy.client.hud.WarningsModule warnings;
+    public static de.myticlegacy.client.module.KeyConflictModule keyConflicts;
+    public static de.myticlegacy.client.module.ServerProfilesModule serverProfiles;
+    public static de.myticlegacy.client.module.PackOverlayModule packOverlays;
+    public static de.myticlegacy.client.module.CloudSyncModule cloudSync;
+    public static final KeyMapping[] packKeys = new KeyMapping[de.myticlegacy.client.module.PackOverlayModule.SLOTS];
     public static ShulkerPreviewModule shulkerPreview;
     public static FriendsModule friends;
 
@@ -183,6 +189,8 @@ public final class MyticClient implements ClientModInitializer {
             return String.format("%d:%02d:%02d", s / 3600, s / 60 % 60, s % 60);
         }));
         hud(new ItemCounterModule());
+        warnings = new de.myticlegacy.client.hud.WarningsModule();
+        hud(warnings);
         hud(new TargetHudModule());
         hud(new de.myticlegacy.client.hud.PitchModule());
         de.myticlegacy.client.hud.VanillaHudModule.createAll();
@@ -215,6 +223,10 @@ public final class MyticClient implements ClientModInitializer {
         shulkerPreview = module(new ShulkerPreviewModule());
         friends = module(new FriendsModule());
         theme = module(new SimpleModules.Theme());
+        keyConflicts = module(new de.myticlegacy.client.module.KeyConflictModule());
+        serverProfiles = module(new de.myticlegacy.client.module.ServerProfilesModule());
+        packOverlays = module(new de.myticlegacy.client.module.PackOverlayModule());
+        cloudSync = module(new de.myticlegacy.client.module.CloudSyncModule());
 
         menuKey = Compat.registerKey("key.myticclient.menu", InputConstants.KEY_RSHIFT);
         zoomKey = Compat.registerKey("key.myticclient.zoom", InputConstants.KEY_C);
@@ -227,6 +239,7 @@ public final class MyticClient implements ClientModInitializer {
         clipKey = Compat.registerKey("key.myticclient.clip", InputConstants.KEY_F8);
         for (int i = 0; i < profileKeys.length; i++) profileKeys[i] = Compat.registerKey("key.myticclient.hudprofile" + (i + 1), InputConstants.UNKNOWN.getValue());
         for (int i = 0; i < AutoTextModule.SLOTS; i++) autoTextKeys[i] = Compat.registerKey("key.myticclient.autotext" + (i + 1), -1);
+        for (int i = 0; i < packKeys.length; i++) packKeys[i] = Compat.registerKey("key.myticclient.pack" + (i + 1), -1);
 
         Compat.registerHud();
         de.myticlegacy.client.render.WorldRender.register(sink -> lightOverlay.draw(sink));
@@ -345,6 +358,11 @@ public final class MyticClient implements ClientModInitializer {
         }
         de.myticlegacy.client.cosmetics.Cosmetics.tick(mc);
         CombatTracker.tick(mc);
+        warnings.tick(mc);
+        keyConflicts.tick(mc);
+        serverProfiles.tick(mc);
+        packOverlays.tick(mc);
+        cloudSync.tick(mc);
 
         if (toggleSprint.enabled() && mc.player != null && Compat.screen(mc) == null
                 && mc.options.keyUp.isDown() && !mc.player.isShiftKeyDown() && !mc.player.isUsingItem()) {

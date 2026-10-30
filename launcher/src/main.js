@@ -1,5 +1,5 @@
 // Electron-Hauptprozess des Mytic Client Launchers.
-const { app, BrowserWindow, ipcMain, shell, safeStorage, session, dialog } = require("electron");
+const { app, BrowserWindow, ipcMain, shell, safeStorage, session, dialog, clipboard, nativeImage } = require("electron");
 const importer = require("./core/importer");
 const { ModUpdater } = require("./core/modupdates");
 const autofix = require("./core/autofix");
@@ -722,6 +722,72 @@ for (const action of ["request", "accept", "deny", "remove"]) {
     return { configured: true, ...data };
   });
 }
+
+// ------------------------------------------------------------------------------ Screenshots
+
+/** Screenshot-Ordner: gemeinsamer Spielordner (Fabric) und eigene Ordner der 1.8.9-Profile (game-<version>) */
+function shotDirs() {
+  const dirs = [path.join(DIRS.game, "screenshots")];
+  try {
+    for (const name of fs.readdirSync(DIRS.base)) if (/^game-/.test(name)) dirs.push(path.join(DIRS.base, name, "screenshots"));
+  } catch {
+    // Basisordner fehlt noch
+  }
+  return dirs;
+}
+
+/** Nur Dateien aus den Screenshot-Ordnern zulassen (die Oberfläche schickt Pfade zurück) */
+function shotFile(file) {
+  const full = path.resolve(String(file || ""));
+  if (!/\.(png|jpe?g)$/i.test(full) || !shotDirs().some((d) => full.startsWith(path.resolve(d) + path.sep))) throw new Error("Unbekannte Datei");
+  return full;
+}
+
+ipcMain.handle("shots:list", async () => {
+  const list = [];
+  for (const dir of shotDirs()) {
+    let names = [];
+    try {
+      names = await fs.promises.readdir(dir);
+    } catch {
+      continue;
+    }
+    for (const name of names) {
+      if (!/\.(png|jpe?g)$/i.test(name)) continue;
+      try {
+        const file = path.join(dir, name);
+        const stat = await fs.promises.stat(file);
+        list.push({ file, name, time: stat.mtimeMs, size: stat.size, legacy: !dir.startsWith(DIRS.game) });
+      } catch {
+        // gerade gelöscht
+      }
+    }
+  }
+  return list.sort((a, b) => b.time - a.time).slice(0, 500);
+});
+
+ipcMain.handle("shots:thumb", async (e, file) => nativeImage.createFromPath(shotFile(file)).resize({ width: 360, quality: "good" }).toDataURL());
+ipcMain.handle("shots:open", async (e, file) => shell.openPath(shotFile(file)));
+ipcMain.handle("shots:folder", async (e, file) => (file ? shell.showItemInFolder(shotFile(file)) : shell.openPath(shotDirs()[0])));
+ipcMain.handle("shots:copy", async (e, file) => clipboard.writeImage(nativeImage.createFromPath(shotFile(file))));
+ipcMain.handle("shots:delete", async (e, file) => shell.trashItem(shotFile(file)));
+
+/** Hochladen: als JPEG (max. 1920 px breit, so lange kleiner, bis es passt) zum Friends-Server → Link in die Zwischenablage */
+ipcMain.handle("shots:upload", async (e, file) => {
+  if (!friends.configured) throw new Error("Hochladen geht nur mit Freundesliste (Server nicht eingerichtet)");
+  let image = nativeImage.createFromPath(shotFile(file));
+  if (image.isEmpty()) throw new Error("Bild nicht lesbar");
+  if (image.getSize().width > 1920) image = image.resize({ width: 1920, quality: "best" });
+  let data;
+  for (let quality = 88; ; quality -= 8) {
+    data = image.toJPEG(quality).toString("base64");
+    if (data.length <= 1850 * 1024) break;
+    if (quality <= 40) image = image.resize({ width: Math.round(image.getSize().width * 0.8), quality: "best" }), quality = 88;
+  }
+  const result = await friends.call(await activeAccount(), "POST", "api/shots", { image: data });
+  clipboard.writeText(result.url);
+  return result;
+});
 
 /** JVM-Argumente, mit denen die Mod im Spiel die Freundesliste nutzt (leer, wenn nicht erreichbar). */
 async function friendsJvm(account) {
