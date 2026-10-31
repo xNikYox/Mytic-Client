@@ -47,6 +47,12 @@ CREATE TABLE IF NOT EXISTS shots (
   data TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS shots_uuid ON shots (uuid, created);
+CREATE TABLE IF NOT EXISTS shot_quota (
+  uuid TEXT NOT NULL,
+  day INTEGER NOT NULL,
+  n INTEGER NOT NULL,
+  PRIMARY KEY (uuid, day)
+);
 CREATE TABLE IF NOT EXISTS requests (
   sender TEXT NOT NULL,
   target TEXT NOT NULL,
@@ -65,4 +71,5 @@ export const MIGRATIONS = [
   "ALTER TABLE users ADD COLUMN shield TEXT",
   "ALTER TABLE users ADD COLUMN aura TEXT",
   "ALTER TABLE users ADD COLUMN nametag TEXT",
+  "ALTER TABLE challenges ADD COLUMN ip TEXT",
 ];

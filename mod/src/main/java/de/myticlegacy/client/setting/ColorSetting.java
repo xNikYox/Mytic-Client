@@ -18,6 +18,11 @@ public class ColorSetting extends Setting<Integer> {
     }
 
     @Override
+    public Object sanitize(Object value) {
+        return value instanceof Number n && Double.isFinite(n.doubleValue()) ? (double) (int) n.longValue() : null;
+    }
+
+    @Override
     public void set(Integer value) {
         store((double) value);
     }

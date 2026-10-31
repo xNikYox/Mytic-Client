@@ -81,13 +81,13 @@ public abstract class HudModule extends Module {
 
     public int x() {
         int[] pos = MyticClient.config().positions.get(id);
-        int x = pos != null ? pos[0] : defaultX;
+        int x = pos != null && pos.length == 2 ? pos[0] : defaultX;
         return Math.max(0, Math.min(x, Minecraft.getInstance().getWindow().getGuiScaledWidth() - width()));
     }
 
     public int y() {
         int[] pos = MyticClient.config().positions.get(id);
-        int y = pos != null ? pos[1] : defaultY;
+        int y = pos != null && pos.length == 2 ? pos[1] : defaultY;
         return Math.max(0, Math.min(y, Minecraft.getInstance().getWindow().getGuiScaledHeight() - height()));
     }
 

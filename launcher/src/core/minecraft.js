@@ -4,7 +4,7 @@ const path = require("node:path");
 const os = require("node:os");
 const { spawn } = require("node:child_process");
 const AdmZip = require("adm-zip");
-const { getJson, downloadAll, downloadFile, isValid } = require("./download");
+const { getJson, fetchRetry, downloadAll, downloadFile, isValid } = require("./download");
 const { ensureJava } = require("./java");
 
 /** Standardversion für neue Profile. */
@@ -24,6 +24,18 @@ const FORGE_MAVEN = "https://maven.minecraftforge.net/";
 
 function loaderFor(mcVersion) {
   return FORGE_VERSIONS[mcVersion] ? "forge" : "fabric";
+}
+
+/**
+ * Prüfsumme (sha1) einer Datei aus einem Maven-Repository (<datei>.sha1 daneben).
+ * null, wenn das Repository keine anbietet (404); Netzwerkfehler werden weitergereicht.
+ */
+async function mavenSha1(url) {
+  const response = await fetchRetry(`${url}.sha1`);
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`HTTP ${response.status} bei ${url}.sha1`);
+  const match = /^\s*([0-9a-f]{40})\b/i.exec(await response.text());
+  return match ? match[1].toLowerCase() : null;
 }
 
 /** Spielordner: alte Versionen (andere Optionen-/Weltformate) bekommen einen eigenen, z. B. game-1.8.9. */
@@ -176,19 +188,31 @@ class Installer {
     const forge = FORGE_VERSIONS[this.mcVersion];
     const dir = path.join(this.dirs.versions, `forge-${forge}`);
     const file = path.join(dir, "profile.json");
+    const base = `${FORGE_MAVEN}net/minecraftforge/forge/${forge}/forge-${forge}`;
     try {
-      return JSON.parse(await fsp.readFile(file, "utf8"));
+      const cached = JSON.parse(await fsp.readFile(file, "utf8"));
+      // ältere profile.json ohne Prüfsumme der Universal-JAR: einmal nachtragen
+      const universal = cached.libraries.find((l) => l.downloadUrl && !l.sha1);
+      if (universal) {
+        universal.sha1 = await mavenSha1(universal.downloadUrl).catch(() => null);
+        if (universal.sha1) await fsp.writeFile(file, JSON.stringify(cached, null, 2));
+        else delete universal.sha1;
+      }
+      return cached;
     } catch {
       // noch nicht vorhanden
     }
     const installer = path.join(dir, "installer.jar");
-    const base = `${FORGE_MAVEN}net/minecraftforge/forge/${forge}/forge-${forge}`;
-    if (!(await isValid(installer))) await downloadFile(`${base}-installer.jar`, installer);
+    const installerSha1 = await mavenSha1(`${base}-installer.jar`);
+    if (!(await isValid(installer, { sha1: installerSha1 }))) await downloadFile(`${base}-installer.jar`, installer, { sha1: installerSha1 });
+    if (!installerSha1) this.log(`[Launcher] Keine Prüfsumme für den Forge-Installer im Maven gefunden`);
+    const universalSha1 = await mavenSha1(`${base}-universal.jar`);
+    if (!universalSha1) this.log(`[Launcher] Keine Prüfsumme für Forge (universal) im Maven gefunden`);
     const info = JSON.parse(new AdmZip(installer).readAsText("install_profile.json")).versionInfo;
     const libraries = info.libraries
       .filter((l) => l.clientreq !== false)
       .map((l) => (l.name.startsWith("net.minecraftforge:forge:")
-        ? { name: l.name, downloadUrl: `${base}-universal.jar` }
+        ? { name: l.name, downloadUrl: `${base}-universal.jar`, ...(universalSha1 ? { sha1: universalSha1 } : {}) }
         : { name: l.name, url: l.url || "https://libraries.minecraft.net/" }));
     const profile = { mainClass: info.mainClass, minecraftArguments: info.minecraftArguments, libraries };
     await fsp.writeFile(file, JSON.stringify(profile, null, 2));
@@ -574,8 +598,9 @@ class Log4jParser {
   }
 }
 
-function launch(command, dirs, { onLog = () => {}, onExit = () => {} } = {}) {
-  const child = spawn(command.java, command.args, { cwd: command.cwd || dirs.game, windowsHide: false, env: { ...process.env, _JAVA_OPTIONS: undefined } });
+/** env: zusätzliche Umgebungsvariablen (z. B. MYTIC_FRIENDS_TOKEN – nicht in der sichtbaren Kommandozeile). */
+function launch(command, dirs, { onLog = () => {}, onExit = () => {}, env = {} } = {}) {
+  const child = spawn(command.java, command.args, { cwd: command.cwd || dirs.game, windowsHide: false, env: { ...process.env, _JAVA_OPTIONS: undefined, ...env } });
   const forward = (stream) => {
     let buffer = "";
     const parser = new Log4jParser(onLog);

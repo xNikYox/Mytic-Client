@@ -21,7 +21,7 @@ public abstract class Setting<T> {
         module.settings.add(this);
     }
 
-    protected String path() {
+    public String path() {
         return path;
     }
 
@@ -37,6 +37,14 @@ public abstract class Setting<T> {
 
     public void set(T value) {
         store(value);
+    }
+
+    /**
+     * Wert aus geladenen/fremden Daten (Cloud, Profil-Code) prüfen: gültiger Speicherwert wie bei set() oder null
+     * (falscher Typ, ungültig) – dann wird er ignoriert. Standard: nichts übernehmen.
+     */
+    public Object sanitize(Object value) {
+        return null;
     }
 
     public void reset() {

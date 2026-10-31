@@ -4,6 +4,9 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
+const { signFiles, loadKey } = require("./sign");
+
+const key = loadKey(); // vorher prüfen: ohne Schlüssel würde sich die Entwicklerversion nicht mehr aktualisieren
 
 // Adresse der eigenen Download-Seite: aus MYTIC_UPDATE_SITE oder der lokalen Datei scripts/.dev-update-site (nicht im Repository)
 const siteFile = path.join(__dirname, ".dev-update-site");
@@ -23,3 +26,6 @@ try {
 } finally {
   fs.writeFileSync(config, original);
 }
+const version = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf8")).version;
+const exe = path.join(__dirname, "..", "dist", `MyticClient-Dev-${version}.exe`);
+console.log(`signiert: ${signFiles([exe], key)[0]}`);

@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import zlib from "node:zlib";
 import nodeCrypto from "node:crypto";
 import { certificatePayload, challengeText, epochMillis } from "../src/mojang.js";
-import { openDb } from "../src/node-server.js";
-import { createApi, offlineUuid, ONLINE_MS } from "../src/api.js";
+import { openDb, clientIp } from "../src/node-server.js";
+import { createApi, offlineUuid, ONLINE_MS, RateLimiter } from "../src/api.js";
 import { headFromPng } from "../src/skin.js";
 
 function crc32(buf) {
@@ -82,8 +82,10 @@ function proof(serverId, uuid, name, clock, overrides = {}) {
 function setup(opts = {}) {
   let clock = 1_000_000_000_000;
   const accounts = { Alice: ALICE, Bob: BOB };
+  const fetched = [];
   const fakeFetch = async (url) => {
     const u = new URL(url);
+    fetched.push(u.hostname);
     if (u.hostname === "textures.minecraft.net") return new Response(skinPng());
     if (u.hostname === "api.mojang.com") return new Response(null, { status: 404 });
     if (u.hostname === "playerdb.co") {
@@ -92,14 +94,16 @@ function setup(opts = {}) {
     }
     throw new Error(`unerwartet: ${url}`);
   };
-  const api = createApi(openDb(":memory:"), { fetch: fakeFetch, now: () => clock, allowOffline: opts.allowOffline, mojangKeys: MOJANG_KEYS, adminKey: ADMIN_KEY });
-  const call = async (method, path, data, token, adminKey) => {
+  const db = openDb(":memory:");
+  const api = createApi(db, { fetch: fakeFetch, now: () => clock, allowOffline: opts.allowOffline, mojangKeys: MOJANG_KEYS, adminKey: opts.adminKey || ADMIN_KEY,
+    limits: opts.limits, shotsPerDay: opts.shotsPerDay, shotsTotal: opts.shotsTotal });
+  const call = async (method, path, data, token, adminKey, ip) => {
     const res = await api(new Request(`http://x/proxy/8766${path}`, {
       method,
       headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}), ...(adminKey ? { "x-admin-key": adminKey } : {}) },
       body: data ? JSON.stringify(data) : undefined,
-    }));
-    return { status: res.status, data: await res.json() };
+    }), ip ? { ip } : undefined);
+    return { status: res.status, data: await res.json(), retryAfter: res.headers.get("retry-after") };
   };
   const login = async (name) => {
     const { data } = await call("POST", "/api/auth/challenge");
@@ -113,7 +117,7 @@ function setup(opts = {}) {
     assert.equal(res.status, 200, JSON.stringify(res.data));
     return res.data;
   };
-  return { call, login, grant, api, tick: (ms) => { clock += ms; }, clock: () => clock };
+  return { call, login, grant, api, db, fetched, tick: (ms) => { clock += ms; }, clock: () => clock };
 }
 
 const ADMIN_KEY = "test-admin-key-1234567890";
@@ -354,4 +358,104 @@ test("Screenshots: hochladen, öffentlicher Link, löschen nur eigene", async ()
   assert.equal((await s.api(new Request(up.data.url))).status, 200, "fremder Löschversuch ohne Wirkung");
   await s.call("POST", "/api/shots/delete", { id: up.data.id }, a);
   assert.equal((await s.api(new Request(up.data.url))).status, 404);
+});
+
+test("Bremse je Adresse: 429 mit Retry-After, Anmeldung strenger, Adressen getrennt", async () => {
+  const s = setup({ limits: { all: 5, auth: 3 } });
+  for (let i = 0; i < 3; i++) assert.equal((await s.call("POST", "/api/auth/challenge", null, null, null, "1.1.1.1")).status, 200);
+  const blocked = await s.call("POST", "/api/auth/challenge", null, null, null, "1.1.1.1");
+  assert.equal(blocked.status, 429);
+  assert.ok(Number(blocked.retryAfter) > 0);
+  // andere Adresse unabhängig; allgemeiner Topf für die erste Adresse noch frei
+  assert.equal((await s.call("POST", "/api/auth/challenge", null, null, null, "2.2.2.2")).status, 200);
+  assert.equal((await s.call("GET", "/api/health", null, null, null, "1.1.1.1")).status, 200);
+  assert.equal((await s.call("GET", "/api/health", null, null, null, "1.1.1.1")).status, 429);
+  s.tick(61 * 1000);
+  assert.equal((await s.call("POST", "/api/auth/challenge", null, null, null, "1.1.1.1")).status, 200);
+});
+
+test("Bremse: begrenzter Speicher, älteste Adresse fällt weg", () => {
+  const limiter = new RateLimiter(1, 60000, 3);
+  assert.equal(limiter.hit("a"), 0);
+  assert.ok(limiter.hit("a") > 0);
+  for (const key of ["b", "c", "d"]) limiter.hit(key);
+  assert.equal(limiter.hits.size, 3);
+  assert.equal(limiter.hits.has("a"), false);
+});
+
+test("Anmelde-Aufgaben: höchstens 10 offene je Adresse, abgelaufene werden aufgeräumt", async () => {
+  const s = setup({ limits: { auth: 1000, all: 1000 } });
+  for (let i = 0; i < 10; i++) assert.equal((await s.call("POST", "/api/auth/challenge", null, null, null, "3.3.3.3")).status, 200);
+  assert.equal((await s.call("POST", "/api/auth/challenge", null, null, null, "3.3.3.3")).status, 429);
+  assert.equal((await s.call("POST", "/api/auth/challenge", null, null, null, "4.4.4.4")).status, 200);
+  s.tick(2 * 60 * 1000 + 1);
+  assert.equal((await s.call("POST", "/api/auth/challenge", null, null, null, "3.3.3.3")).status, 200);
+  assert.equal((await s.db.get("SELECT COUNT(*) AS n FROM challenges")).n, 1);
+});
+
+test("Anfrage-Größe: 413 bei Content-Length und beim Lesen ohne Angabe", async () => {
+  const s = setup();
+  const big = await s.call("POST", "/api/auth/login", { serverId: "a".repeat(40), junk: "x".repeat(20 * 1024) });
+  assert.equal(big.status, 413);
+  // Datenstrom ohne Content-Length
+  const stream = new ReadableStream({
+    start(controller) {
+      for (let i = 0; i < 20; i++) controller.enqueue(new TextEncoder().encode("x".repeat(1024)));
+      controller.close();
+    },
+  });
+  const res = await s.api(new Request("http://x/api/auth/login", { method: "POST", body: stream, duplex: "half" }));
+  assert.equal(res.status, 413);
+  // Screenshot darf größer sein
+  const a = await s.login("Alice");
+  const jpeg = "/9j/" + "A".repeat(100 * 1024);
+  assert.equal((await s.call("POST", "/api/shots", { image: jpeg }, a)).status, 200);
+});
+
+test("Screenshots: Tagesgrenze je Konto (Löschen hilft nicht) und Gesamtgrenze", async () => {
+  const s = setup({ shotsPerDay: 2, shotsTotal: 3 });
+  const a = await s.login("Alice");
+  const b = await s.login("Bob");
+  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4, 0xff, 0xd9]).toString("base64");
+  const first = await s.call("POST", "/api/shots", { image: jpeg }, a);
+  await s.call("POST", "/api/shots/delete", { id: first.data.id }, a);
+  assert.equal((await s.call("POST", "/api/shots", { image: jpeg }, a)).status, 200);
+  const over = await s.call("POST", "/api/shots", { image: jpeg }, a);
+  assert.equal(over.status, 429);
+  assert.ok(Number(over.retryAfter) > 0);
+  assert.equal((await s.call("POST", "/api/shots", { image: jpeg }, b)).status, 200);
+  assert.equal((await s.call("POST", "/api/shots", { image: jpeg }, b)).status, 200);
+  // jetzt 3 gespeichert = voll
+  s.tick(24 * 60 * 60 * 1000);
+  assert.equal((await s.call("POST", "/api/shots", { image: jpeg }, a)).status, 507);
+});
+
+test("Admin-Passwort: mindestens 16 Zeichen, Fehlversuche sperren die Adresse", async () => {
+  const short = setup({ adminKey: "kurz-15-zeichen" });
+  assert.equal((await short.call("GET", "/api/admin/catalog", null, null, "kurz-15-zeichen")).status, 403);
+  const s = setup();
+  assert.equal((await s.call("GET", "/api/admin/catalog", null, null, ADMIN_KEY, "5.5.5.5")).status, 200);
+  for (let i = 0; i < 5; i++) assert.equal((await s.call("GET", "/api/admin/catalog", null, null, "falsch-falsch-falsch", "5.5.5.5")).status, 403);
+  // gesperrt – auch mit dem richtigen Passwort
+  const locked = await s.call("GET", "/api/admin/catalog", null, null, ADMIN_KEY, "5.5.5.5");
+  assert.equal(locked.status, 429);
+  assert.ok(Number(locked.retryAfter) > 0);
+  assert.equal((await s.call("GET", "/api/admin/catalog", null, null, ADMIN_KEY, "6.6.6.6")).status, 200);
+  s.tick(61 * 1000);
+  assert.equal((await s.call("GET", "/api/admin/catalog", null, null, ADMIN_KEY, "5.5.5.5")).status, 200);
+});
+
+test("Freundschaftsanfrage: eigene Grenze vor der Namenssuche", async () => {
+  const s = setup();
+  const a = await s.login("Alice");
+  for (let i = 0; i < 50; i++) await s.db.run("INSERT INTO requests (sender, target, created) VALUES (?, ?, ?)", [ALICE, i.toString(16).padStart(32, "0"), s.clock()]);
+  s.fetched.length = 0;
+  assert.equal((await s.call("POST", "/api/friends/request", { name: "carol" }, a)).status, 429);
+  assert.deepEqual(s.fetched, [], "kein Nachschlagen bei playerdb.co");
+});
+
+test("Node: X-Forwarded-For nur mit TRUST_PROXY", () => {
+  const req = { headers: { "x-forwarded-for": "9.9.9.9, 7.7.7.7" }, socket: { remoteAddress: "127.0.0.1" } };
+  assert.equal(clientIp(req, false), "127.0.0.1");
+  assert.equal(clientIp(req, true), "7.7.7.7");
 });

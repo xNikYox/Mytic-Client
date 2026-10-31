@@ -348,6 +348,8 @@ test("Mod-Updates wie bei Lunar: einzelne Jar laden, sonst mitgelieferte Mod", a
   const crypto = require("node:crypto");
   const AdmZip = require("adm-zip");
   const { ModUpdater, jarVersion } = require("../src/core/modupdates");
+  const signing = require("../src/core/signing");
+  const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519"); // Testschlüssel
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "mytic-modupd-"));
   const bundled = path.join(root, "bundled");
   fs.mkdirSync(path.join(bundled, "1.21.4"), { recursive: true });
@@ -367,17 +369,22 @@ test("Mod-Updates wie bei Lunar: einzelne Jar laden, sonst mitgelieferte Mod", a
   const server = http.createServer((req, res) => {
     if (req.url === "/api/latest/mytic-mods") {
       res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ version: "2.6.0", name: "MyticMods-2.6.0.zip", size: zipData.length, sha256: sha, url: "files/MyticMods-2.6.0.zip" }));
+      res.end(JSON.stringify({ version: "2.6.0", name: "MyticMods-2.6.0.zip", size: zipData.length, sha256: sha, url: "files/MyticMods-2.6.0.zip",
+        signature: signing.sign("MyticMods-2.6.0.zip", sha, privateKey) }));
     } else if (req.url === "/files/MyticMods-2.6.0.zip") res.end(zipData);
     else res.writeHead(404).end();
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   const base = `http://127.0.0.1:${server.address().port}/`;
-  const site = new ModUpdater({ cacheDir: path.join(root, "cache"), bundledDir: bundled, source: { type: "site", base } });
+  // ohne gültige Signatur (echter Schlüssel) wird nichts übernommen
+  const unsigned = new ModUpdater({ cacheDir: path.join(root, "unsigned"), bundledDir: bundled, source: { type: "site", base } });
+  assert.equal(await unsigned.prepare("1.21.4"), bundled);
+  const site = new ModUpdater({ cacheDir: path.join(root, "cache"), bundledDir: bundled, source: { type: "site", base }, publicKey });
   const dir = await site.prepare("1.21.4");
   assert.equal(dir, path.join(root, "cache"));
   assert.equal(fs.readFileSync(path.join(root, "cache", "1.21.4", "mytic-client-2.6.0+1.21.4.jar"), "utf8"), "neu-1.21.4");
   assert.equal(await site.prepare("1.21.11"), path.join(root, "cache"));
+  server.closeAllConnections();
   server.close();
 
   // ohne Netz: Cache bleibt nutzbar, für andere Versionen die mitgelieferte Mod
@@ -397,19 +404,23 @@ test("Mod-Updates wie bei Lunar: einzelne Jar laden, sonst mitgelieferte Mod", a
         { tag_name: "mods-2.6.0", draft: false, assets: [] },
         { tag_name: "mods-2.7.0", draft: false, assets: [
           { name: "mytic-client-2.7.0+1.21.4.jar", size: jar.length, browser_download_url: "https://example.test/a.jar", digest: `sha256:${crypto.createHash("sha256").update(jar).digest("hex")}` },
+          { name: "mytic-client-2.7.0+1.21.4.jar.sig", size: 89, browser_download_url: "https://example.test/a.jar.sig" },
           { name: "mytic-client-2.7.0+1.21.5.jar", size: 1, browser_download_url: "https://example.test/b.jar", digest: "sha256:00" },
         ] },
       ]), { status: 200 });
     }
     if (String(url) === "https://example.test/a.jar") return new Response(jar, { status: 200 });
+    if (String(url) === "https://example.test/a.jar.sig") {
+      return new Response(signing.sign("mytic-client-2.7.0+1.21.4.jar", crypto.createHash("sha256").update(jar).digest("hex"), privateKey), { status: 200 });
+    }
     return new Response("", { status: 404 });
   };
   try {
-    const gh = new ModUpdater({ cacheDir: path.join(root, "gh"), bundledDir: bundled, source: { type: "github", repo: "x/y" } });
+    const gh = new ModUpdater({ cacheDir: path.join(root, "gh"), bundledDir: bundled, source: { type: "github", repo: "x/y" }, publicKey });
     assert.equal(await gh.prepare("1.21.4"), path.join(root, "gh"));
     assert.deepEqual(fs.readdirSync(path.join(root, "gh", "1.21.4")), ["mytic-client-2.7.0+1.21.4.jar"]);
     // falsche Prüfsumme → mitgelieferte Mod
-    const bad = new ModUpdater({ cacheDir: path.join(root, "gh2"), bundledDir: bundled, source: { type: "github", repo: "x/y" } });
+    const bad = new ModUpdater({ cacheDir: path.join(root, "gh2"), bundledDir: bundled, source: { type: "github", repo: "x/y" }, publicKey });
     fs.mkdirSync(path.join(bundled, "1.21.5"));
     fs.writeFileSync(path.join(bundled, "1.21.5", "mytic-client-2.5.0+1.21.5.jar"), "alt");
     assert.equal(await bad.prepare("1.21.5"), bundled);
@@ -564,4 +575,59 @@ test("Discord-Status: Handshake und Aktivität über die lokale Discord-Schnitts
   assert.equal(frames[1].data.cmd, "SET_ACTIVITY");
   assert.equal(frames[1].data.args.activity.details, "Im Launcher");
   assert.equal(frames[2].data.args.activity.state, "auf hypixel.net");
+});
+
+test("Profile: IDs werden geprüft, Löschen bleibt im Profil-Ordner", async () => {
+  const base = await fsp.mkdtemp(path.join(os.tmpdir(), "mytic-prof-id-"));
+  const outside = path.join(base, "outside");
+  await fsp.mkdir(outside, { recursive: true });
+  await fsp.writeFile(path.join(outside, "keep.txt"), "x");
+  assert.equal(profiles.validId("standard"), true);
+  assert.equal(profiles.validId("0a1b2c3d"), true);
+  for (const bad of ["../../..", "..", "", "standard/..", "0A1B2C3D", "0a1b2c3", "0a1b2c3d0", null, 5, "a/b"]) assert.equal(profiles.validId(bad), false, String(bad));
+  assert.throws(() => profiles.modsDir(base, "../outside"));
+  let s = await profiles.migrate({}, base, path.join(base, "game"));
+  s = await profiles.create(s, base, "Zweites");
+  // ungültige oder unbekannte IDs werden abgelehnt, nichts wird gelöscht
+  await assert.rejects(profiles.remove(s, base, "../../.."), /Ungültige Profil-ID/);
+  await assert.rejects(profiles.remove(s, base, "../outside"), /Ungültige Profil-ID/);
+  await assert.rejects(profiles.remove(s, base, "ffffffff"), /nicht gefunden/);
+  await fsp.access(path.join(outside, "keep.txt"));
+  // eine gefälschte ID in den Einstellungen hilft auch nicht
+  await assert.rejects(profiles.remove({ ...s, profiles: [...s.profiles, { id: "../outside" }] }, base, "../outside"));
+  await fsp.access(path.join(outside, "keep.txt"));
+  await fsp.rm(base, { recursive: true });
+});
+
+test("Einstellungen: nur erlaubte Schlüssel und Werte über IPC", () => {
+  const { sanitizePatch } = require("../src/core/settings");
+  assert.deepEqual(sanitizePatch({ memoryMb: 4096, fullscreen: true, afterLaunch: "hide", launcherTheme: "ocean" }), { memoryMb: 4096, fullscreen: true, afterLaunch: "hide", launcherTheme: "ocean" });
+  assert.deepEqual(sanitizePatch({ server: " play.example.net:25565 ", recentServers: ["a.net", "b.net:1234"] }), { server: "play.example.net:25565", recentServers: ["a.net", "b.net:1234"] });
+  assert.deepEqual(sanitizePatch({ jvmArgs: "-XX:+UseG1GC  -Dfoo=bar" }), { jvmArgs: "-XX:+UseG1GC -Dfoo=bar" });
+  assert.deepEqual(sanitizePatch({ customClientId: "" }), { customClientId: "" });
+  assert.deepEqual(sanitizePatch({ customClientId: "00000000-0000-0000-0000-000000000000" }), { customClientId: "00000000-0000-0000-0000-000000000000" });
+  // unbekannte Schlüssel (Profile, Konten …) werden abgelehnt
+  for (const key of ["profiles", "activeProfile", "mods", "clientId", "__proto__x"]) assert.throws(() => sanitizePatch({ [key]: [] }), /Unbekannte Einstellung/);
+  assert.throws(() => sanitizePatch(JSON.parse('{"__proto__": {"x": 1}}')), /Unbekannte Einstellung/);
+  // falsche Typen
+  assert.throws(() => sanitizePatch({ memoryMb: "4096" }));
+  assert.throws(() => sanitizePatch({ width: -1 }));
+  assert.throws(() => sanitizePatch({ fullscreen: "yes" }));
+  assert.throws(() => sanitizePatch({ afterLaunch: "exec" }));
+  assert.throws(() => sanitizePatch({ launcherTheme: "evil" }));
+  assert.throws(() => sanitizePatch({ server: "--jvm" }));
+  assert.throws(() => sanitizePatch({ server: "a b" }));
+  assert.throws(() => sanitizePatch({ customClientId: "not-a-guid" }));
+  assert.throws(() => sanitizePatch(null));
+  assert.throws(() => sanitizePatch([]));
+  // gefährliche JVM-Argumente
+  for (const arg of ["-javaagent:x.jar", "-agentlib:jdwp=transport=dt_socket", "-agentpath:/x.so", "-XX:OnOutOfMemoryError=calc", "-XX:OnError=calc", "-Xbootclasspath/a:x.jar", "@args.txt", "-XX:VMOptionsFile=x", "-JAVAAGENT:x.jar"]) {
+    assert.throws(() => sanitizePatch({ jvmArgs: `-Xss4m ${arg}` }), /nicht erlaubt/, arg);
+  }
+});
+
+test("Modrinth: Dateinamen werden geprüft", () => {
+  const { safeJarName } = require("../src/core/modrinth");
+  assert.equal(safeJarName("sodium-0.6.jar"), "sodium-0.6.jar");
+  for (const bad of ["", ".", "..", "../evil.jar", "a/b.jar", "mod.zip", "mod.jar/..", null]) assert.throws(() => safeJarName(bad), String(bad));
 });

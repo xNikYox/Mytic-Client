@@ -17,8 +17,86 @@ const HEAD_MS = 24 * 60 * 60 * 1000;
 const SETTINGS_MAX = 256 * 1024;      // Cloud-Einstellungen (JSON-Text)
 const SHOT_MAX = 1900 * 1024;         // Screenshot als Base64 (≈ 1,4 MB JPEG; SQLite-Zeile max. 2 MB)
 const SHOTS_PER_USER = 100;           // ältere Uploads werden gelöscht
+const SHOTS_PER_DAY = 30;             // Uploads je Konto und Tag (UTC), auch gelöschte zählen
+const SHOTS_TOTAL = 2000;             // Screenshots insgesamt (≤ 2000 × 1,9 MB ≈ 3,7 GB)
 const MAX_FRIENDS = 300;
 const MAX_PENDING = 50;
+const BODY_MAX = 16 * 1024;           // Anfrage-Inhalt allgemein
+export const SHOT_BODY_MAX = 2200 * 1024; // Anfrage-Inhalt beim Screenshot-Upload
+const CHALLENGES_TOTAL = 5000;        // offene Anmelde-Aufgaben insgesamt
+const CHALLENGES_PER_IP = 10;         // offene Anmelde-Aufgaben je Adresse
+const ADMIN_KEY_MIN = 16;
+
+/** Anfragen je Adresse und Minute (pro Topf). */
+export const RATE_LIMITS = {
+  all: 120,      // alle API-Anfragen
+  auth: 20,      // Anmeldung ohne Konto (challenge, login, offline)
+  upload: 10,    // Screenshot-Upload
+  view: 300,     // öffentliche Screenshot-Links
+};
+
+/**
+ * Bremse gegen zu viele Anfragen pro Schlüssel (Adresse): festes Zeitfenster, höchstens maxKeys Einträge.
+ * Die Map ist nach letzter Nutzung sortiert – ist sie voll, fällt der am längsten unbenutzte Eintrag weg.
+ */
+export class RateLimiter {
+  constructor(limit, windowMs = 60 * 1000, maxKeys = 10000, now = () => Date.now()) {
+    this.limit = limit;
+    this.windowMs = windowMs;
+    this.maxKeys = maxKeys;
+    this.now = now;
+    this.hits = new Map();
+  }
+
+  /** Zählt einen Treffer; gibt 0 zurück, wenn erlaubt, sonst die Wartezeit in Sekunden. */
+  hit(key) {
+    const t = this.now();
+    let entry = this.hits.get(key);
+    if (!entry || t - entry.start >= this.windowMs) entry = { start: t, n: 0 };
+    this.hits.delete(key);
+    entry.n++;
+    this.hits.set(key, entry);
+    while (this.hits.size > this.maxKeys) this.hits.delete(this.hits.keys().next().value);
+    return entry.n <= this.limit ? 0 : Math.max(1, Math.ceil((entry.start + this.windowMs - t) / 1000));
+  }
+}
+
+/**
+ * Fehlversuche mit dem Admin-Passwort je Adresse: nach 5 Fehlern innerhalb von 15 Minuten gesperrt,
+ * erst 1 Minute, bei jedem weiteren Fehler doppelt so lange (höchstens 1 Stunde).
+ */
+export class AdminGuard {
+  constructor(now = () => Date.now(), maxKeys = 10000) {
+    this.now = now;
+    this.maxKeys = maxKeys;
+    this.fails = new Map();
+  }
+
+  /** Sekunden, die diese Adresse noch gesperrt ist (0 = frei). */
+  locked(key) {
+    const entry = this.fails.get(key);
+    if (!entry) return 0;
+    const t = this.now();
+    if (entry.until > t) return Math.ceil((entry.until - t) / 1000);
+    return 0;
+  }
+
+  fail(key) {
+    const t = this.now();
+    let entry = this.fails.get(key);
+    if (!entry || (t - entry.last > 15 * 60 * 1000 && entry.until <= t)) entry = { n: 0, last: t, until: 0 };
+    this.fails.delete(key);
+    entry.n++;
+    entry.last = t;
+    if (entry.n >= 5) entry.until = t + Math.min(60 * 60 * 1000, 60 * 1000 * 2 ** (entry.n - 5));
+    this.fails.set(key, entry);
+    while (this.fails.size > this.maxKeys) this.fails.delete(this.fails.keys().next().value);
+  }
+
+  success(key) {
+    this.fails.delete(key);
+  }
+}
 
 const NAME = /^[A-Za-z0-9_]{3,16}$/;
 /** Wo der MiniMe sitzt (ohne Angabe: Schulter). */
@@ -48,17 +126,44 @@ function miniMeSet(row) {
 }
 
 class HttpError extends Error {
-  constructor(status, message) {
+  constructor(status, message, retryAfter = 0) {
     super(message);
     this.status = status;
+    this.retryAfter = retryAfter;
   }
 }
 
-function json(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "access-control-allow-origin": "*" },
-  });
+function json(data, status = 200, retryAfter = 0) {
+  const headers = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "access-control-allow-origin": "*" };
+  if (retryAfter) headers["retry-after"] = String(retryAfter);
+  return new Response(JSON.stringify(data), { status, headers });
+}
+
+/** Inhalt einer Anfrage als Text, höchstens max Bytes (Content-Length und tatsächlich gelesene Menge), sonst 413. */
+async function readText(request, max) {
+  const length = Number(request.headers.get("content-length") || 0);
+  if (!(length <= max)) throw new HttpError(413, "Anfrage zu groß");
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const chunks = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > max) {
+      reader.cancel().catch(() => {});
+      throw new HttpError(413, "Anfrage zu groß");
+    }
+    chunks.push(value);
+  }
+  const all = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    all.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(all);
 }
 
 function hex(bytes) {
@@ -91,15 +196,24 @@ function clean(value, max) {
 
 /**
  * db: { all(sql, params), get(sql, params), run(sql, params) } – alle async.
- * options: { allowOffline, fetch, now, log }
+ * options: { allowOffline, adminKey, fetch, now, log, ipHeader, limits, shotsPerDay, shotsTotal }
+ * ipHeader: Kopfzeile mit der Adresse des Aufrufers (Cloudflare: cf-connecting-ip). Unter Node übergibt
+ * node-server.js die Adresse selbst: handle(request, { ip }).
  */
 export function createApi(db, options = {}) {
-  const adminKey = typeof options.adminKey === "string" && options.adminKey.length >= 8 ? options.adminKey : null;
+  const log = options.log || (() => {});
+  const adminKey = typeof options.adminKey === "string" && options.adminKey.length >= ADMIN_KEY_MIN ? options.adminKey : null;
+  if (options.adminKey && !adminKey) log(`WARNUNG: Admin-Passwort zu kurz (mindestens ${ADMIN_KEY_MIN} Zeichen) – Anmeldung mit Passwort ist abgeschaltet`);
   const fetchImpl = options.fetch || ((...args) => fetch(...args));
   const now = options.now || (() => Date.now());
   const allowOffline = Boolean(options.allowOffline);
-  const log = options.log || (() => {});
+  if (allowOffline) log("WARNUNG: OFFLINE-KONTEN ERLAUBT – jeder kann sich ohne Microsoft-Konto unter beliebigem Namen anmelden. Nur für die Entwicklerversion!");
   const mojangKeys = options.mojangKeys || MOJANG_KEYS;
+  const shotsPerDay = options.shotsPerDay || SHOTS_PER_DAY;
+  const shotsTotal = options.shotsTotal || SHOTS_TOTAL;
+  const limits = { ...RATE_LIMITS, ...options.limits };
+  const limiters = Object.fromEntries(Object.entries(limits).map(([name, n]) => [name, new RateLimiter(n, 60 * 1000, 10000, now)]));
+  const adminGuard = new AdminGuard(now);
 
   async function getJson(url) {
     const response = await fetchImpl(url, { headers: { accept: "application/json", "user-agent": "MyticClient-Friends/1.0" } });
@@ -151,12 +265,24 @@ export function createApi(db, options = {}) {
   }
 
   /** Admin: entweder mit dem Admin-Passwort (Kopfzeile x-admin-key) oder angemeldet mit Admin-Freischaltung. */
-  async function adminAuth(request) {
+  async function adminAuth(request, ip) {
     const key = request.headers.get("x-admin-key");
-    if (key && adminKey && key.length === adminKey.length) {
-      let diff = 0;
-      for (let i = 0; i < key.length; i++) diff |= key.charCodeAt(i) ^ adminKey.charCodeAt(i);
-      if (diff === 0) return { admin: true };
+    if (key) {
+      // Raten bremsen: nach mehreren Fehlversuchen ist die Adresse eine Zeit lang gesperrt
+      const wait = adminGuard.locked(ip);
+      if (wait) throw new HttpError(429, "Zu viele falsche Admin-Passwörter – bitte später erneut versuchen", wait);
+      if (adminKey) {
+        // Vergleich über die Hashes: gleich lang, ohne frühen Abbruch
+        const [x, y] = [await sha256(key), await sha256(adminKey)];
+        let diff = 0;
+        for (let i = 0; i < x.length; i++) diff |= x.charCodeAt(i) ^ y.charCodeAt(i);
+        if (diff === 0) {
+          adminGuard.success(ip);
+          return { admin: true };
+        }
+      }
+      adminGuard.fail(ip);
+      log(`Falsches Admin-Passwort von ${ip}`);
     }
     if (request.headers.get("authorization")) {
       const me = await auth(request);
@@ -232,9 +358,11 @@ export function createApi(db, options = {}) {
       server: playing ? me.server || null : null, version: playing ? me.version || null : null }, friends: list, incoming: incoming.map(short), outgoing: outgoing.map(short), serverTime: now() };
   }
 
-  async function body(request) {
+  /** JSON-Inhalt der Anfrage (höchstens max Bytes, sonst 413); kaputtes JSON gilt als leer. */
+  async function body(request, max = BODY_MAX) {
+    const text = await readText(request, max);
     try {
-      const data = await request.json();
+      const data = JSON.parse(text);
       return data && typeof data === "object" ? data : {};
     } catch {
       return {};
@@ -301,9 +429,18 @@ export function createApi(db, options = {}) {
   const routes = {
     "GET /api/health": async () => ({ ok: true, offline: allowOffline }),
 
-    "POST /api/auth/challenge": async () => {
+    "POST /api/auth/challenge": async (request, ip) => {
+      const t = now();
+      // abgelaufene Aufgaben sofort aufräumen, offene Aufgaben insgesamt und je Adresse begrenzen
+      await db.run("DELETE FROM challenges WHERE created < ?", [t - CHALLENGE_MS]);
+      if ((await count("SELECT COUNT(*) AS n FROM challenges WHERE ip = ?", [ip])) >= CHALLENGES_PER_IP) {
+        throw new HttpError(429, "Zu viele Anmeldeversuche – bitte kurz warten", Math.ceil(CHALLENGE_MS / 1000));
+      }
+      if ((await count("SELECT COUNT(*) AS n FROM challenges", [])) >= CHALLENGES_TOTAL) {
+        throw new HttpError(503, "Gerade zu viele Anmeldungen – bitte gleich erneut versuchen", 30);
+      }
       const id = randomHex(20);
-      await db.run("INSERT INTO challenges (id, created) VALUES (?, ?)", [id, now()]);
+      await db.run("INSERT INTO challenges (id, created, ip) VALUES (?, ?, ?)", [id, t, ip]);
       return { serverId: id };
     },
 
@@ -447,14 +584,14 @@ export function createApi(db, options = {}) {
     },
 
     // ------------------------------------------------------------------ Admin: Cosmetics freischalten
-    "GET /api/admin/catalog": async (request) => {
-      await adminAuth(request);
+    "GET /api/admin/catalog": async (request, ip) => {
+      await adminAuth(request, ip);
       return { catalog: CATALOG };
     },
 
     /** Spieler suchen (Name oder UUID); unbekannte Namen werden wie bei Freundschaftsanfragen angelegt. */
-    "POST /api/admin/user": async (request) => {
-      await adminAuth(request);
+    "POST /api/admin/user": async (request, ip) => {
+      await adminAuth(request, ip);
       const { name } = await body(request);
       const key = String(name || "").replace(/-/g, "").toLowerCase();
       let user = UUID.test(key) ? await db.get("SELECT uuid, name FROM users WHERE uuid = ?", [key]) : null;
@@ -464,8 +601,8 @@ export function createApi(db, options = {}) {
     },
 
     /** Freischaltungen eines Spielers festlegen (ersetzt die bisherigen). */
-    "POST /api/admin/grants": async (request) => {
-      const admin = await adminAuth(request);
+    "POST /api/admin/grants": async (request, ip) => {
+      const admin = await adminAuth(request, ip);
       const { uuid, items } = await body(request);
       const id = String(uuid || "").replace(/-/g, "").toLowerCase();
       if (!UUID.test(id) || !(await db.get("SELECT uuid FROM users WHERE uuid = ?", [id]))) throw new HttpError(404, "Spieler nicht gefunden");
@@ -479,8 +616,8 @@ export function createApi(db, options = {}) {
     },
 
     /** Alle Spieler mit Freischaltungen. */
-    "GET /api/admin/users": async (request) => {
-      await adminAuth(request);
+    "GET /api/admin/users": async (request, ip) => {
+      await adminAuth(request, ip);
       const rows = await db.all("SELECT g.uuid AS uuid, u.name AS name, g.item AS item FROM grants g LEFT JOIN users u ON u.uuid = g.uuid ORDER BY u.name_lower");
       const map = new Map();
       for (const r of rows) {
@@ -535,17 +672,20 @@ export function createApi(db, options = {}) {
     "POST /api/friends/request": async (request) => {
       const me = await auth(request);
       const { name } = await body(request);
-      const target = (await findUser(name)) || (await placeholder(name));
+      // eigene Grenzen zuerst prüfen – vor dem Nachschlagen (playerdb.co) und Anlegen unbekannter Spieler
+      if ((await count("SELECT COUNT(*) AS n FROM friends WHERE a = ? OR b = ?", [me.uuid, me.uuid])) >= MAX_FRIENDS) throw new HttpError(409, "Freundesliste ist voll");
+      const found = await findUser(name);
+      const mutual = found && (await db.get("SELECT 1 AS ok FROM requests WHERE sender = ? AND target = ?", [found.uuid, me.uuid]));
+      if (!mutual && (await count("SELECT COUNT(*) AS n FROM requests WHERE sender = ?", [me.uuid])) >= MAX_PENDING) throw new HttpError(429, "Zu viele offene Anfragen");
+      const target = found || (await placeholder(name));
       if (!target) throw new HttpError(404, "Diesen Minecraft-Namen gibt es nicht");
       if (target.uuid === me.uuid) throw new HttpError(400, "Du kannst dich nicht selbst hinzufügen");
       if (await areFriends(me.uuid, target.uuid)) throw new HttpError(409, `${target.name} ist schon dein Freund`);
       // hat der andere schon angefragt? Dann gleich befreunden
-      if (await db.get("SELECT 1 AS ok FROM requests WHERE sender = ? AND target = ?", [target.uuid, me.uuid])) {
+      if (mutual) {
         await makeFriends(me.uuid, target.uuid);
         return { ...(await overview(me)), message: `Du bist jetzt mit ${target.name} befreundet` };
       }
-      if ((await count("SELECT COUNT(*) AS n FROM friends WHERE a = ? OR b = ?", [me.uuid, me.uuid])) >= MAX_FRIENDS) throw new HttpError(409, "Freundesliste ist voll");
-      if ((await count("SELECT COUNT(*) AS n FROM requests WHERE sender = ?", [me.uuid])) >= MAX_PENDING) throw new HttpError(429, "Zu viele offene Anfragen");
       if ((await count("SELECT COUNT(*) AS n FROM requests WHERE target = ?", [target.uuid])) >= MAX_PENDING) throw new HttpError(429, `${target.name} hat zu viele offene Anfragen`);
       await db.run("INSERT OR IGNORE INTO requests (sender, target, created) VALUES (?, ?, ?)", [me.uuid, target.uuid, now()]);
       const waiting = !(await db.get("SELECT 1 AS ok FROM sessions WHERE uuid = ? LIMIT 1", [target.uuid]));
@@ -591,11 +731,22 @@ export function createApi(db, options = {}) {
     /** Screenshot hochladen (JPEG als Base64, vom Launcher verkleinert) → öffentlicher Link */
     "POST /api/shots": async (request) => {
       const me = await auth(request);
-      const { image } = await body(request);
+      const { image } = await body(request, SHOT_BODY_MAX);
       if (typeof image !== "string" || !image.startsWith("/9j/") || !/^[A-Za-z0-9+/]+=*$/.test(image)) throw new HttpError(400, "Kein JPEG");
       if (image.length > SHOT_MAX) throw new HttpError(413, "Bild zu groß");
+      const t = now();
+      // Tagesgrenze je Konto (Zähler, damit Löschen nicht hilft) und Gesamtgrenze für den Speicher
+      const day = Math.floor(t / (24 * 60 * 60 * 1000));
+      await db.run("DELETE FROM shot_quota WHERE day < ?", [day]);
+      const used = await db.get("SELECT n FROM shot_quota WHERE uuid = ? AND day = ?", [me.uuid, day]);
+      if (used && used.n >= shotsPerDay) throw new HttpError(429, `Höchstens ${shotsPerDay} Screenshots am Tag`, Math.ceil(((day + 1) * 24 * 60 * 60 * 1000 - t) / 1000));
+      if ((await count("SELECT COUNT(*) AS n FROM shots", [])) >= shotsTotal) {
+        log("WARNUNG: Screenshot-Speicher voll");
+        throw new HttpError(507, "Screenshot-Speicher des Servers ist voll");
+      }
+      await db.run("INSERT INTO shot_quota (uuid, day, n) VALUES (?, ?, 1) ON CONFLICT(uuid, day) DO UPDATE SET n = n + 1", [me.uuid, day]);
       const id = randomHex(8);
-      await db.run("INSERT INTO shots (id, uuid, created, data) VALUES (?, ?, ?, ?)", [id, me.uuid, now(), image]);
+      await db.run("INSERT INTO shots (id, uuid, created, data) VALUES (?, ?, ?, ?)", [id, me.uuid, t, image]);
       // nur die neuesten SHOTS_PER_USER behalten
       await db.run("DELETE FROM shots WHERE uuid = ? AND id NOT IN (SELECT id FROM shots WHERE uuid = ? ORDER BY created DESC LIMIT ?)", [me.uuid, me.uuid, SHOTS_PER_USER]);
       return { id, url: new URL(request.url).origin + "/api/shots/" + id + ".jpg" };
@@ -617,7 +768,32 @@ export function createApi(db, options = {}) {
     },
   };
 
-  return async function handle(request) {
+  /** Adresse des Aufrufers: von node-server.js übergeben oder (Cloudflare) aus der Kopfzeile ipHeader. */
+  function clientIp(request, info) {
+    if (info && info.ip) return String(info.ip);
+    if (options.ipHeader) return request.headers.get(options.ipHeader) || "unbekannt";
+    return "lokal";
+  }
+
+  /** Anfrage im Topf zählen; zu viele → 429 mit Retry-After. */
+  function limit(name, ip) {
+    const wait = limiters[name].hit(ip);
+    if (wait) throw new HttpError(429, "Zu viele Anfragen – bitte kurz warten", wait);
+  }
+
+  /** Strengere Töpfe für Anmeldung ohne Konto und für Uploads. */
+  const STRICT = { "POST /api/auth/challenge": "auth", "POST /api/auth/login": "auth", "POST /api/auth/offline": "auth", "POST /api/shots": "upload" };
+
+  return async function handle(request, info) {
+    try {
+      return await dispatch(request, clientIp(request, info));
+    } catch (error) {
+      if (error instanceof HttpError) return json({ error: error.message }, error.status, error.retryAfter);
+      throw error;
+    }
+  };
+
+  async function dispatch(request, ip) {
     const url = new URL(request.url);
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, content-type, x-admin-key", "access-control-allow-methods": "GET, POST" } });
@@ -631,20 +807,24 @@ export function createApi(db, options = {}) {
     // öffentlicher Screenshot-Link: /api/shots/<id>.jpg
     const shot = request.method === "GET" && path.match(/^\/api\/shots\/([0-9a-f]{16})(?:\.jpg)?$/);
     if (shot) {
+      limit("view", ip);
       const row = await db.get("SELECT data FROM shots WHERE id = ?", [shot[1]]);
       if (!row) return json({ error: "Nicht gefunden" }, 404);
       const bin = atob(row.data), bytes = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
       return new Response(bytes, { headers: { "content-type": "image/jpeg", "cache-control": "public, max-age=31536000, immutable", "access-control-allow-origin": "*", "x-content-type-options": "nosniff" } });
     }
-    const route = routes[`${request.method} ${path}`];
+    const name = `${request.method} ${path}`;
+    const route = routes[name];
     if (!route) return json({ error: "Nicht gefunden" }, 404);
+    limit("all", ip);
+    if (STRICT[name]) limit(STRICT[name], ip);
     try {
-      return json(await route(request));
+      return json(await route(request, ip));
     } catch (error) {
-      if (error instanceof HttpError) return json({ error: error.message }, error.status);
+      if (error instanceof HttpError) return json({ error: error.message }, error.status, error.retryAfter);
       log(`Fehler bei ${path}: ${error.stack || error.message}`);
       return json({ error: "Serverfehler" }, 500);
     }
-  };
+  }
 }

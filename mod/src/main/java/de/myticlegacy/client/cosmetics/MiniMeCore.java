@@ -157,7 +157,10 @@ public final class MiniMeCore {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             byte[] buf = new byte[8192];
             int n;
-            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+            while ((n = in.read(buf)) > 0) {
+                out.write(buf, 0, n);
+                if (out.size() > 5 * 1024 * 1024) throw new Exception("Antwort zu groß"); // Schutz gegen riesige Antworten
+            }
             return out.toByteArray();
         }
     }

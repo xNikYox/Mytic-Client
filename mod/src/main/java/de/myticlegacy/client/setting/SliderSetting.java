@@ -27,6 +27,11 @@ public class SliderSetting extends Setting<Double> {
         store(clamp(value));
     }
 
+    @Override
+    public Object sanitize(Object value) {
+        return value instanceof Number n && Double.isFinite(n.doubleValue()) ? clamp(n.doubleValue()) : null;
+    }
+
     public float floatValue() {
         return get().floatValue();
     }

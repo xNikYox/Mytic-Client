@@ -163,6 +163,9 @@ public final class ClipRecorder {
     }
 
     /** Windows: ffmpeg.exe aus dem „essentials“-Paket von gyan.dev holen (nur diese eine Datei wird entpackt) */
+    // TODO Sicherheit: Download wird nicht auf Integrität geprüft. Feste Version (versionierte URL statt „release“)
+    //  verwenden und SHA-256 der ZIP bzw. der ffmpeg.exe gegen einen im Code hinterlegten, geprüften Wert vergleichen;
+    //  bei Abweichung Datei löschen und nicht ausführen. (Hash muss aus vertrauenswürdiger Quelle ermittelt werden.)
     private static Path download() throws IOException, InterruptedException {
         Path dir = toolsDir();
         Files.createDirectories(dir);

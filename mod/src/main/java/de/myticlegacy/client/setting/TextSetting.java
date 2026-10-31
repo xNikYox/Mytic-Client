@@ -17,12 +17,21 @@ public class TextSetting extends Setting<String> {
     @Override
     public String get() {
         Object raw = raw();
-        return raw instanceof String ? (String) raw : defaultValue;
+        return raw instanceof String ? clip((String) raw) : defaultValue; // Länge auch für geladene Werte begrenzen
     }
 
     @Override
     public void set(String value) {
-        store(value.length() > MAX ? value.substring(0, MAX) : value);
+        store(clip(value));
+    }
+
+    @Override
+    public Object sanitize(Object value) {
+        return value instanceof String ? clip((String) value) : null;
+    }
+
+    private static String clip(String value) {
+        return value.length() > MAX ? value.substring(0, MAX) : value;
     }
 
     public String hint() {

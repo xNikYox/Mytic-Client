@@ -21,7 +21,10 @@ export class FriendsStore extends DurableObject {
       get: async (query, params = []) => sql.exec(query, ...params).toArray()[0] || null,
       run: async (query, params = []) => sql.exec(query, ...params),
     };
-    this.api = createApi(db, { allowOffline: env.ALLOW_OFFLINE === "1", adminKey: env.ADMIN_KEY, log: (line) => console.log(line) });
+    // Offline-Konten gibt es auf Cloudflare nie (nur Entwicklerversion unter Node) – ALLOW_OFFLINE wird ignoriert
+    if (env.ALLOW_OFFLINE) console.warn("WARNUNG: ALLOW_OFFLINE ist gesetzt, wird auf Cloudflare aber ignoriert – Offline-Konten bleiben aus");
+    // Alle Anfragen landen in diesem einen Durable Object, daher gilt die Bremse je Adresse (CF-Connecting-IP) überall
+    this.api = createApi(db, { allowOffline: false, adminKey: env.ADMIN_KEY, ipHeader: "cf-connecting-ip", log: (line) => console.log(line) });
   }
 
   async fetch(request) {

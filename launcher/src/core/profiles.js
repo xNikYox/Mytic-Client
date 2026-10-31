@@ -7,7 +7,15 @@ const crypto = require("node:crypto");
 const DEFAULT_VERSION = "1.21.11";
 const COLORS = ["#9b5cff", "#3ee6d0", "#ff6fb5", "#ffcf5a", "#4da3ff", "#5be38a", "#ff9f43", "#ff5c72"];
 
+/** Gültige Profil-IDs: "standard" (erstes Profil) oder 8 Hex-Zeichen (newId). */
+const ID_PATTERN = /^(standard|[0-9a-f]{8})$/;
+
+function validId(id) {
+  return typeof id === "string" && ID_PATTERN.test(id);
+}
+
 function profileDir(base, id) {
+  if (!validId(id)) throw new Error("Ungültige Profil-ID");
   return path.join(base, "profiles", id);
 }
 
@@ -77,9 +85,15 @@ function rename(settings, id, name) {
 }
 
 async function remove(settings, base, id) {
+  if (!validId(id)) throw new Error("Ungültige Profil-ID");
+  if (!settings.profiles.some((p) => p.id === id)) throw new Error("Profil nicht gefunden");
   if (settings.profiles.length <= 1) throw new Error("Das letzte Profil kann nicht gelöscht werden.");
   const profiles = settings.profiles.filter((p) => p.id !== id);
-  await fsp.rm(profileDir(base, id), { recursive: true, force: true });
+  // nur innerhalb des Profil-Ordners löschen
+  const root = path.resolve(base, "profiles");
+  const dir = path.resolve(profileDir(base, id));
+  if (path.dirname(dir) !== root) throw new Error("Ungültiger Profil-Ordner");
+  await fsp.rm(dir, { recursive: true, force: true });
   return { ...settings, profiles, activeProfile: settings.activeProfile === id ? profiles[0].id : settings.activeProfile };
 }
 
@@ -93,4 +107,4 @@ function setVersion(settings, id, mcVersion) {
   return { ...settings, profiles: settings.profiles.map((p) => (p.id === id ? { ...p, mcVersion } : p)) };
 }
 
-module.exports = { migrate, create, rename, remove, active, setVersion, countMods, modsDir, profileDir, COLORS, DEFAULT_VERSION };
+module.exports = { validId, migrate, create, rename, remove, active, setVersion, countMods, modsDir, profileDir, COLORS, DEFAULT_VERSION };

@@ -6,6 +6,13 @@ const { getJson, downloadFile, isValid } = require("./download");
 const API = "https://api.modrinth.com/v2";
 const STATE_FILE = ".mytic-user.json";
 
+/** Dateiname aus der Modrinth-Antwort: nur ein reiner Name, der auf .jar endet (kein Pfad, kein "." oder ".."). */
+function safeJarName(name) {
+  const base = path.basename(String(name || ""));
+  if (!base || base === "." || base === ".." || base !== String(name) || !/\.jar$/i.test(base)) throw new Error(`Ungültiger Dateiname: ${name}`);
+  return base;
+}
+
 class ModBrowser {
   /**
    * modsDir: Mods-Ordner des Spiels; gameVersion: z. B. "1.21.11"; loader: "fabric" oder "forge" (1.8.9);
@@ -94,15 +101,16 @@ class ModBrowser {
   }
 
   async writeVersion(entry, version, file) {
-    const target = path.join(this.modsDir, file.filename + (entry.enabled === false ? ".disabled" : ""));
+    const filename = safeJarName(file.filename);
+    const target = path.join(this.modsDir, filename + (entry.enabled === false ? ".disabled" : ""));
     if (!(await isValid(target, { sha1: file.hashes.sha1, size: file.size }))) {
       await downloadFile(file.url, target, { sha1: file.hashes.sha1, size: file.size });
     }
-    if (entry.file && entry.file !== file.filename) {
+    if (entry.file && entry.file !== filename) {
       await fsp.rm(path.join(this.modsDir, entry.file), { force: true });
       await fsp.rm(path.join(this.modsDir, `${entry.file}.disabled`), { force: true });
     }
-    entry.file = file.filename;
+    entry.file = filename;
     entry.versionId = version.id;
     entry.versionNumber = version.version_number;
   }
@@ -224,4 +232,4 @@ class ModBrowser {
   }
 }
 
-module.exports = { ModBrowser };
+module.exports = { ModBrowser, safeJarName };

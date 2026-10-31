@@ -8,8 +8,10 @@
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node --test test/core.test.js",
+    "test": "node --test test/core.test.js test/signing.test.js",
     "dist:win": "electron-builder --win portable zip --x64",
+    "postdist:win": "node scripts/sign.js dist",
+    "sign": "node scripts/sign.js",
     "dist:linux": "electron-builder --linux AppImage --x64",
     "dist:win-dev": "node scripts/build-dev.js"
   },

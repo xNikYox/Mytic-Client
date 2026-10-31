@@ -8,6 +8,7 @@ const crypto = require("node:crypto");
 const AdmZip = require("adm-zip");
 const { fetchRetry, getJson } = require("./download");
 const { compareVersions } = require("./updater");
+const signing = require("./signing");
 
 /** mytic-client-2.5.0.jar (1.21.11) bzw. mytic-client-2.5.0+1.21.4.jar */
 const MOD_PATTERN = /^mytic-client-(\d+\.\d+\.\d+)(?:\+([\w.-]+))?\.jar$/i;
@@ -37,13 +38,16 @@ function withTimeout(promise, ms) {
   return Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error("Zeitüberschreitung")), ms))]);
 }
 
-async function download(url, sha256, expectedSize) {
-  const response = await fetchRetry(url);
-  if (!response.ok) throw new Error(`HTTP ${response.status} bei ${url}`);
+/** Lädt eine Datei und prüft Größe, SHA-256 und Signatur (file: { name, url, size, sha256, signature?, sigUrl? }). */
+async function download(file, publicKey) {
+  const response = await fetchRetry(file.url);
+  if (!response.ok) throw new Error(`HTTP ${response.status} bei ${file.url}`);
   const data = Buffer.from(await response.arrayBuffer());
-  if (expectedSize && data.length !== expectedSize) throw new Error("Download unvollständig");
-  if (!sha256) throw new Error("keine Prüfsumme – Mod-Update übersprungen");
-  if (crypto.createHash("sha256").update(data).digest("hex") !== String(sha256).toLowerCase()) throw new Error("Prüfsumme stimmt nicht");
+  if (file.size && data.length !== file.size) throw new Error("Download unvollständig");
+  if (!file.sha256) throw new Error("keine Prüfsumme – Mod-Update übersprungen");
+  const digest = crypto.createHash("sha256").update(data).digest("hex");
+  if (digest !== String(file.sha256).toLowerCase()) throw new Error("Prüfsumme stimmt nicht");
+  signing.assertSigned(file.name, digest, file.signature || (await signing.fetchSignature(file.sigUrl)), publicKey);
   return data;
 }
 
@@ -52,7 +56,8 @@ class ModUpdater {
    * cacheDir: wo aktualisierte Mods liegen (<cache>/<mc>/<jar>); bundledDir: mitgelieferte Mods.
    * source: { type: "github", repo } oder { type: "site", base }.
    */
-  constructor({ cacheDir, bundledDir, source, log = () => {} }) {
+  constructor({ cacheDir, bundledDir, source, log = () => {}, publicKey }) {
+    this.publicKey = publicKey; // nur für Tests, sonst der eingebaute Schlüssel
     this.cacheDir = cacheDir;
     this.bundledDir = bundledDir;
     this.source = source;
@@ -72,6 +77,7 @@ class ModUpdater {
         url: a.browser_download_url,
         size: a.size,
         sha256: typeof a.digest === "string" && a.digest.startsWith("sha256:") ? a.digest.slice(7) : null,
+        sigUrl: signing.githubSigUrl(release, a.name),
       }));
       // 1. festes Release "mods-latest" (immer das aktuelle Paket, eine Abfrage)
       try {
@@ -94,8 +100,11 @@ class ModUpdater {
     } else if (this.source.type === "site" && this.source.base) {
       const root = this.source.base.endsWith("/") ? this.source.base : `${this.source.base}/`;
       const data = await getJson(`${root}api/latest/mytic-mods`);
-      if (/^\d+\.\d+\.\d+$/.test(data.version || "")) {
-        info = { version: data.version, zip: { url: new URL(data.url, root).toString(), size: data.size, sha256: data.sha256 } };
+      // Dateiname muss zur Version passen, sonst ließe sich ein altes, signiertes Paket als neues ausgeben
+      if (/^\d+\.\d+\.\d+$/.test(data.version || "") && data.name === `MyticMods-${data.version}.zip`) {
+        const url = new URL(data.url, root).toString();
+        info = { version: data.version, zip: { name: data.name, url, size: data.size, sha256: data.sha256,
+          signature: typeof data.signature === "string" ? data.signature : null, sigUrl: signing.sigUrl(url) } };
       }
     }
     this.latestInfo = info;
@@ -111,9 +120,9 @@ class ModUpdater {
       const file = info.files.find((f) => jarVersion(f.name, mcVersion) === info.version);
       if (!file) return false;
       name = file.name;
-      data = await download(file.url, file.sha256, file.size);
+      data = await download(file, this.publicKey);
     } else if (info.zip) {
-      const zip = new AdmZip(await download(info.zip.url, info.zip.sha256, info.zip.size));
+      const zip = new AdmZip(await download(info.zip, this.publicKey));
       const entry = zip.getEntries().find((e) => e.entryName.startsWith(`${mcVersion}/`) && jarVersion(path.basename(e.entryName), mcVersion) === info.version);
       if (!entry) return false;
       name = path.basename(entry.entryName);

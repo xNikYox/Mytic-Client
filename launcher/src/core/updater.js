@@ -1,9 +1,10 @@
-// Auto-Update über GitHub-Releases: neue Version finden, EXE mit Prüfsumme laden, alte EXE aufräumen.
+// Auto-Update über GitHub-Releases: neue Version finden, EXE mit Prüfsumme und Signatur laden, alte EXE aufräumen.
 const fs = require("node:fs");
 const fsp = require("node:fs/promises");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { fetchRetry, USER_AGENT } = require("./download");
+const signing = require("./signing");
 
 const REPO = "xNikYox/Mytic-Client";
 const ASSET_PATTERN = /^MyticClient-(?:Dev-)?(\d+\.\d+\.\d+)\.exe$/i;
@@ -56,6 +57,7 @@ async function checkForUpdate(currentVersion, repo = REPO, { kind = "portable", 
     url: asset.browser_download_url,
     size: asset.size,
     sha256: digest,
+    sigUrl: signing.githubSigUrl(release, asset.name),
     notes: String(release.body || "").slice(0, 4000),
     page: release.html_url,
   };
@@ -71,21 +73,26 @@ async function checkSiteUpdate(currentVersion, base, project) {
   if (!response.ok) throw new Error(`Update-Prüfung fehlgeschlagen (HTTP ${response.status})`);
   const info = await response.json();
   if (!/^\d+\.\d+\.\d+$/.test(info.version || "") || compareVersions(info.version, currentVersion) <= 0) return null;
-  if (!ASSET_PATTERN.test(info.name || "")) return null;
+  // Version im Dateinamen muss passen (sonst ließe sich eine alte, signierte EXE als neue ausgeben)
+  const named = ASSET_PATTERN.exec(info.name || "");
+  if (!named || named[1] !== info.version) return null;
+  const url = new URL(info.url, root).toString();
   return {
     version: info.version,
     kind: "portable",
     name: info.name,
-    url: new URL(info.url, root).toString(),
+    url,
     size: info.size,
     sha256: info.sha256 || null,
+    signature: typeof info.signature === "string" ? info.signature : null,
+    sigUrl: signing.sigUrl(url),
     notes: "",
     page: root,
   };
 }
 
-/** Lädt die neue EXE neben die alte (über eine .part-Datei) und prüft Größe und SHA-256. */
-async function downloadUpdate(update, targetDir, onProgress = () => {}) {
+/** Lädt die neue EXE neben die alte (über eine .part-Datei) und prüft Größe, SHA-256 und Signatur. */
+async function downloadUpdate(update, targetDir, onProgress = () => {}, { publicKey } = {}) {
   const target = path.join(targetDir, update.name);
   const part = `${target}.part`;
   await fsp.mkdir(targetDir, { recursive: true });
@@ -121,10 +128,20 @@ async function downloadUpdate(update, targetDir, onProgress = () => {}) {
     await fsp.rm(part, { force: true });
     throw new Error("Download unvollständig, bitte erneut versuchen.");
   }
-  if (update.sha256 && hash.digest("hex") !== update.sha256.toLowerCase()) {
+  const digest = hash.digest("hex");
+  if (update.sha256 && digest !== update.sha256.toLowerCase()) {
     await fsp.rm(part, { force: true });
     throw new Error("Prüfsumme stimmt nicht, Update abgebrochen.");
   }
+  // Nur vom Entwickler signierte Updates ausführen (schützt auch bei HTTP oder gehacktem Release-Konto)
+  try {
+    const signature = update.signature || (await signing.fetchSignature(update.sigUrl));
+    signing.assertSigned(update.name, digest, signature, publicKey);
+  } catch (error) {
+    await fsp.rm(part, { force: true });
+    throw error;
+  }
+  update.sha256 = digest;
   await fsp.rm(target, { force: true });
   await fsp.rename(part, target);
   return target;

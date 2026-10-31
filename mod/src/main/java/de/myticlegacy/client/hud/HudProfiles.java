@@ -63,13 +63,14 @@ public final class HudProfiles {
         cfg().hudProfiles.put(cfg().hudProfile, capture());
         for (HudModule m : MyticClient.HUD) {
             int[] pos = target.positions.get(m.id);
-            if (pos != null) cfg().positions.put(m.id, pos.clone());
+            if (pos != null && pos.length == 2) cfg().positions.put(m.id, pos.clone());
             else cfg().positions.remove(m.id);
             Boolean on = target.enabled.get(m.id);
             if (on != null) cfg().enabled.put(m.id, on);
             cfg().settings.keySet().removeIf(k -> k.startsWith(m.id + "."));
+            // nur Einstellungen dieses HUD-Moduls übernehmen (ein Profil darf keine anderen Module verstellen)
+            for (Map.Entry<String, Object> e : target.settings.entrySet()) if (e.getKey().startsWith(m.id + ".")) cfg().settings.put(e.getKey(), e.getValue());
         }
-        cfg().settings.putAll(target.settings);
         cfg().hudProfile = name;
         cfg().save();
     }

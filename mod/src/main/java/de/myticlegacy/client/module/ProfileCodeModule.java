@@ -48,20 +48,32 @@ public class ProfileCodeModule extends Module {
     }
 
     private void paste() {
-        String code = Minecraft.getInstance().keyboardHandler.getClipboard();
-        JsonObject data = decode(code);
-        if (data == null) {
-            Msg.actionBar("Kein Mytic-Profil-Code in der Zwischenablage");
-            return;
+        try {
+            String code = Minecraft.getInstance().keyboardHandler.getClipboard();
+            JsonObject data = decode(code);
+            if (data == null) {
+                Msg.actionBar("Kein Mytic-Profil-Code in der Zwischenablage");
+                return;
+            }
+            JsonObject own = CloudSyncModule.snapshot(true); // eigenen Stand (mit Tasten) für „Rückgängig“ merken
+            // fremder Code: Auto Text & Co. bleiben unberührt, Tasten nur wenn „Tasten mitnehmen“ an ist
+            if (!CloudSyncModule.apply(data, true, keys.get())) {
+                Msg.actionBar("Profil-Code fehlerhaft – nichts geändert");
+                return;
+            }
+            backup = own;
+            Msg.actionBar("Profil übernommen – „Rückgängig“ holt dein Setup zurück");
+        } catch (RuntimeException e) {
+            Msg.actionBar("Profil-Code fehlerhaft – nichts geändert");
         }
-        backup = CloudSyncModule.snapshot(true); // eigenen Stand (mit Tasten) für „Rückgängig“ merken
-        CloudSyncModule.apply(data);
-        Msg.actionBar("Profil übernommen – „Rückgängig“ holt dein Setup zurück");
     }
 
     private void undo() {
         if (backup == null) return;
-        CloudSyncModule.apply(backup);
+        if (!CloudSyncModule.apply(backup)) {
+            Msg.actionBar("Wiederherstellen fehlgeschlagen");
+            return;
+        }
         backup = null;
         Msg.actionBar("Eigenes Setup wiederhergestellt");
     }

@@ -7,6 +7,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { fetchRetry, getJson } = require("./download");
 const { compareVersions } = require("./updater");
+const signing = require("./signing");
 
 const PACK_PATTERN = /^mytic-cosmetics-(\d+\.\d+\.\d+)\.jar$/;
 
@@ -16,7 +17,8 @@ function withTimeout(promise, ms) {
 
 class CosmeticsUpdater {
   /** dir: Ablage für das Paket; source: { type: "github", repo } oder { type: "site", base }. */
-  constructor({ dir, source, log = () => {} }) {
+  constructor({ dir, source, log = () => {}, publicKey }) {
+    this.publicKey = publicKey; // nur für Tests, sonst der eingebaute Schlüssel
     this.dir = dir;
     this.source = source;
     this.log = log;
@@ -40,13 +42,16 @@ class CosmeticsUpdater {
       const asset = (release.assets || []).find((a) => PACK_PATTERN.test(a.name));
       if (!asset) return null;
       const sha256 = typeof asset.digest === "string" && asset.digest.startsWith("sha256:") ? asset.digest.slice(7) : null;
-      return { version: PACK_PATTERN.exec(asset.name)[1], name: asset.name, url: asset.browser_download_url, size: asset.size, sha256 };
+      return { version: PACK_PATTERN.exec(asset.name)[1], name: asset.name, url: asset.browser_download_url, size: asset.size, sha256,
+        sigUrl: signing.githubSigUrl(release, asset.name) };
     }
     if (this.source.type === "site" && this.source.base) {
       const root = this.source.base.endsWith("/") ? this.source.base : `${this.source.base}/`;
       const data = await getJson(`${root}api/latest/mytic-cosmetics`);
       if (!PACK_PATTERN.test(data.name || "")) return null;
-      return { version: PACK_PATTERN.exec(data.name)[1], name: data.name, url: new URL(data.url, root).toString(), size: data.size, sha256: data.sha256 };
+      const url = new URL(data.url, root).toString();
+      return { version: PACK_PATTERN.exec(data.name)[1], name: data.name, url, size: data.size, sha256: data.sha256,
+        signature: typeof data.signature === "string" ? data.signature : null, sigUrl: signing.sigUrl(url) };
     }
     return null;
   }
@@ -56,7 +61,9 @@ class CosmeticsUpdater {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = Buffer.from(await response.arrayBuffer());
     if (info.size && data.length !== info.size) throw new Error("Download unvollständig");
-    if (!info.sha256 || crypto.createHash("sha256").update(data).digest("hex") !== String(info.sha256).toLowerCase()) throw new Error("Prüfsumme stimmt nicht");
+    const digest = crypto.createHash("sha256").update(data).digest("hex");
+    if (!info.sha256 || digest !== String(info.sha256).toLowerCase()) throw new Error("Prüfsumme stimmt nicht");
+    signing.assertSigned(info.name, digest, info.signature || (await signing.fetchSignature(info.sigUrl)), this.publicKey);
     await fsp.mkdir(this.dir, { recursive: true });
     const target = path.join(this.dir, info.name);
     await fsp.writeFile(`${target}.part`, data);

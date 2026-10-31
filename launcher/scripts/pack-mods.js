@@ -2,10 +2,12 @@
 //   dist/mods/jars/mytic-client-<v>+<mc>.jar  → als GitHub-Release "mods-<v>" hochladen
 //   dist/mods/MyticMods-<v>.zip               → für die Download-Seite (Entwicklerversion)
 // Aufruf: node scripts/pack-mods.js   (vorher ../build-mods.sh)
+// Jars und Zip werden signiert (<datei>.sig) – die .sig-Dateien mit hochladen, sonst lehnt der Launcher das Update ab.
 const fs = require("node:fs");
 const path = require("node:path");
 const AdmZip = require("adm-zip");
 const { jarVersion } = require("../src/core/modupdates");
+const { signFiles } = require("./sign");
 
 const root = path.join(__dirname, "..");
 const source = path.join(root, "resources", "mods");
@@ -27,4 +29,6 @@ for (const mc of fs.readdirSync(source).sort()) {
   count++;
 }
 zip.writeZip(path.join(out, `MyticMods-${version}.zip`));
+const jars = fs.readdirSync(path.join(out, "jars")).map((f) => path.join(out, "jars", f));
+signFiles([...jars, path.join(out, `MyticMods-${version}.zip`)]);
 console.log(`Mytic-Mods ${version}: ${count} Versionen → dist/mods/`);

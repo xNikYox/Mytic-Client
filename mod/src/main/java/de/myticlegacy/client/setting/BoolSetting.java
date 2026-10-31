@@ -12,6 +12,11 @@ public class BoolSetting extends Setting<Boolean> {
         return raw() instanceof Boolean b ? b : defaultValue;
     }
 
+    @Override
+    public Object sanitize(Object value) {
+        return value instanceof Boolean ? value : null;
+    }
+
     public void toggle() {
         set(!get());
     }

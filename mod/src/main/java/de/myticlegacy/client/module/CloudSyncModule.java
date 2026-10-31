@@ -3,15 +3,25 @@ package de.myticlegacy.client.module;
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
 import com.mojang.blaze3d.platform.InputConstants;
 import de.myticlegacy.client.Config;
 import de.myticlegacy.client.MyticClient;
 import de.myticlegacy.client.friends.Friends;
+import de.myticlegacy.client.hud.HudModule;
 import de.myticlegacy.client.setting.ActionSetting;
 import de.myticlegacy.client.setting.BoolSetting;
+import de.myticlegacy.client.setting.Setting;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.item.Items;
+
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Predicate;
+import java.util.regex.Pattern;
 
 /**
  * Cloud-Sync: Mods (an/aus, Einstellungen), HUD-Positionen, HUD- und Server-Profile und alle Tasten am Mytic-Konto sichern
@@ -56,33 +66,149 @@ public class CloudSyncModule extends Module {
         return out;
     }
 
-    /** Gesicherten Stand übernehmen (im Render-Thread) – auch für Profil-Codes */
-    public static void apply(JsonObject data) {
-        Minecraft mc = Minecraft.getInstance();
-        JsonObject all = GSON.toJsonTree(MyticClient.config()).getAsJsonObject();
-        for (String f : FIELDS) if (data.has(f)) all.add(f, data.get(f));
-        Config loaded = GSON.fromJson(all, Config.class);
-        Config cfg = MyticClient.config();
-        if (loaded.enabled != null) cfg.enabled = loaded.enabled;
-        if (loaded.positions != null) cfg.positions = loaded.positions;
-        if (loaded.settings != null) cfg.settings = loaded.settings;
-        if (loaded.hudProfiles != null) cfg.hudProfiles = loaded.hudProfiles;
-        cfg.hudProfile = loaded.hudProfile;
-        if (loaded.serverProfiles != null) cfg.serverProfiles = loaded.serverProfiles;
-        cfg.save();
-        if (data.has("keys") && data.get("keys").isJsonObject()) {
-            JsonObject keys = data.getAsJsonObject("keys");
-            for (KeyMapping km : mc.options.keyMappings) {
-                JsonElement k = keys.get(km.getName());
-                if (k == null) continue;
-                try {
-                    km.setKey(InputConstants.getKey(k.getAsString()));
-                } catch (RuntimeException e) {
-                    // Taste gibt es hier nicht (andere Version) – überspringen
+    /** Module, die Chat-Nachrichten oder Befehle senden: nie aus fremden Profil-Codes übernehmen (an/aus, Einstellungen, Tasten) */
+    private static final Set<String> NO_IMPORT = Set.of("autotext");
+    private static final Pattern KEY_VALUE = Pattern.compile("key\\.(keyboard|mouse)\\.[a-z0-9._-]{1,40}");
+    private static final int MAX_PROFILES = 100, MAX_NAME = 255;
+
+    /** Eigenen gesicherten Stand übernehmen (Cloud, „Rückgängig“) */
+    public static boolean apply(JsonObject data) {
+        return apply(data, false, true);
+    }
+
+    /**
+     * Gesicherten Stand übernehmen (im Render-Thread) – auch für Profil-Codes. foreign = Code eines anderen Spielers:
+     * Befehls-Module (Auto Text) bleiben unberührt, Tasten nur mit withKeys und nur Mytic-Tasten. Alles wird erst
+     * geprüft (nur bekannte Module/Einstellungen, gültige Werte); bei kaputten Daten wird nichts geändert → false.
+     */
+    public static boolean apply(JsonObject data, boolean foreign, boolean withKeys) {
+        try {
+            Config cfg = MyticClient.config();
+            Map<String, Module> modules = new HashMap<>();
+            for (Module m : MyticClient.MODULES) modules.put(m.id, m);
+            Map<String, Setting<?>> known = new HashMap<>();
+            for (Module m : MyticClient.MODULES) for (Setting<?> st : m.settings) if (!(st instanceof ActionSetting)) known.put(st.path(), st);
+            Predicate<String> allowed = id -> modules.containsKey(id) && !(foreign && NO_IMPORT.contains(id));
+            Predicate<String> hud = id -> allowed.test(id) && modules.get(id) instanceof HudModule;
+
+            // 1. prüfen und vorbereiten (noch nichts ändern)
+            Map<String, Boolean> enabled = obj(data, "enabled") == null ? null : bools(obj(data, "enabled"), allowed);
+            Map<String, int[]> positions = obj(data, "positions") == null ? null : positions(obj(data, "positions"), allowed);
+            Map<String, Object> settings = obj(data, "settings") == null ? null : settings(obj(data, "settings"), known, allowed);
+            Map<String, Config.HudProfile> hudProfiles = null;
+            if (obj(data, "hudProfiles") != null) {
+                hudProfiles = new LinkedHashMap<>();
+                for (Map.Entry<String, JsonElement> e : obj(data, "hudProfiles").entrySet()) {
+                    if (!e.getValue().isJsonObject() || e.getKey().isBlank() || e.getKey().length() > MAX_NAME || hudProfiles.size() >= MAX_PROFILES) continue;
+                    JsonObject o = e.getValue().getAsJsonObject();
+                    Config.HudProfile p = new Config.HudProfile();
+                    if (obj(o, "positions") != null) p.positions = positions(obj(o, "positions"), hud);
+                    if (obj(o, "enabled") != null) p.enabled = bools(obj(o, "enabled"), hud);
+                    if (obj(o, "settings") != null) p.settings = settings(obj(o, "settings"), known, hud);
+                    hudProfiles.put(e.getKey(), p);
                 }
             }
-            KeyMapping.resetMapping();
-            mc.options.save();
+            boolean hasHudProfile = data.has("hudProfile");
+            String hudProfile = hasHudProfile ? string(data.get("hudProfile")) : null;
+            Map<String, Config.ServerProfile> serverProfiles = null;
+            if (obj(data, "serverProfiles") != null) {
+                serverProfiles = new LinkedHashMap<>();
+                for (Map.Entry<String, JsonElement> e : obj(data, "serverProfiles").entrySet()) {
+                    if (!e.getValue().isJsonObject() || e.getKey().isBlank() || e.getKey().length() > MAX_NAME || serverProfiles.size() >= MAX_PROFILES) continue;
+                    JsonObject o = e.getValue().getAsJsonObject();
+                    Config.ServerProfile p = new Config.ServerProfile();
+                    p.hudProfile = string(o.get("hudProfile"));
+                    if (obj(o, "modules") != null) p.modules = bools(obj(o, "modules"), allowed);
+                    serverProfiles.put(e.getKey(), p);
+                }
+            }
+            Minecraft mc = Minecraft.getInstance();
+            Map<KeyMapping, InputConstants.Key> keys = new LinkedHashMap<>();
+            if (withKeys && obj(data, "keys") != null) {
+                JsonObject k = obj(data, "keys");
+                for (KeyMapping km : mc.options.keyMappings) {
+                    String name = km.getName();
+                    if (foreign && (!name.startsWith("key.myticclient.") || name.startsWith("key.myticclient.autotext"))) continue;
+                    InputConstants.Key key = key(k.get(name));
+                    if (key != null) keys.put(km, key);
+                }
+            }
+
+            // 2. übernehmen – bei fremden Codes bleiben die eigenen Werte der Befehls-Module erhalten
+            if (enabled != null) {
+                if (foreign) for (String id : NO_IMPORT) if (cfg.enabled.containsKey(id)) enabled.put(id, cfg.enabled.get(id));
+                cfg.enabled = enabled;
+            }
+            if (positions != null) cfg.positions = positions;
+            if (settings != null) {
+                if (foreign) for (Map.Entry<String, Object> e : cfg.settings.entrySet())
+                    if (NO_IMPORT.contains(e.getKey().substring(0, Math.max(0, e.getKey().indexOf('.'))))) settings.put(e.getKey(), e.getValue());
+                cfg.settings = settings;
+            }
+            if (hudProfiles != null) cfg.hudProfiles = hudProfiles;
+            if (hasHudProfile) cfg.hudProfile = hudProfile;
+            if (serverProfiles != null) cfg.serverProfiles = serverProfiles;
+            cfg.save();
+            if (!keys.isEmpty()) {
+                for (Map.Entry<KeyMapping, InputConstants.Key> e : keys.entrySet()) e.getKey().setKey(e.getValue());
+                KeyMapping.resetMapping();
+                mc.options.save();
+            }
+            return true;
+        } catch (RuntimeException e) {
+            MyticClient.LOG.warn("Einstellungen konnten nicht übernommen werden", e);
+            return false;
+        }
+    }
+
+    private static JsonObject obj(JsonObject o, String key) {
+        JsonElement e = o.get(key);
+        return e != null && e.isJsonObject() ? e.getAsJsonObject() : null;
+    }
+
+    private static String string(JsonElement e) {
+        return e != null && e.isJsonPrimitive() && e.getAsJsonPrimitive().isString() && e.getAsString().length() <= MAX_NAME ? e.getAsString() : null;
+    }
+
+    /** Modul → an/aus; unbekannte Module und falsche Typen fallen weg */
+    private static Map<String, Boolean> bools(JsonObject o, Predicate<String> allowed) {
+        Map<String, Boolean> out = new LinkedHashMap<>();
+        for (Map.Entry<String, JsonElement> e : o.entrySet()) {
+            JsonElement v = e.getValue();
+            if (allowed.test(e.getKey()) && v.isJsonPrimitive() && v.getAsJsonPrimitive().isBoolean()) out.put(e.getKey(), v.getAsBoolean());
+        }
+        return out;
+    }
+
+    private static Map<String, int[]> positions(JsonObject o, Predicate<String> allowed) {
+        Map<String, int[]> out = Config.positions(o);
+        out.keySet().removeIf(id -> !allowed.test(id));
+        return out;
+    }
+
+    /** Nur registrierte Einstellungen, Wert geprüft wie beim normalen Setzen (Länge, Bereich, Auswahl) */
+    private static Map<String, Object> settings(JsonObject o, Map<String, Setting<?>> known, Predicate<String> allowed) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        for (Map.Entry<String, JsonElement> e : o.entrySet()) {
+            Setting<?> st = known.get(e.getKey());
+            if (st == null || !allowed.test(st.module.id) || !e.getValue().isJsonPrimitive()) continue;
+            JsonPrimitive p = e.getValue().getAsJsonPrimitive();
+            Object raw = p.isBoolean() ? (Object) p.getAsBoolean() : p.isNumber() ? (Object) p.getAsDouble() : p.getAsString();
+            Object value = st.sanitize(raw);
+            if (value != null) out.put(e.getKey(), value);
+        }
+        return out;
+    }
+
+    /** Gültiger Tastenname (z. B. „key.keyboard.g“, „key.mouse.left“) oder null */
+    private static InputConstants.Key key(JsonElement e) {
+        if (e == null || !e.isJsonPrimitive() || !e.getAsJsonPrimitive().isString()) return null;
+        String name = e.getAsString();
+        if (!KEY_VALUE.matcher(name).matches()) return null;
+        try {
+            return InputConstants.getKey(name);
+        } catch (RuntimeException ex) {
+            return null; // Taste gibt es hier nicht (andere Version) – überspringen
         }
     }
 
@@ -109,10 +235,8 @@ public class CloudSyncModule extends Module {
                 JsonElement data = r.get("data");
                 Minecraft mc = Minecraft.getInstance();
                 mc.execute(() -> {
-                    if (restore && data != null && data.isJsonObject()) {
-                        apply(data.getAsJsonObject());
-                        Msg.actionBar("Einstellungen aus der Cloud geladen");
-                    }
+                    if (restore && data != null && data.isJsonObject())
+                        Msg.actionBar(apply(data.getAsJsonObject()) ? "Einstellungen aus der Cloud geladen" : "Cloud-Daten fehlerhaft – nichts geändert");
                     uploaded = snapshot().toString(); // ab jetzt Änderungen sichern
                     busy = false;
                 });

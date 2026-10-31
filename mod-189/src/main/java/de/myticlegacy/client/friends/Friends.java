@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Freundesliste im Spiel. Der Mytic Launcher meldet das Konto beim Friends-Server an und übergibt Adresse und
- * Sitzung als -Dmytic.friends.url / -Dmytic.friends.token. Alle Anfragen laufen in einem eigenen Thread; das Spiel
+ * Sitzung als -Dmytic.friends.url und Umgebungsvariable MYTIC_FRIENDS_TOKEN. Alle Anfragen laufen in einem eigenen Thread; das Spiel
  * liest nur die zuletzt geladene Liste. (Gleicher Code für alle Minecraft-Versionen, daher Java 8.)
  */
 public final class Friends {
@@ -67,8 +67,15 @@ public final class Friends {
         }
     }
 
-    private static final String BASE = withSlash(System.getProperty("mytic.friends.url", "").trim());
-    private static final String TOKEN = System.getProperty("mytic.friends.token", "").trim();
+    private static final String BASE = withSlash(safeUrl(System.getProperty("mytic.friends.url", "").trim()));
+    private static final String TOKEN = token();
+
+    /** Token aus der Umgebungsvariable MYTIC_FRIENDS_TOKEN (nicht in der Prozessliste sichtbar), sonst -Dmytic.friends.token. */
+    private static String token() {
+        String env = System.getenv("MYTIC_FRIENDS_TOKEN");
+        if (env != null && !env.trim().isEmpty()) return env.trim();
+        return System.getProperty("mytic.friends.token", "").trim();
+    }
 
     private static volatile List<Friend> friends = Collections.emptyList();
     private static volatile List<Friend> incoming = Collections.emptyList();
@@ -321,6 +328,22 @@ public final class Friends {
         int[] pixels = new int[64];
         for (int i = 0; i < 64; i++) pixels[i] = (int) Long.parseLong(hex.substring(i * 8, i * 8 + 8), 16);
         return pixels;
+    }
+
+    /** Nur https (Token wird mitgeschickt) – http nur für localhost/127.0.0.1 zum Testen; sonst keine Freundesliste */
+    static String safeUrl(String url) {
+        if (url.isEmpty()) return url;
+        try {
+            java.net.URI u = new java.net.URI(url);
+            String scheme = u.getScheme() == null ? "" : u.getScheme().toLowerCase(java.util.Locale.ROOT);
+            String host = u.getHost() == null ? "" : u.getHost().toLowerCase(java.util.Locale.ROOT);
+            if (host.isEmpty() || u.getRawUserInfo() != null) return "";
+            if (scheme.equals("https")) return url;
+            if (scheme.equals("http") && (host.equals("localhost") || host.equals("127.0.0.1"))) return url;
+        } catch (java.net.URISyntaxException ignored) {
+            // ungültige Adresse
+        }
+        return "";
     }
 
     private static String withSlash(String url) {

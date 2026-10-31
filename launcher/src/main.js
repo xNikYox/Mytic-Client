@@ -10,12 +10,14 @@ const fsp = require("node:fs/promises");
 const path = require("node:path");
 const os = require("node:os");
 const crypto = require("node:crypto");
+const { fileURLToPath } = require("node:url");
 const { dirs: makeDirs } = require("./core/paths");
 const { Installer, buildCommand, launch, MANAGED_MODS, MC_VERSION, defaultMemoryMb, availableVersions, bundledMytic, loaderFor, FORGE_VERSIONS } = require("./core/minecraft");
 const auth = require("./core/auth");
 const updater = require("./core/updater");
 const { ModBrowser } = require("./core/modrinth");
 const profiles = require("./core/profiles");
+const { sanitizePatch } = require("./core/settings");
 const { DiscordPresence } = require("./core/discord");
 const { spawn } = require("node:child_process");
 
@@ -98,6 +100,40 @@ const GAME_MODULES = [
 
 let win;
 let game = null;
+
+// ---------------------------------------------------------------------------------------------- IPC-Absender
+const APP_PAGE = path.join(__dirname, "renderer", "index.html");
+
+/** Ist die Adresse die eigene Seite des Launchers (file://…/renderer/index.html)? */
+function isAppPage(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "file:" && path.resolve(fileURLToPath(parsed)) === path.resolve(APP_PAGE);
+  } catch {
+    return false;
+  }
+}
+
+/** Nur Anfragen aus dem Hauptrahmen der eigenen Seite im Launcher-Fenster zulassen. */
+function trustedSender(event) {
+  const frame = event.senderFrame;
+  return Boolean(frame && !frame.parent && win && !win.isDestroyed() && event.sender === win.webContents && isAppPage(frame.url));
+}
+
+/** Zentrale Hülle für alle IPC-Handler mit Absender-Prüfung. */
+const ipc = {
+  handle(channel, handler) {
+    ipcMain.handle(channel, (event, ...args) => {
+      if (!trustedSender(event)) throw new Error("Anfrage nicht erlaubt");
+      return handler(event, ...args);
+    });
+  },
+  on(channel, handler) {
+    ipcMain.on(channel, (event, ...args) => {
+      if (trustedSender(event)) handler(event, ...args);
+    });
+  },
+};
 
 // ------------------------------------------------------------------------------ Discord: "Spielt Mytic Client"
 const DISCORD_APP = "1559647258943954994";
@@ -231,15 +267,27 @@ function settings() {
   return merged;
 }
 
+/** Tokens nur für diese Sitzung (wenn das System keine Verschlüsselung bietet): uuid → { accessToken, refreshToken } */
+const sessionTokens = new Map();
+let plainWarned = false;
+
+/** Verschlüsselt ein Token. Ohne safeStorage wird nichts gespeichert (nie Klartext auf der Platte). */
 function protect(text) {
   if (!text) return "";
-  return safeStorage.isEncryptionAvailable() ? `enc:${safeStorage.encryptString(text).toString("base64")}` : `raw:${text}`;
+  return safeStorage.isEncryptionAvailable() ? `enc:${safeStorage.encryptString(text).toString("base64")}` : "";
 }
 
+/** Liest ein gespeichertes Token; alte "raw:"-Einträge (Klartext) bleiben lesbar und werden danach neu gespeichert. */
 function unprotect(text) {
   if (!text) return "";
   if (text.startsWith("enc:")) return safeStorage.decryptString(Buffer.from(text.slice(4), "base64"));
   return text.replace(/^raw:/, "");
+}
+
+/** Token eines Kontos: aus der Sitzung oder (verschlüsselt) aus der Datei. */
+function tokenOf(entry, key) {
+  const memory = sessionTokens.get(entry.uuid);
+  return (memory && memory[key]) || unprotect(entry[key]);
 }
 
 function accounts() {
@@ -247,6 +295,13 @@ function accounts() {
 }
 
 async function saveAccount(account, refreshToken) {
+  if (!safeStorage.isEncryptionAvailable()) {
+    sessionTokens.set(account.uuid, { accessToken: account.accessToken || "", refreshToken: refreshToken || "" });
+    if (refreshToken && !plainWarned) {
+      plainWarned = true;
+      emit("log", "[Launcher] Warnung: Keine sichere Speicherung verfügbar – die Anmeldung gilt nur bis zum Beenden des Launchers.");
+    }
+  }
   const store = accounts();
   const entry = { ...account, accessToken: protect(account.accessToken), refreshToken: protect(refreshToken) };
   store.list = store.list.filter((a) => a.uuid !== account.uuid).concat(entry);
@@ -270,13 +325,20 @@ async function activeAccount() {
     if (!OFFLINE_ALLOWED) throw new Error("Bitte melde dich mit deinem Microsoft-Konto an.");
     return entry;
   }
-  if (entry.expiresAt && entry.expiresAt > Date.now() + 5 * 60 * 1000) return { ...entry, accessToken: unprotect(entry.accessToken) };
+  const accessToken = tokenOf(entry, "accessToken");
+  const refreshToken = tokenOf(entry, "refreshToken");
+  // alte Klartext-Einträge einmal lesen und ohne Klartext neu speichern
+  if (/^raw:/.test(entry.accessToken || "") || /^raw:/.test(entry.refreshToken || "")) {
+    await saveAccount({ ...entry, accessToken }, refreshToken);
+  }
+  if (accessToken && entry.expiresAt && entry.expiresAt > Date.now() + 5 * 60 * 1000) return { ...entry, accessToken };
+  if (!refreshToken) throw new Error("Anmeldung abgelaufen – bitte das Microsoft-Konto neu hinzufügen.");
   const clientId = settings().clientId;
   if (!clientId) throw new Error("Für Microsoft-Konten fehlt die Client-ID (Einstellungen).");
   emit("status", "Anmeldung wird erneuert …");
-  const tokens = await auth.refreshMicrosoft(clientId, unprotect(entry.refreshToken));
+  const tokens = await auth.refreshMicrosoft(clientId, refreshToken);
   const account = await auth.minecraftLogin(tokens.access_token);
-  await saveAccount(account, tokens.refresh_token || unprotect(entry.refreshToken));
+  await saveAccount(account, tokens.refresh_token || refreshToken);
   return account;
 }
 
@@ -321,6 +383,13 @@ function createWindow() {
     if (/^https:\/\//.test(url)) shell.openExternal(url);
     return { action: "deny" };
   });
+  // nie von der eigenen Seite wegnavigieren (Links, Drag & Drop von Dateien usw.)
+  win.webContents.on("will-navigate", (event, url) => {
+    if (!isAppPage(url)) event.preventDefault();
+  });
+  win.webContents.on("will-frame-navigate", (event) => {
+    if (!event.isMainFrame && !isAppPage(event.url)) event.preventDefault();
+  });
 }
 
 /** Öffnet das Microsoft-Anmeldefenster und liefert den Autorisierungscode. */
@@ -339,6 +408,11 @@ function microsoftCode(clientId) {
       webPreferences: { session: authSession, contextIsolation: true, nodeIntegration: false, sandbox: true },
     });
     popup.removeMenu();
+    // Anmeldefenster: keine weiteren Fenster, nur https-Seiten
+    popup.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+    popup.webContents.on("will-navigate", (event, url) => {
+      if (!/^https:\/\//.test(url)) event.preventDefault();
+    });
     let finished = false;
     const check = (event, url) => {
       if (!url.startsWith(auth.REDIRECT_URI)) return;
@@ -362,19 +436,19 @@ function microsoftCode(clientId) {
 
 // ---------------------------------------------------------------------------------------------- Mod-Browser
 
-ipcMain.handle("browser:search", async (e, options) => (await activeBrowser()).search(options || {}));
-ipcMain.handle("browser:list", async () => (await activeBrowser()).list());
-ipcMain.handle("browser:install", async (e, projectId) => {
+ipc.handle("browser:search", async (e, options) => (await activeBrowser()).search(options || {}));
+ipc.handle("browser:list", async () => (await activeBrowser()).list());
+ipc.handle("browser:install", async (e, projectId) => {
   const browser = await activeBrowser();
   const installed = await browser.install(String(projectId), (title) => emit("browser-step", title));
   return { installed, list: await browser.list() };
 });
-ipcMain.handle("browser:remove", async (e, projectId) => {
+ipc.handle("browser:remove", async (e, projectId) => {
   const browser = await activeBrowser();
   await browser.remove(String(projectId));
   return browser.list();
 });
-ipcMain.handle("browser:toggle", async (e, projectId, enabled) => {
+ipc.handle("browser:toggle", async (e, projectId, enabled) => {
   const browser = await activeBrowser();
   await browser.setEnabled(String(projectId), Boolean(enabled));
   return browser.list();
@@ -382,28 +456,28 @@ ipcMain.handle("browser:toggle", async (e, projectId, enabled) => {
 
 // ---------------------------------------------------------------------------------------------- Profile
 
-ipcMain.handle("profiles:list", () => profileList());
-ipcMain.handle("profiles:select", async (e, id) => {
+ipc.handle("profiles:list", () => profileList());
+ipc.handle("profiles:select", async (e, id) => {
   const current = await ensureProfiles();
   if (current.profiles.some((p) => p.id === id)) await saveSettings({ ...current, activeProfile: id });
   return profileList();
 });
-ipcMain.handle("profiles:create", async (e, name, copyFrom, mcVersion) => {
+ipc.handle("profiles:create", async (e, name, copyFrom, mcVersion) => {
   if (game) throw new Error("Bitte zuerst Minecraft beenden.");
   await saveSettings(await profiles.create(await ensureProfiles(), DIRS.base, name, copyFrom || null, mcVersion || null));
   return profileList();
 });
-ipcMain.handle("profiles:version", async (e, id, mcVersion) => {
+ipc.handle("profiles:version", async (e, id, mcVersion) => {
   if (game) throw new Error("Bitte zuerst Minecraft beenden.");
   await saveSettings(profiles.setVersion(await ensureProfiles(), id, String(mcVersion)));
   return profileList();
 });
-ipcMain.handle("versions:list", () => availableVersions(path.join(DIRS.base, "versions-cache.json")));
+ipc.handle("versions:list", () => availableVersions(path.join(DIRS.base, "versions-cache.json")));
 
 // ---------------------------------------------------------------------------------------------- Import aus anderen Launchern
 const importCache = new Map();
 
-ipcMain.handle("import:scan", async () => {
+ipc.handle("import:scan", async () => {
   const available = await availableVersions(path.join(DIRS.base, "versions-cache.json"));
   const { entries, list } = importer.scan({ available, loaderFor });
   importCache.clear();
@@ -425,7 +499,7 @@ async function importFromPaths(paths) {
     return evaluation;
   });
 }
-ipcMain.handle("import:pick", async (e, kind) => {
+ipc.handle("import:pick", async (e, kind) => {
   const result = await dialog.showOpenDialog(win, kind === "folder"
     ? { title: "Profil-Ordner wählen", properties: ["openDirectory"] }
     : {
@@ -436,8 +510,8 @@ ipcMain.handle("import:pick", async (e, kind) => {
   if (result.canceled || !result.filePaths.length) return [];
   return importFromPaths(result.filePaths);
 });
-ipcMain.handle("import:paths", (e, paths) => importFromPaths((paths || []).filter((p) => typeof p === "string")));
-ipcMain.handle("import:run", async (e, id, version) => {
+ipc.handle("import:paths", (e, paths) => importFromPaths((paths || []).filter((p) => typeof p === "string")));
+ipc.handle("import:run", async (e, id, version) => {
   if (game) throw new Error("Bitte zuerst Minecraft beenden.");
   const cached = importCache.get(id);
   if (!cached) throw new Error("Profil nicht mehr gefunden – bitte neu suchen.");
@@ -454,16 +528,16 @@ ipcMain.handle("import:run", async (e, id, version) => {
   await saveSettings(result.settings);
   return { profiles: await profileList(), name: result.profile.name, copied: result.copied, identified: result.identified, skipped: result.skipped };
 });
-ipcMain.handle("profiles:rename", async (e, id, name) => {
+ipc.handle("profiles:rename", async (e, id, name) => {
   await saveSettings(profiles.rename(await ensureProfiles(), id, name));
   return profileList();
 });
-ipcMain.handle("profiles:delete", async (e, id) => {
+ipc.handle("profiles:delete", async (e, id) => {
   if (game) throw new Error("Bitte zuerst Minecraft beenden.");
   await saveSettings(await profiles.remove(await ensureProfiles(), DIRS.base, id));
   return profileList();
 });
-ipcMain.handle("profiles:perf", async (e, slug, on) => {
+ipc.handle("profiles:perf", async (e, slug, on) => {
   const current = await ensureProfiles();
   const active = profiles.active(current);
   const next = { ...current, profiles: current.profiles.map((p) => (p.id === active.id ? { ...p, perf: { ...(p.perf || {}), [slug]: Boolean(on) } } : p)) };
@@ -578,7 +652,7 @@ async function checkUpdate() {
 setInterval(checkUpdate, 30 * 60 * 1000);
 
 /** "Jetzt neu starten": bereitliegendes Update sofort einspielen (ZIP-Version: Release-Seite öffnen). */
-ipcMain.handle("update:install", async () => {
+ipc.handle("update:install", async () => {
   if (game) throw new Error("Bitte zuerst Minecraft beenden.");
   if (!readyUpdate) {
     if (pendingUpdate) shell.openExternal(pendingUpdate.page);
@@ -599,7 +673,7 @@ ipcMain.handle("update:install", async () => {
 
 const PACKAGE_VERSION = require("../package.json").version;
 
-ipcMain.handle("state", () => ({
+ipc.handle("state", () => ({
   version: PACKAGE_VERSION,
   minecraft: MC_VERSION,
   settings: settings(),
@@ -615,21 +689,23 @@ ipcMain.handle("state", () => ({
   gameDir: DIRS.game,
 }));
 
-ipcMain.handle("settings:set", async (e, patch) => {
+ipc.handle("settings:set", async (e, input) => {
+  // nur bekannte Einstellungen mit gültigen Werten (Profile usw. laufen über eigene Handler)
+  const patch = sanitizePatch(input);
   const { clientId, ...current } = settings();
   await writeJson(SETTINGS_FILE, { ...current, ...patch });
   if ("discordPresence" in patch) discord.setEnabled(patch.discordPresence !== false);
   return settings();
 });
 
-ipcMain.handle("module:set", async (e, id, on) => {
+ipc.handle("module:set", async (e, id, on) => {
   const config = readJson(GAME_CONFIG, {});
   config.enabled = { ...(config.enabled || {}), [id]: Boolean(on) };
   await writeJson(GAME_CONFIG, config);
   return gameModules();
 });
 
-ipcMain.handle("account:microsoft", async () => {
+ipc.handle("account:microsoft", async () => {
   const clientId = settings().clientId;
   if (!clientId) throw new Error("Für den Microsoft-Login fehlt die Client-ID (Einstellungen).");
   const { code, verifier } = await microsoftCode(clientId);
@@ -639,22 +715,23 @@ ipcMain.handle("account:microsoft", async () => {
   return publicAccounts();
 });
 
-ipcMain.handle("account:offline", async (e, name) => {
+ipc.handle("account:offline", async (e, name) => {
   if (!OFFLINE_ALLOWED) throw new Error("Offline-Konten sind nur in der Entwicklerversion verfügbar.");
   await saveAccount(auth.offlineAccount(String(name || "").trim()), "");
   return publicAccounts();
 });
 
-ipcMain.handle("account:select", async (e, uuid) => {
+ipc.handle("account:select", async (e, uuid) => {
   const store = accounts();
   if (store.list.some((a) => a.uuid === uuid)) store.selected = uuid;
   await writeJson(ACCOUNTS_FILE, store);
   return publicAccounts();
 });
 
-ipcMain.handle("account:remove", async (e, uuid) => {
+ipc.handle("account:remove", async (e, uuid) => {
   const store = accounts();
   store.list = store.list.filter((a) => a.uuid !== uuid);
+  sessionTokens.delete(uuid);
   if (store.selected === uuid) store.selected = store.list[0] ? store.list[0].uuid : null;
   await writeJson(ACCOUNTS_FILE, store);
   return publicAccounts();
@@ -688,7 +765,7 @@ async function detectCrash({ code, log, crashReport, profile, modsDir, gameDir, 
   emit("crash", { code, reason: reason.trim().slice(0, 300), steps: steps.map((s) => s.label), details: problems.map((p) => p.text).slice(0, 8) });
 }
 
-ipcMain.handle("autofix:apply", async () => {
+ipc.handle("autofix:apply", async () => {
   // hängt das Spiel noch am Fehlerfenster von Fabric: beenden
   if (game) {
     const running = game;
@@ -708,7 +785,7 @@ ipcMain.handle("autofix:apply", async () => {
 // ------------------------------------------------------------------------------ Freunde
 
 /** Freundesliste holen; ohne laufendes Spiel meldet sich dabei der Launcher als online ("im Launcher"). */
-ipcMain.handle("friends:get", async () => {
+ipc.handle("friends:get", async () => {
   if (!friends.configured) return { configured: false };
   const account = await activeAccount();
   const data = game ? await friends.call(account, "GET", "api/friends") : await friends.call(account, "POST", "api/presence", { place: "launcher" });
@@ -716,7 +793,7 @@ ipcMain.handle("friends:get", async () => {
 });
 
 for (const action of ["request", "accept", "deny", "remove"]) {
-  ipcMain.handle(`friends:${action}`, async (e, value) => {
+  ipc.handle(`friends:${action}`, async (e, value) => {
     const account = await activeAccount();
     const data = await friends.call(account, "POST", `api/friends/${action}`, action === "request" ? { name: String(value || "").trim() } : { uuid: String(value || "") });
     return { configured: true, ...data };
@@ -743,7 +820,7 @@ function shotFile(file) {
   return full;
 }
 
-ipcMain.handle("shots:list", async () => {
+ipc.handle("shots:list", async () => {
   const list = [];
   for (const dir of shotDirs()) {
     let names = [];
@@ -766,14 +843,14 @@ ipcMain.handle("shots:list", async () => {
   return list.sort((a, b) => b.time - a.time).slice(0, 500);
 });
 
-ipcMain.handle("shots:thumb", async (e, file) => nativeImage.createFromPath(shotFile(file)).resize({ width: 360, quality: "good" }).toDataURL());
-ipcMain.handle("shots:open", async (e, file) => shell.openPath(shotFile(file)));
-ipcMain.handle("shots:folder", async (e, file) => (file ? shell.showItemInFolder(shotFile(file)) : shell.openPath(shotDirs()[0])));
-ipcMain.handle("shots:copy", async (e, file) => clipboard.writeImage(nativeImage.createFromPath(shotFile(file))));
-ipcMain.handle("shots:delete", async (e, file) => shell.trashItem(shotFile(file)));
+ipc.handle("shots:thumb", async (e, file) => nativeImage.createFromPath(shotFile(file)).resize({ width: 360, quality: "good" }).toDataURL());
+ipc.handle("shots:open", async (e, file) => shell.openPath(shotFile(file)));
+ipc.handle("shots:folder", async (e, file) => (file ? shell.showItemInFolder(shotFile(file)) : shell.openPath(shotDirs()[0])));
+ipc.handle("shots:copy", async (e, file) => clipboard.writeImage(nativeImage.createFromPath(shotFile(file))));
+ipc.handle("shots:delete", async (e, file) => shell.trashItem(shotFile(file)));
 
 /** Hochladen: als JPEG (max. 1920 px breit, so lange kleiner, bis es passt) zum Friends-Server → Link in die Zwischenablage */
-ipcMain.handle("shots:upload", async (e, file) => {
+ipc.handle("shots:upload", async (e, file) => {
   if (!friends.configured) throw new Error("Hochladen geht nur mit Freundesliste (Server nicht eingerichtet)");
   let image = nativeImage.createFromPath(shotFile(file));
   if (image.isEmpty()) throw new Error("Bild nicht lesbar");
@@ -789,19 +866,22 @@ ipcMain.handle("shots:upload", async (e, file) => {
   return result;
 });
 
-/** JVM-Argumente, mit denen die Mod im Spiel die Freundesliste nutzt (leer, wenn nicht erreichbar). */
-async function friendsJvm(account) {
-  if (!friends.configured) return [];
+/**
+ * Freundesliste im Spiel: Adresse als JVM-Argument, Token über die Umgebungsvariable MYTIC_FRIENDS_TOKEN
+ * (nicht in der Kommandozeile, die in der Prozessliste sichtbar ist). Leer, wenn nicht erreichbar.
+ */
+async function friendsLaunch(account) {
+  if (!friends.configured) return { jvm: [], env: {} };
   try {
     const token = await friends.login(account);
-    return [`-Dmytic.friends.url=${friends.base}`, `-Dmytic.friends.token=${token}`];
+    return { jvm: [`-Dmytic.friends.url=${friends.base}`], env: { MYTIC_FRIENDS_TOKEN: token } };
   } catch (error) {
     emit("log", `[Freunde] Im Spiel nicht verfügbar: ${error.message}`);
-    return [];
+    return { jvm: [], env: {} };
   }
 }
 
-ipcMain.handle("game:launch", async () => {
+ipc.handle("game:launch", async () => {
   if (busy || game) throw new Error("Das Spiel läuft bereits.");
   busy = true;
   try {
@@ -826,7 +906,8 @@ ipcMain.handle("game:launch", async () => {
     emit("status", "Cosmetics prüfen …");
     const cosmeticsPack = await cosmetics.prepare();
     // Design des Launchers auch als Hintergrund des Mytic-Hauptmenüs
-    const extraJvm = [...(await friendsJvm(account)), ...(cosmeticsPack ? [`-Dmytic.cosmetics=${cosmeticsPack}`] : []), `-Dmytic.launcherTheme=${current.launcherTheme || "sunset"}`];
+    const friendsInGame = await friendsLaunch(account);
+    const extraJvm = [...friendsInGame.jvm, ...(cosmeticsPack ? [`-Dmytic.cosmetics=${cosmeticsPack}`] : []), `-Dmytic.launcherTheme=${current.launcherTheme || "sunset"}`];
     const command = buildCommand(install, DIRS, account, { ...current, modsDir: profileMods, extraJvm, addMods: cosmeticsPack ? [cosmeticsPack] : [] });
     emit("status", "Minecraft startet …");
     emit("log", `[Launcher] Starte Minecraft ${profile.mcVersion} (Fabric) als ${account.name} – Profil „${profile.name}“`);
@@ -843,6 +924,7 @@ ipcMain.handle("game:launch", async () => {
     discordGame = { version: profile.mcVersion, start: Date.now(), server: null };
     updateDiscord();
     game = launch(command, DIRS, {
+      env: friendsInGame.env,
       onLog: (line) => {
         emit("log", line);
         recent.push(line);
@@ -873,21 +955,21 @@ ipcMain.handle("game:launch", async () => {
   }
 });
 
-ipcMain.handle("game:stop", () => {
+ipc.handle("game:stop", () => {
   if (game) game.kill();
   return true;
 });
 
-ipcMain.handle("open:gameDir", async () => {
+ipc.handle("open:gameDir", async () => {
   await fsp.mkdir(DIRS.game, { recursive: true });
   return shell.openPath(DIRS.game);
 });
 
-ipcMain.handle("open:url", (e, url) => {
+ipc.handle("open:url", (e, url) => {
   if (/^https:\/\//.test(url)) shell.openExternal(url);
 });
 
-ipcMain.on("window", (e, action) => {
+ipc.on("window", (e, action) => {
   if (!win) return;
   if (action === "minimize") win.minimize();
   if (action === "maximize") (win.isMaximized() ? win.unmaximize() : win.maximize());
