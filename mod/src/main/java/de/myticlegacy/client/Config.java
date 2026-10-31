@@ -135,12 +135,58 @@ public final class Config {
         return new Config();
     }
 
+    // Speichern ohne Hänger: JSON wird auf dem aufrufenden Thread erzeugt (fester Stand), geschrieben wird im Hintergrund –
+    // nur wenn sich etwas geändert hat; bei schnellen Folgen gewinnt der neueste Stand. Beim Beenden wird Ausstehendes geschrieben.
+    private static final Object LOCK = new Object();
+    private static final Object WRITE_LOCK = new Object();
+    private static String pending, written;
+    private static Path pendingFile;
+    private static final java.util.concurrent.ExecutorService WRITER = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "Mytic-Config");
+        t.setDaemon(true);
+        return t;
+    });
+
+    static {
+        Runtime.getRuntime().addShutdownHook(new Thread(Config::flush, "Mytic-Config-Speichern"));
+    }
+
     public void save() {
-        try {
-            Files.createDirectories(file().getParent());
-            Files.writeString(file(), GSON.toJson(this));
-        } catch (IOException e) {
-            MyticClient.LOG.warn("Konfiguration konnte nicht gespeichert werden", e);
+        String json = GSON.toJson(this);
+        synchronized (LOCK) {
+            if (json.equals(pending != null ? pending : written)) return; // unverändert
+            pending = json;
+            pendingFile = file();
+        }
+        WRITER.execute(Config::flush);
+    }
+
+    /** Ausstehenden Stand schreiben (Hintergrund-Thread bzw. beim Beenden) */
+    private static void flush() {
+        synchronized (WRITE_LOCK) {
+            String json;
+            Path f;
+            synchronized (LOCK) {
+                json = pending;
+                f = pendingFile;
+                pending = null;
+            }
+            if (json == null) return;
+            try {
+                Files.createDirectories(f.getParent());
+                Path tmp = f.resolveSibling(f.getFileName() + ".tmp");
+                Files.writeString(tmp, json);
+                try {
+                    Files.move(tmp, f, java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+                } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+                    Files.move(tmp, f, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                }
+                synchronized (LOCK) {
+                    written = json;
+                }
+            } catch (IOException e) {
+                MyticClient.LOG.warn("Konfiguration konnte nicht gespeichert werden", e);
+            }
         }
     }
 }

@@ -641,3 +641,17 @@ test("Startseite: „Neu in …“ passt zur Launcher-Version", () => {
   assert.equal(newsVersion(html), version.split(".").slice(0, 2).join("."),
     "Karte „Neu in …“ in src/renderer/index.html auf die neue Version bringen (Überschrift und Inhalt)");
 });
+
+test("Java-Speicher: ZGC ab Java 21 mit genug Kernen, sonst G1; eigener GC hat Vorrang", () => {
+  const { memoryArgs } = require("../src/core/minecraft");
+  const z21 = memoryArgs({ memory: 4096, javaMajor: 21, cpus: 8 });
+  assert.deepEqual(z21.slice(0, 2), ["-Xms4096M", "-Xmx4096M"], "Startspeicher = Maximum");
+  assert.ok(z21.includes("-XX:+UseZGC") && z21.includes("-XX:+ZGenerational"));
+  const z25 = memoryArgs({ memory: 4096, javaMajor: 25, cpus: 8 });
+  assert.ok(z25.includes("-XX:+UseZGC") && !z25.includes("-XX:+ZGenerational"), "ab Java 23 ohne veralteten Schalter");
+  const g1 = memoryArgs({ memory: 4096, javaMajor: 21, cpus: 4 });
+  assert.ok(g1.includes("-XX:+UseG1GC") && g1.includes("-XX:MaxGCPauseMillis=50") && !g1.includes("-XX:+UseZGC"), "wenige Kerne → G1");
+  assert.ok(memoryArgs({ memory: 2048, javaMajor: 8, cpus: 16 }).includes("-XX:+UseG1GC"), "Java 8 → G1");
+  const own = memoryArgs({ memory: 4096, javaMajor: 21, cpus: 8, userArgs: "-XX:+UseShenandoahGC -Dx=1" });
+  assert.deepEqual(own, ["-Xms4096M", "-Xmx4096M"], "eigener GC → keine weiteren GC-Schalter");
+});

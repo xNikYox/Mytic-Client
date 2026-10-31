@@ -485,15 +485,7 @@ function buildCommand(install, dirs, account, settings = {}, { platform = proces
   const ruleOptions = { platform, arch, features };
   const memory = Math.max(1024, Number(settings.memoryMb) || 4096);
   const jvm = [
-    `-Xms${Math.min(1024, memory)}M`,
-    `-Xmx${memory}M`,
-    "-XX:+UseG1GC",
-    "-XX:+ParallelRefProcEnabled",
-    "-XX:MaxGCPauseMillis=200",
-    "-XX:+UnlockExperimentalVMOptions",
-    "-XX:+DisableExplicitGC",
-    "-XX:G1NewSizePercent=30",
-    "-XX:G1ReservePercent=20",
+    ...memoryArgs({ memory, javaMajor: (version.javaVersion && version.javaVersion.majorVersion) || 21, userArgs: settings.jvmArgs }),
     ...collectArguments(version.arguments.jvm, vars, ruleOptions),
     ...collectArguments(fabric.arguments && fabric.arguments.jvm, vars, ruleOptions),
     // Mods des gewählten Profils (Fabric lädt alle JARs aus diesem Ordner zusätzlich)
@@ -509,6 +501,23 @@ function buildCommand(install, dirs, account, settings = {}, { platform = proces
   if (settings.fullscreen) game.push("--fullscreen");
   if (settings.server) game.push("--quickPlayMultiplayer", settings.server);
   return { java, args: [...jvm, fabric.mainClass, ...game] };
+}
+
+/**
+ * Speicher und Speicherbereinigung (GC) für Spieler statt Server:
+ * Java 21+ mit mindestens 6 Kernen → Generational ZGC (Pausen unter 1 ms, kaum Ruckler); sonst G1 mit 50 ms Pausenziel.
+ * Startspeicher = Maximum, damit der Speicher nicht mitten im Spiel wachsen muss.
+ * Stehen in den eigenen Java-Argumenten schon ein GC (-XX:+Use…GC), bleibt es bei dessen Wahl – zwei GCs verhindern den Start.
+ */
+function memoryArgs({ memory, javaMajor = 8, cpus = os.cpus().length, userArgs = "" }) {
+  const args = [`-Xms${memory}M`, `-Xmx${memory}M`];
+  if (/-XX:[+-]Use\w*GC\b/.test(userArgs)) return args;
+  if (javaMajor >= 21 && cpus >= 6) {
+    // ab Java 23 ist ZGC immer generational, der Schalter ist dort veraltet
+    return [...args, "-XX:+UseZGC", ...(javaMajor < 23 ? ["-XX:+ZGenerational"] : []), "-XX:+DisableExplicitGC"];
+  }
+  return [...args, "-XX:+UseG1GC", "-XX:MaxGCPauseMillis=50", "-XX:+ParallelRefProcEnabled", "-XX:+UnlockExperimentalVMOptions",
+    "-XX:G1NewSizePercent=20", "-XX:G1ReservePercent=20", "-XX:+DisableExplicitGC"];
 }
 
 /** Kommandozeile für alte Versionen mit Forge (minecraftArguments-Format, LaunchWrapper, eigener Spielordner). */
@@ -528,12 +537,7 @@ function buildLegacyCommand(install, dirs, account, settings, platform) {
   };
   const memory = Math.max(1024, Number(settings.memoryMb) || 4096);
   const jvm = [
-    `-Xms${Math.min(1024, memory)}M`,
-    `-Xmx${memory}M`,
-    "-XX:+UseG1GC",
-    "-XX:MaxGCPauseMillis=200",
-    "-XX:+UnlockExperimentalVMOptions",
-    "-XX:G1NewSizePercent=20",
+    ...memoryArgs({ memory, javaMajor: 8, userArgs: settings.jvmArgs }), // 1.8.9: Java 8, also G1
     `-Djava.library.path=${nativesDir}`,
     `-Dminecraft.launcher.brand=${LAUNCHER_NAME}`,
     `-Dminecraft.launcher.version=${LAUNCHER_VERSION}`,
@@ -626,4 +630,4 @@ function defaultMemoryMb() {
   return Math.max(2048, Math.min(4096, Math.floor(total / 2 / 512) * 512));
 }
 
-module.exports = { disableForgeSplash, newestVersion, loaderFor, gameDirFor, FORGE_VERSIONS, Log4jParser, Installer, buildCommand, launch, rulesAllow, collectArguments, mavenPath, MANAGED_MODS, MC_VERSION, defaultMemoryMb, availableVersions, bundledMytic };
+module.exports = { memoryArgs, disableForgeSplash, newestVersion, loaderFor, gameDirFor, FORGE_VERSIONS, Log4jParser, Installer, buildCommand, launch, rulesAllow, collectArguments, mavenPath, MANAGED_MODS, MC_VERSION, defaultMemoryMb, availableVersions, bundledMytic };
