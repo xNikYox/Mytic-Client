@@ -34,7 +34,12 @@ function signFiles(files, key = loadKey()) {
 module.exports = { signFiles, loadKey, KEY_FILE };
 
 if (require.main === module) {
-  const files = process.argv.slice(2).flatMap((arg) => (fs.statSync(arg).isDirectory()
+  // --release: nur EXE und Zip der aktuellen Version aus dist/ (nach npm run dist:win)
+  const version = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf8")).version;
+  const args = process.argv.slice(2).flatMap((arg) => (arg === "--release"
+    ? [`MyticClient-${version}.exe`, `MyticClient-${version}-win.zip`].map((f) => path.join(__dirname, "..", "dist", f)).filter((f) => fs.existsSync(f))
+    : [arg]));
+  const files = args.flatMap((arg) => (fs.statSync(arg).isDirectory()
     ? fs.readdirSync(arg).filter((f) => /\.(exe|jar|zip)$/i.test(f)).map((f) => path.join(arg, f))
     : [arg]));
   if (!files.length) {

@@ -1,5 +1,5 @@
 // Veröffentlicht auf GitHub – immer mit Signaturen, damit die Launcher der Spieler die Updates annehmen.
-//   node scripts/release.js launcher    Release "v<version>": portable EXE + Zip aus dist/ (vorher npm run dist:win)
+//   node scripts/release.js launcher [notizen.md]   Release "v<version>": portable EXE + Zip aus dist/ (vorher npm run dist:win)
 //                                       – den Installer baut und signiert danach GitHub Actions (installer.yml)
 //   node scripts/release.js mods        Release "mods-latest": Jars aus dist/mods/jars (vorher pack-mods.js)
 //   node scripts/release.js cosmetics   Release "cosmetics-latest": ../cosmetics/build/mytic-cosmetics-<v>.jar
@@ -59,7 +59,11 @@ try {
     const files = signed([`MyticClient-${version}.exe`, `MyticClient-${version}-win.zip`].map((f) => path.join(dist, f)).filter((f) => fs.existsSync(f)));
     const tag = `v${version}`;
     if (releaseExists(tag)) gh(["release", "upload", tag, ...files, "--clobber"], { stdio: "inherit" });
-    else gh(["release", "create", tag, ...files, "--title", `Mytic Client ${version}`, "--generate-notes"], { stdio: "inherit" });
+    else {
+      // Release-Notizen: optional als Datei (node scripts/release.js launcher notizen.md), sonst von GitHub erzeugt
+      const notes = process.argv[3] ? ["--notes-file", process.argv[3]] : ["--generate-notes"];
+      gh(["release", "create", tag, ...files, "--title", `Mytic Client ${version}`, ...notes], { stdio: "inherit" });
+    }
     console.log(`${tag} veröffentlicht – der Installer folgt über GitHub Actions (signiert mit Secret MYTIC_UPDATE_KEY).`);
   } else if (what === "mods") {
     const dir = path.join(root, "dist", "mods", "jars");
