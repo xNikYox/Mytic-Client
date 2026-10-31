@@ -12,6 +12,7 @@
     "dist:win": "electron-builder --win portable zip --x64",
     "postdist:win": "node scripts/sign.js dist",
     "sign": "node scripts/sign.js",
+    "release": "node scripts/release.js",
     "dist:linux": "electron-builder --linux AppImage --x64",
     "dist:win-dev": "node scripts/build-dev.js"
   },

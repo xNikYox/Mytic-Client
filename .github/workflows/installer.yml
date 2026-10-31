@@ -36,13 +36,25 @@ jobs:
         working-directory: launcher
         shell: bash
         run: npx electron-builder --win nsis --x64 --publish never --config.win.signAndEditExecutable=true
+      - name: Signieren (für die Auto-Updates)
+        working-directory: launcher
+        shell: bash
+        env:
+          MYTIC_UPDATE_KEY: ${{ secrets.MYTIC_UPDATE_KEY }}
+        run: |
+          # Ohne Signatur nehmen installierte Launcher das Update nicht an – dann lieber abbrechen als still veröffentlichen
+          if [ -z "$MYTIC_UPDATE_KEY" ]; then echo "::error::Secret MYTIC_UPDATE_KEY fehlt"; exit 1; fi
+          umask 077
+          printf '%s\n' "$MYTIC_UPDATE_KEY" > "$RUNNER_TEMP/update-key.pem"
+          MYTIC_SIGNING_KEY="$RUNNER_TEMP/update-key.pem" node scripts/sign.js dist/MyticClient-Setup-*.exe
+          rm -f "$RUNNER_TEMP/update-key.pem"
       - name: An das Release hängen
         working-directory: launcher
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release upload "$TAG" dist/MyticClient-Setup-*.exe --clobber --repo "${{ github.repository }}"
+          gh release upload "$TAG" dist/MyticClient-Setup-*.exe dist/MyticClient-Setup-*.exe.sig --clobber --repo "${{ github.repository }}"
           # zusätzlich unter festem Namen: Website lädt direkt über releases/latest/download/MyticClient-Setup.exe
           cp dist/MyticClient-Setup-*.exe dist/MyticClient-Setup.exe
           gh release upload "$TAG" dist/MyticClient-Setup.exe --clobber --repo "${{ github.repository }}"
