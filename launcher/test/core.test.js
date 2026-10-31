@@ -631,3 +631,13 @@ test("Modrinth: Dateinamen werden geprüft", () => {
   assert.equal(safeJarName("sodium-0.6.jar"), "sodium-0.6.jar");
   for (const bad of ["", ".", "..", "../evil.jar", "a/b.jar", "mod.zip", "mod.jar/..", null]) assert.throws(() => safeJarName(bad), String(bad));
 });
+
+test("Startseite: „Neu in …“ passt zur Launcher-Version", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const { newsVersion } = require("../scripts/release");
+  const version = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf8")).version;
+  const html = fs.readFileSync(path.join(__dirname, "..", "src", "renderer", "index.html"), "utf8");
+  assert.equal(newsVersion(html), version.split(".").slice(0, 2).join("."),
+    "Karte „Neu in …“ in src/renderer/index.html auf die neue Version bringen (Überschrift und Inhalt)");
+});

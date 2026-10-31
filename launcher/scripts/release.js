@@ -52,9 +52,23 @@ function replaceAssets(tag, files, title) {
   for (const name of old.filter((n) => !names.has(n))) gh(["release", "delete-asset", tag, name, "--yes"]);
 }
 
-const what = process.argv[2];
+/** Version aus der Karte „Neu in X.Y“ der Startseite (oder null). */
+function newsVersion(html) {
+  const m = /<h3>Neu in (\d+\.\d+)<\/h3>/.exec(html);
+  return m ? m[1] : null;
+}
+
+module.exports = { newsVersion };
+
+const what = require.main === module ? process.argv[2] : null;
 try {
-  if (what === "launcher") {
+  if (what === null) {
+    // nur als Modul geladen (Tests)
+  } else if (what === "launcher") {
+    // Die Spieler sehen „Neu in …“ auf der Startseite – muss bei jedem Release zur Version passen
+    const news = newsVersion(fs.readFileSync(path.join(root, "src", "renderer", "index.html"), "utf8"));
+    const minor = version.split(".").slice(0, 2).join(".");
+    if (news !== minor) throw new Error(`Startseite zeigt „Neu in ${news}“, Version ist ${version} – erst die Karte in src/renderer/index.html aktualisieren`);
     const dist = path.join(root, "dist");
     const files = signed([`MyticClient-${version}.exe`, `MyticClient-${version}-win.zip`].map((f) => path.join(dist, f)).filter((f) => fs.existsSync(f)));
     const tag = `v${version}`;
