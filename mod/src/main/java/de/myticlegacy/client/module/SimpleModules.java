@@ -37,6 +37,8 @@ public final class SimpleModules {
     }
 
     public static final class Theme extends Module {
+        /** Standardwert der Menü-Farbe: dann die Grautöne des gewählten Menü-Stils */
+        public static final int MENU_COLOR_DEFAULT = 0xFF1B1B1D;
         public final ColorSetting accent;
         public final BoolSetting customMenu;
         public final ModeSetting menuBackground;
@@ -44,6 +46,10 @@ public final class SimpleModules {
         public final ModeSetting hudStyle;
         public final ModeSetting menuStyle;
         public final SliderSetting menuOpacity;
+        /** Grundfarbe des Mod-Menüs (Lunar/Eckig); Standard = Grau des Menü-Stils */
+        public final ColorSetting menuColor;
+        /** Farbe aktiver Schalter und Markierungen (Lunar/Eckig) */
+        public final ColorSetting menuHighlight;
         /** Hintergrund des Mytic-Hauptmenüs: Szene des Launcher-Designs oder das Minecraft-Panorama. */
         public final ModeSetting titleBackground;
 
@@ -56,6 +62,8 @@ public final class SimpleModules {
             hudStyle = new ModeSetting(this, "hudStyle", "HUD-Stil", "Lunar", "Lunar", "Neon", "Klassisch");
             menuStyle = new ModeSetting(this, "menuStyle", "Menü-Stil", "Eckig", "Eckig", "Lunar", "Glas", "Neon");
             menuOpacity = new SliderSetting(this, "menuOpacity", "Menü-Deckkraft", 30, 100, 5, 75, " %");
+            menuColor = new ColorSetting(this, "menuColor", "Menü-Farbe", MENU_COLOR_DEFAULT);
+            menuHighlight = new ColorSetting(this, "menuHighlight", "Schalter-Farbe", 0xFF33B45A);
             titleBackground = new ModeSetting(this, "titleBackground", "Hauptmenü-Hintergrund", "Launcher-Design", "Launcher-Design", "Panorama");
         }
     }

@@ -2,6 +2,7 @@ package de.myticlegacy.client.gui;
 
 import de.myticlegacy.client.compat.Gfx;
 import de.myticlegacy.client.MyticClient;
+import de.myticlegacy.client.module.SimpleModules;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -174,7 +175,9 @@ public final class Ui {
         float op = (float) (MyticClient.theme.menuOpacity.get() / 100.0);
         String style = MyticClient.theme.menuStyle.get();
         int acc = accent();
-        String key = style + op + acc;
+        int menuColor = MyticClient.theme.menuColor.get() | 0xFF000000;
+        int highlight = MyticClient.theme.menuHighlight.get() | 0xFF000000;
+        String key = style + op + acc + "/" + menuColor + "/" + highlight;
         if (key.equals(paletteKey)) return;
         paletteKey = key;
         if (style.equals("Glas")) {
@@ -189,13 +192,20 @@ public final class Ui {
             L_CARD = a(0x26272A, Math.min(1f, op + 0.15f));
             L_CARD_HOVER = a(0x313236, Math.min(1f, op + 0.2f));
             L_LINE = 0x26FFFFFF;
-            L_GREEN = 0xFF33B45A;
+            L_GREEN = highlight;
         } else {
             L_PANEL = a(0x141414, 0.95f * op);
             L_CARD = a(0x222222, Math.min(1f, op + 0.15f));
             L_CARD_HOVER = a(0x2C2C2C, Math.min(1f, op + 0.2f));
             L_LINE = 0x22FFFFFF;
-            L_GREEN = 0xFF33B45A;
+            L_GREEN = highlight;
+        }
+        // Eigene Menü-Farbe (Design → Menü-Farbe): abgedunkelt, damit weiße Schrift lesbar bleibt; Karten etwas heller
+        if (!style.equals("Glas") && menuColor != SimpleModules.Theme.MENU_COLOR_DEFAULT) {
+            int panel = mix(0xFF111113, menuColor, 0.35f);
+            L_PANEL = a(panel, 0.97f * op);
+            L_CARD = a(mix(panel, 0xFFFFFFFF, 0.07f), Math.min(1f, op + 0.15f));
+            L_CARD_HOVER = a(mix(panel, 0xFFFFFFFF, 0.13f), Math.min(1f, op + 0.2f));
         }
         PANEL = a(0x0A0716, 0.95f * op);
         SURFACE = a(0x130D24, Math.min(1f, op + 0.15f));
