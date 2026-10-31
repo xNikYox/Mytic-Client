@@ -6,6 +6,7 @@ import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuTexture;
 import de.myticlegacy.client.clips.ClipRecorder;
+import com.mojang.blaze3d.opengl.GlTexture;
 import net.minecraft.client.Minecraft;
 
 import java.nio.ByteBuffer;
@@ -37,12 +38,22 @@ public final class FrameGrab {
         return Minecraft.getInstance().getMainRenderTarget().height;
     }
 
+    /** Läuft das Spiel mit OpenGL? Dann verkleinert GlGrab auf der Grafikkarte (sonst z. B. Vulkan: alter Weg über ffmpeg) */
+    public static boolean gpuScale() {
+        return Minecraft.getInstance().getMainRenderTarget().getColorTexture() instanceof GlTexture;
+    }
+
     public static void grab() {
         RenderTarget target = Minecraft.getInstance().getMainRenderTarget();
         GpuTexture tex = target.getColorTexture();
-        if (tex == null || inFlight >= 3) return;
+        if (tex == null) return;
         int w = target.width, h = target.height;
-        if (w != ClipRecorder.width() || h != ClipRecorder.height()) return; // Größe geändert: Aufnahme startet gleich neu
+        if (w != ClipRecorder.sourceWidth() || h != ClipRecorder.sourceHeight()) return; // Größe geändert: Aufnahme startet gleich neu
+        if (tex instanceof GlTexture gl && !ClipRecorder.flipped()) { // OpenGL: auf der Grafikkarte verkleinern (GlGrab)
+            GlGrab.grab(0, gl.glId(), w, h, ClipRecorder.width(), ClipRecorder.height());
+            return;
+        }
+        if (inFlight >= 3) return;
         int size = w * h * tex.getFormat().pixelSize();
         if (size != bufferSize) {
             for (GpuBuffer b : free) b.close();

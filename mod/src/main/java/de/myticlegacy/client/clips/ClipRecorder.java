@@ -50,6 +50,8 @@ public final class ClipRecorder {
 
     private static Path ffmpeg;
     private static String encoder;
+    /** Kodierer nimmt RGBA direkt (NVENC/AMF wandeln selbst auf der Grafikkarte um) – ffmpeg spart die Umwandlung */
+    private static boolean rgbaDirect;
     private static final AtomicBoolean preparing = new AtomicBoolean();
     public static volatile String status = "";
 
@@ -57,7 +59,8 @@ public final class ClipRecorder {
     private static Thread writer;
     private static ArrayBlockingQueue<ByteBuffer> queue;
     private static ArrayBlockingQueue<ByteBuffer> pool;
-    private static int width, height, fps, seconds;
+    private static int width, height, sourceWidth, sourceHeight, fps, seconds;
+    private static boolean flipped;
     private static Path session;
     private static volatile boolean saving;
 
@@ -115,6 +118,7 @@ public final class ClipRecorder {
                     if (test(found, enc[0])) {
                         ffmpeg = found;
                         encoder = enc[0];
+                        rgbaDirect = (enc[0].equals("h264_nvenc") || enc[0].equals("h264_amf")) && test(found, enc[0], "rgba");
                         status = "";
                         MyticClient.LOG.info("Clips: ffmpeg {} mit {}", found, enc[0]);
                         return;
@@ -149,9 +153,14 @@ public final class ClipRecorder {
     }
 
     private static boolean test(Path exe, String enc) {
+        return test(exe, enc, "yuv420p");
+    }
+
+    /** Probelauf: kann der Kodierer Bilder im Format pixFmt annehmen? */
+    private static boolean test(Path exe, String enc, String pixFmt) {
         try {
             Process p = new ProcessBuilder(exe.toString(), "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=black:s=640x360:d=0.3:r=30",
-                    "-c:v", enc, "-pix_fmt", "yuv420p", "-f", "null", "-").redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start();
+                    "-c:v", enc, "-pix_fmt", pixFmt, "-f", "null", "-").redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start();
             if (!p.waitFor(20, TimeUnit.SECONDS)) {
                 p.destroyForcibly();
                 return false;
@@ -227,12 +236,16 @@ public final class ClipRecorder {
     // ---------- Aufnahme ----------
 
     /**
-     * Aufnahme starten. w/h = Größe der gelieferten Bilder, outHeight = Zielhöhe (0 = wie Bildschirm),
+     * Aufnahme starten. srcW/srcH = Größe des Spielbilds, w/h = Größe der gelieferten Bilder (von der Grafikkarte schon
+     * verkleinert oder gleich srcW/srcH), outHeight = Zielhöhe für ffmpeg (0 = wie geliefert),
      * flip = Bilder kommen auf dem Kopf (OpenGL).
      */
-    public static synchronized void start(int w, int h, int outHeight, int targetFps, int lengthSeconds, boolean flip) {
+    public static synchronized void start(int srcW, int srcH, int w, int h, int outHeight, int targetFps, int lengthSeconds, boolean flip) {
         stop();
         if (!ready()) return;
+        flipped = flip;
+        sourceWidth = srcW;
+        sourceHeight = srcH;
         width = w;
         height = h;
         fps = targetFps;
@@ -246,8 +259,9 @@ public final class ClipRecorder {
             if (flip) vf.add("vflip");
             int oh = outHeight > 0 && outHeight < h ? outHeight : h;
             if (oh != h || (w & 1) != 0 || (h & 1) != 0) vf.add("scale=-2:" + (oh & ~1));
-            vf.add("format=yuv420p");
-            cmd.addAll(List.of("-vf", String.join(",", vf), "-fps_mode", "cfr", "-r", Integer.toString(fps)));
+            if (!rgbaDirect) vf.add("format=yuv420p");
+            if (!vf.isEmpty()) cmd.addAll(List.of("-vf", String.join(",", vf)));
+            cmd.addAll(List.of("-fps_mode", "cfr", "-r", Integer.toString(fps)));
             for (String[] enc : ENCODERS) {
                 if (!enc[0].equals(encoder)) continue;
                 cmd.add("-c:v");
@@ -278,7 +292,8 @@ public final class ClipRecorder {
             }, "Mytic-Clips");
             writer.setDaemon(true);
             writer.start();
-            MyticClient.LOG.info("Clips: Aufnahme {}x{} → {}p, {} fps, {} s, {}", w, h, oh, fps, seconds, encoder);
+            MyticClient.LOG.info("Clips: Aufnahme {}x{} (Spiel {}x{}) → {}p, {} fps, {} s, {}{}", w, h, srcW, srcH, oh, fps, seconds, encoder,
+                    rgbaDirect ? ", RGBA direkt" : "");
         } catch (IOException e) {
             MyticClient.LOG.warn("Clips: Start fehlgeschlagen", e);
             status = "Aufnahme konnte nicht starten";
@@ -316,6 +331,20 @@ public final class ClipRecorder {
 
     public static int width() {
         return width;
+    }
+
+    /** Bilder kommen auf dem Kopf (alter Weg ohne Verkleinern auf der Grafikkarte) */
+    public static boolean flipped() {
+        return flipped;
+    }
+
+    /** Größe des Spielbilds, für das die Aufnahme läuft (Fenstergröße geändert → Aufnahme startet neu) */
+    public static int sourceWidth() {
+        return sourceWidth;
+    }
+
+    public static int sourceHeight() {
+        return sourceHeight;
     }
 
     public static int height() {

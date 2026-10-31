@@ -63,7 +63,12 @@ public class ClipModule extends Module {
         String c = w + "x" + h + "/" + outHeight() + "/" + targetFps() + "/" + len;
         if (!ClipRecorder.running() || !c.equals(config)) {
             config = c;
-            ClipRecorder.start(w, h, outHeight(), targetFps(), len, FrameGrab.flipped());
+            if (FrameGrab.gpuScale()) {
+                // Grafikkarte verkleinert und dreht schon – ffmpeg bekommt fertige Bilder in Clip-Größe (gerade Zahlen)
+                int oh = (outHeight() > 0 && outHeight() < h ? outHeight() : h) & ~1;
+                int ow = Math.max(2, Math.round(w * (float) oh / h) & ~1);
+                ClipRecorder.start(w, h, ow, oh, 0, targetFps(), len, false);
+            } else ClipRecorder.start(w, h, w, h, outHeight(), targetFps(), len, FrameGrab.flipped());
             if (!announced && ClipRecorder.running()) {
                 announced = true;
                 Msg.actionBar("Clips: Aufnahme läuft (" + ClipRecorder.encoderName() + ")");
