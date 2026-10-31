@@ -34,6 +34,7 @@ val renames = listOf(
     Regex("""\brenderBackground\(""") to "extractBackground(",
     Regex("""original\.render\(""") to "original.extractRenderState(",
     Regex("""setTooltipForNextFrame\(font, """) to "setTooltipForNextFrame(",
+    Regex("""\bClientCommandManager\b""") to "ClientCommands", // Fabric-API für 26.x: Client-Befehle
 )
     // ab 26.2 stehen die Entity-Typen in EntityTypes
     .plus(if (mc.startsWith("26.1")) emptyList() else listOf(

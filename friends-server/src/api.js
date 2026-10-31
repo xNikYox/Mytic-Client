@@ -8,6 +8,7 @@ import { verifyLogin } from "./mojang.js";
 import { MOJANG_KEYS } from "./mojang-keys.js";
 import { CATALOG } from "./catalog.js";
 import { ADMIN_PAGE } from "./admin-page.js";
+import { START_FEN, parseFen, toFen, applyUci, status as chessStatus } from "./chess.js";
 
 /** Ab wann ein Spieler als offline gilt (Mod und Launcher melden sich jede Minute). */
 export const ONLINE_MS = 150 * 1000;
@@ -26,6 +27,14 @@ export const SHOT_BODY_MAX = 2200 * 1024; // Anfrage-Inhalt beim Screenshot-Uplo
 const CHALLENGES_TOTAL = 5000;        // offene Anmelde-Aufgaben insgesamt
 const CHALLENGES_PER_IP = 10;         // offene Anmelde-Aufgaben je Adresse
 const ADMIN_KEY_MIN = 16;
+// Schach-Partien unter Spielern
+const GAME_INVITE_MS = 10 * 60 * 1000;  // Einladung verfällt nach 10 Minuten
+const GAME_RECENT_MS = 2 * 60 * 1000;   // beendete Partien bleiben so lange in der Liste
+const GAME_KEEP_MS = 7 * 24 * 60 * 60 * 1000; // abgelehnte/zurückgezogene/verfallene Einladungen danach löschen
+const GAME_TIMES = [180, 300, 600];     // Bedenkzeit je Spieler in Sekunden
+const GAME_COLORS = ["random", "white", "black"];
+const GAME_INVITES = 5;                 // offene ausgehende Einladungen je Spieler
+const GAME_ACTIVE = 3;                  // laufende Partien je Spieler
 
 /** Anfragen je Adresse und Minute (pro Topf). */
 export const RATE_LIMITS = {
@@ -33,6 +42,7 @@ export const RATE_LIMITS = {
   auth: 20,      // Anmeldung ohne Konto (challenge, login, offline)
   upload: 10,    // Screenshot-Upload
   view: 300,     // öffentliche Screenshot-Links
+  games: 240,    // Partien abfragen (GET /api/games, ~40/min je Client während einer Partie) – statt "all"
 };
 
 /**
@@ -426,6 +436,110 @@ export function createApi(db, options = {}) {
     return row ? Number(Object.values(row)[0]) : 0;
   }
 
+  // ------------------------------------------------------------------ Schach-Partien
+
+  /** Uhren zum Zeitpunkt t: die Seite am Zug verliert seit turn_since Zeit. */
+  function gameClock(row, t) {
+    const clock = { white: row.white_ms, black: row.black_ms };
+    if (row.status === "active") {
+      const side = gameTurn(row) === "w" ? "white" : "black";
+      clock[side] = Math.max(0, clock[side] - (t - row.turn_since));
+    }
+    return clock;
+  }
+
+  function gameMoves(row) {
+    return row.moves ? row.moves.split(" ") : [];
+  }
+
+  function gameTurn(row) {
+    return gameMoves(row).length % 2 ? "b" : "w";
+  }
+
+  /** Zeitabläufe nachholen (beim Lesen und Schreiben): verfallene Einladung, abgelaufene Uhr der Seite am Zug. */
+  async function settleGame(row) {
+    const t = now();
+    if (row.status === "invited" && row.created <= t - GAME_INVITE_MS) {
+      await db.run("UPDATE games SET status = 'expired', updated = ? WHERE id = ? AND status = 'invited'", [t, row.id]);
+      return { ...row, status: "expired", updated: t };
+    }
+    if (row.status === "active") {
+      const clock = gameClock(row, t);
+      const turn = gameTurn(row);
+      if ((turn === "w" ? clock.white : clock.black) <= 0) {
+        const result = turn === "w" ? "0-1" : "1-0";
+        await db.run("UPDATE games SET status = 'over', result = ?, reason = 'timeout', white_ms = ?, black_ms = ?, draw_offer = NULL, updated = ? WHERE id = ? AND status = 'active'",
+          [result, clock.white, clock.black, t, row.id]);
+        return { ...row, status: "over", result, reason: "timeout", white_ms: clock.white, black_ms: clock.black, draw_offer: null, updated: t };
+      }
+    }
+    return row;
+  }
+
+  /** Partie, an der ich beteiligt bin (sonst 404), mit nachgeholten Zeitabläufen. */
+  async function loadGame(id, me) {
+    const row = await db.get("SELECT * FROM games WHERE id = ? AND (inviter = ? OR invitee = ?)", [String(id), me.uuid, me.uuid]);
+    if (!row) throw new HttpError(404, "Partie nicht gefunden");
+    return settleGame(row);
+  }
+
+  /** Meine Einladungen und laufenden Partien (Zeitabläufe nachgeholt). */
+  async function openGames(uuid) {
+    const rows = await db.all("SELECT * FROM games WHERE (inviter = ? OR invitee = ?) AND status IN ('invited', 'active')", [uuid, uuid]);
+    const result = [];
+    for (const row of rows) result.push(await settleGame(row));
+    return result;
+  }
+
+  async function gameViews(rows) {
+    const uuids = [...new Set(rows.flatMap((r) => [r.inviter, r.invitee]))];
+    const names = new Map();
+    if (uuids.length) {
+      for (const u of await db.all(`SELECT uuid, name FROM users WHERE uuid IN (${uuids.map(() => "?").join(",")})`, uuids)) names.set(u.uuid, u.name);
+    }
+    const t = now();
+    const person = (uuid) => (uuid ? { uuid, name: names.get(uuid) || null } : null);
+    return rows.map((row) => ({
+      id: row.id,
+      status: row.status,
+      inviter: person(row.inviter),
+      invitee: person(row.invitee),
+      white: person(row.white),
+      black: person(row.black),
+      color: row.color,
+      time: row.time_s,
+      moves: gameMoves(row),
+      fen: row.fen,
+      turn: gameTurn(row),
+      clock: gameClock(row, t),
+      drawOffer: row.draw_offer || null,
+      result: row.result || null,
+      reason: row.reason || null,
+      created: row.created,
+      updated: row.updated,
+    }));
+  }
+
+  async function gameResponse(row) {
+    return { game: (await gameViews([row]))[0], serverTime: now() };
+  }
+
+  /** Partie beenden: result "1-0" | "0-1" | "1/2-1/2". */
+  async function endGame(row, result, reason, extra = {}) {
+    const t = now();
+    const clock = gameClock(row, t);
+    const next = { ...row, white_ms: clock.white, black_ms: clock.black, ...extra, status: "over", result, reason, draw_offer: null, updated: t };
+    await db.run("UPDATE games SET status = 'over', result = ?, reason = ?, white_ms = ?, black_ms = ?, moves = ?, fen = ?, draw_offer = NULL, updated = ? WHERE id = ?",
+      [result, reason, next.white_ms, next.black_ms, next.moves, next.fen, t, row.id]);
+    return next;
+  }
+
+  /** Laufende Partie, in der ich mitspiele; meine Farbe ("w"/"b"). */
+  function myColor(row, me) {
+    if (row.status !== "active") throw new HttpError(409, "Partie läuft nicht");
+    return row.white === me.uuid ? "w" : "b";
+  }
+
   const routes = {
     "GET /api/health": async () => ({ ok: true, offline: allowOffline }),
 
@@ -766,6 +880,134 @@ export function createApi(db, options = {}) {
       await db.run("DELETE FROM requests WHERE sender = ? AND target = ?", [me.uuid, String(uuid)]);
       return overview(me);
     },
+
+    // ------------------------------------------------------------------ Schach
+    /** Meine Einladungen (ein- und ausgehend), laufende Partien und kürzlich beendete. */
+    "GET /api/games": async (request) => {
+      const me = await auth(request);
+      const open = (await openGames(me.uuid)).filter((g) => g.status === "invited" || g.status === "active");
+      const recent = await db.all("SELECT * FROM games WHERE (inviter = ? OR invitee = ?) AND status IN ('over', 'declined', 'cancelled') AND updated > ?",
+        [me.uuid, me.uuid, now() - GAME_RECENT_MS]);
+      const ids = new Set(open.map((g) => g.id));
+      const rows = [...open, ...recent.filter((g) => !ids.has(g.id))].sort((x, y) => y.updated - x.updated);
+      return { games: await gameViews(rows), serverTime: now() };
+    },
+
+    /** Einladen: { to: Minecraft-Name, time: 180|300|600, color: "random"|"white"|"black" (eigene Farbe) }. */
+    "POST /api/games": async (request) => {
+      const me = await auth(request);
+      const data = await body(request);
+      const time = Number(data.time);
+      const color = data.color === undefined ? "random" : data.color;
+      if (!GAME_TIMES.includes(time)) throw new HttpError(400, "Ungültige Bedenkzeit");
+      if (!GAME_COLORS.includes(color)) throw new HttpError(400, "Ungültige Farbe");
+      if (typeof data.to !== "string" || !NAME.test(data.to.trim())) throw new HttpError(400, "Ungültiger Name");
+      const target = await findUser(data.to);
+      if (!target) throw new HttpError(404, "Dieser Spieler nutzt den Mytic Client nicht");
+      if (target.uuid === me.uuid) throw new HttpError(400, "Du kannst dich nicht selbst einladen");
+      const t = now();
+      await db.run("DELETE FROM games WHERE status IN ('declined', 'cancelled', 'expired') AND updated < ?", [t - GAME_KEEP_MS]);
+      const mine = await openGames(me.uuid);
+      if (mine.some((g) => (g.status === "invited" || g.status === "active") && (g.inviter === target.uuid || g.invitee === target.uuid))) {
+        throw new HttpError(409, `Mit ${target.name} gibt es schon eine Einladung oder Partie`);
+      }
+      if (mine.filter((g) => g.status === "invited" && g.inviter === me.uuid).length >= GAME_INVITES) throw new HttpError(429, "Zu viele offene Einladungen");
+      if (mine.filter((g) => g.status === "active").length >= GAME_ACTIVE) throw new HttpError(429, `Höchstens ${GAME_ACTIVE} Partien gleichzeitig`);
+      const id = randomHex(8);
+      await db.run("INSERT INTO games (id, inviter, invitee, color, time_s, status, moves, fen, white_ms, black_ms, turn_since, created, updated) VALUES (?, ?, ?, ?, ?, 'invited', '', ?, ?, ?, 0, ?, ?)",
+        [id, me.uuid, target.uuid, color, time, START_FEN, time * 1000, time * 1000, t, t]);
+      return gameResponse(await db.get("SELECT * FROM games WHERE id = ?", [id]));
+    },
+
+    "POST /api/games/:id/accept": async (request, ip, id) => {
+      const me = await auth(request);
+      const row = await loadGame(id, me);
+      if (row.invitee !== me.uuid) throw new HttpError(403, "Nur der Eingeladene kann annehmen");
+      if (row.status !== "invited") throw new HttpError(409, "Einladung ist nicht mehr offen");
+      for (const uuid of [row.inviter, row.invitee]) {
+        if ((await openGames(uuid)).filter((g) => g.status === "active").length >= GAME_ACTIVE) throw new HttpError(429, `Höchstens ${GAME_ACTIVE} Partien gleichzeitig`);
+      }
+      const inviterWhite = row.color === "white" || (row.color === "random" && crypto.getRandomValues(new Uint8Array(1))[0] < 128);
+      const [white, black] = inviterWhite ? [row.inviter, row.invitee] : [row.invitee, row.inviter];
+      const t = now();
+      await db.run("UPDATE games SET status = 'active', white = ?, black = ?, white_ms = ?, black_ms = ?, turn_since = ?, updated = ? WHERE id = ? AND status = 'invited'",
+        [white, black, row.time_s * 1000, row.time_s * 1000, t, t, row.id]);
+      return gameResponse(await db.get("SELECT * FROM games WHERE id = ?", [row.id]));
+    },
+
+    "POST /api/games/:id/decline": async (request, ip, id) => {
+      const me = await auth(request);
+      const row = await loadGame(id, me);
+      if (row.invitee !== me.uuid) throw new HttpError(403, "Nur der Eingeladene kann ablehnen");
+      if (row.status !== "invited") throw new HttpError(409, "Einladung ist nicht mehr offen");
+      await db.run("UPDATE games SET status = 'declined', updated = ? WHERE id = ?", [now(), row.id]);
+      return gameResponse(await db.get("SELECT * FROM games WHERE id = ?", [row.id]));
+    },
+
+    "POST /api/games/:id/cancel": async (request, ip, id) => {
+      const me = await auth(request);
+      const row = await loadGame(id, me);
+      if (row.inviter !== me.uuid) throw new HttpError(403, "Nur der Einladende kann zurückziehen");
+      if (row.status !== "invited") throw new HttpError(409, "Einladung ist nicht mehr offen");
+      await db.run("UPDATE games SET status = 'cancelled', updated = ? WHERE id = ?", [now(), row.id]);
+      return gameResponse(await db.get("SELECT * FROM games WHERE id = ?", [row.id]));
+    },
+
+    /** Zug: { move: "e2e4" | "e7e8q", ply: Anzahl bereits gespielter Halbzüge }. */
+    "POST /api/games/:id/move": async (request, ip, id) => {
+      const me = await auth(request);
+      const data = await body(request);
+      const row = await loadGame(id, me);
+      const color = myColor(row, me);
+      const moves = gameMoves(row);
+      if (data.ply !== moves.length) throw new HttpError(409, "Partie hat sich geändert – bitte neu laden");
+      if (gameTurn(row) !== color) throw new HttpError(409, "Du bist nicht am Zug");
+      const move = typeof data.move === "string" ? data.move.trim().toLowerCase() : "";
+      const state = /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(move) ? parseFen(row.fen) : null;
+      const next = state && applyUci(state, move);
+      if (!next) throw new HttpError(400, "Unerlaubter Zug");
+      const t = now();
+      const clock = gameClock(row, t);
+      const updated = { ...row, moves: [...moves, move].join(" "), fen: toFen(next), white_ms: clock.white, black_ms: clock.black, turn_since: t, draw_offer: null, updated: t };
+      const result = chessStatus(next);
+      if (result === "checkmate") return gameResponse(await endGame(updated, color === "w" ? "1-0" : "0-1", "checkmate", updated));
+      if (result === "stalemate") return gameResponse(await endGame(updated, "1/2-1/2", "stalemate", updated));
+      await db.run("UPDATE games SET moves = ?, fen = ?, white_ms = ?, black_ms = ?, turn_since = ?, draw_offer = NULL, updated = ? WHERE id = ?",
+        [updated.moves, updated.fen, updated.white_ms, updated.black_ms, t, t, row.id]);
+      return gameResponse(updated);
+    },
+
+    "POST /api/games/:id/resign": async (request, ip, id) => {
+      const me = await auth(request);
+      const row = await loadGame(id, me);
+      const color = myColor(row, me);
+      return gameResponse(await endGame(row, color === "w" ? "0-1" : "1-0", "resign"));
+    },
+
+    /** Remis: { action: "offer" | "accept" | "decline" }. */
+    "POST /api/games/:id/draw": async (request, ip, id) => {
+      const me = await auth(request);
+      const { action } = await body(request);
+      const row = await loadGame(id, me);
+      myColor(row, me);
+      const opponentOffered = Boolean(row.draw_offer) && row.draw_offer !== me.uuid;
+      if (action === "offer") {
+        // hat der Gegner schon angeboten, gilt das eigene Angebot als Annahme
+        if (opponentOffered) return gameResponse(await endGame(row, "1/2-1/2", "agreement"));
+        await db.run("UPDATE games SET draw_offer = ?, updated = ? WHERE id = ?", [me.uuid, now(), row.id]);
+        return gameResponse({ ...row, draw_offer: me.uuid, updated: now() });
+      }
+      if (action === "accept") {
+        if (!opponentOffered) throw new HttpError(409, "Kein Remis-Angebot");
+        return gameResponse(await endGame(row, "1/2-1/2", "agreement"));
+      }
+      if (action === "decline") {
+        if (!opponentOffered) throw new HttpError(409, "Kein Remis-Angebot");
+        await db.run("UPDATE games SET draw_offer = NULL, updated = ? WHERE id = ?", [now(), row.id]);
+        return gameResponse({ ...row, draw_offer: null, updated: now() });
+      }
+      throw new HttpError(400, "Ungültige Aktion");
+    },
   };
 
   /** Adresse des Aufrufers: von node-server.js übergeben oder (Cloudflare) aus der Kopfzeile ipHeader. */
@@ -814,13 +1056,17 @@ export function createApi(db, options = {}) {
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
       return new Response(bytes, { headers: { "content-type": "image/jpeg", "cache-control": "public, max-age=31536000, immutable", "access-control-allow-origin": "*", "x-content-type-options": "nosniff" } });
     }
-    const name = `${request.method} ${path}`;
+    let name = `${request.method} ${path}`;
+    // Partie-Aktionen: /api/games/<id>/<aktion>
+    const game = path.match(/^\/api\/games\/([^/]+)\/([a-z]+)$/);
+    if (game) name = `${request.method} /api/games/:id/${game[2]}`;
     const route = routes[name];
     if (!route) return json({ error: "Nicht gefunden" }, 404);
-    limit("all", ip);
+    // Abfragen der Partien (häufig während einer Partie) haben einen eigenen Topf statt "all"
+    limit(name === "GET /api/games" ? "games" : "all", ip);
     if (STRICT[name]) limit(STRICT[name], ip);
     try {
-      return json(await route(request, ip));
+      return json(await route(request, ip, game ? game[1] : null));
     } catch (error) {
       if (error instanceof HttpError) return json({ error: error.message }, error.status, error.retryAfter);
       log(`Fehler bei ${path}: ${error.stack || error.message}`);

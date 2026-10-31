@@ -59,6 +59,29 @@ CREATE TABLE IF NOT EXISTS requests (
   created INTEGER NOT NULL,
   PRIMARY KEY (sender, target)
 );
+CREATE TABLE IF NOT EXISTS games (
+  id TEXT PRIMARY KEY,
+  inviter TEXT NOT NULL,
+  invitee TEXT NOT NULL,
+  white TEXT,
+  black TEXT,
+  color TEXT NOT NULL,
+  time_s INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  result TEXT,
+  reason TEXT,
+  moves TEXT NOT NULL DEFAULT '',
+  fen TEXT NOT NULL,
+  white_ms INTEGER NOT NULL,
+  black_ms INTEGER NOT NULL,
+  turn_since INTEGER NOT NULL DEFAULT 0,
+  draw_offer TEXT,
+  created INTEGER NOT NULL,
+  updated INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS games_inviter ON games (inviter, status);
+CREATE INDEX IF NOT EXISTS games_invitee ON games (invitee, status);
+CREATE INDEX IF NOT EXISTS games_status ON games (status, created);
 `;
 
 /** Spätere Erweiterungen bestehender Datenbanken (Fehler "Spalte gibt es schon" wird ignoriert). */

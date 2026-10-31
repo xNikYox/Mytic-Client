@@ -54,7 +54,7 @@ form.append("metadata", new Blob([JSON.stringify({
   keep_bindings: ["secret_text"],
   ...(exists ? {} : { migrations: { new_tag: "v1", new_sqlite_classes: ["FriendsStore"] } }),
 })], { type: "application/json" }));
-for (const file of ["worker.js", "api.js", "skin.js", "schema.js", "mojang.js", "mojang-keys.js", "catalog.js", "admin-page.js"]) {
+for (const file of ["worker.js", "api.js", "skin.js", "schema.js", "mojang.js", "mojang-keys.js", "catalog.js", "admin-page.js", "chess.js"]) {
   form.append(file, new Blob([fs.readFileSync(path.join(here, "src", file))], { type: "application/javascript+module" }), file);
 }
 await api("PUT", `/workers/scripts/${NAME}`, form);
