@@ -22,6 +22,15 @@ public final class FrameGrab {
         return true;
     }
 
+    /** Für GlSaturation: Framebuffer des Haupt-Ziels */
+    public static int glFramebuffer() {
+        return Minecraft.getInstance().getMainRenderTarget().frameBufferId;
+    }
+
+    public static int glTexture() {
+        return Minecraft.getInstance().getMainRenderTarget().getColorTextureId();
+    }
+
     public static int width() {
         return Minecraft.getInstance().getMainRenderTarget().width;
     }

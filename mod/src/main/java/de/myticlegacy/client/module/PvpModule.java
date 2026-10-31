@@ -18,6 +18,9 @@ public class PvpModule extends Module {
     public final SliderSetting critMultiplier;
     public final SliderSetting sharpMultiplier;
     public final de.myticlegacy.client.setting.ModeSetting hitTarget;
+    public final BoolSetting hitArmor;
+    /** Wird das Wesen, dessen Rüstung gleich gezeichnet wird, gerade getroffen? (gesetzt in HurtOverlayMixin, nur Render-Thread) */
+    private static boolean armorHurt;
     private int appliedHit = Integer.MIN_VALUE;
 
     public PvpModule() {
@@ -25,6 +28,7 @@ public class PvpModule extends Module {
         hitColorOn = new BoolSetting(this, "hitColorOn", "Eigene Treffer-Farbe", true);
         hitColor = new ColorSetting(this, "hitColor", "Treffer-Farbe", 0xFF9B5CFF);
         hitTarget = new de.myticlegacy.client.setting.ModeSetting(this, "hitTarget", "Treffer-Farbe für", "Alle", "Alle", "Nur Spieler");
+        hitArmor = new BoolSetting(this, "hitArmor", "Rüstung auch färben", false);
         outlineOn = new BoolSetting(this, "outlineOn", "Eigener Blockrahmen", true);
         outlineColor = new ColorSetting(this, "outlineColor", "Blockrahmen-Farbe", 0xFFFFFFFF);
         outlineWidth = new SliderSetting(this, "outlineWidth", "Blockrahmen-Dicke", 1, 8, 0.5, 2.5, " px");
@@ -74,6 +78,25 @@ public class PvpModule extends Module {
     /** Eigene Treffer-Farbe nur für Spieler – andere Wesen bleiben rot (HurtOverlayMixin) */
     public static boolean playersOnly() {
         return hitColor() != null && instance.hitTarget.is("Nur Spieler");
+    }
+
+    /** Vor dem Zeichnen eines Wesens (getOverlayCoords): merken, ob seine Rüstung die Treffer-Farbe bekommt */
+    public static void armorHurt(boolean hurt, boolean player) {
+        armorHurt = hurt && on() && instance.hitArmor.get() && (player || !playersOnly());
+    }
+
+    /**
+     * Farbe einer Rüstungsschicht (ArmorHitColorMixin): bei Treffer mit der Treffer-Farbe eingefärbt (sonst Minecraft-Rot).
+     * Minecrafts Rüstungs-Shader ignoriert die Treffer-Overlay-Textur, daher über die Vertex-Farbe.
+     */
+    public static int armorColor(int color) {
+        if (!armorHurt) return color;
+        Integer c = hitColor();
+        int tint = de.myticlegacy.client.gui.Ui.mix(0xFFFFFFFF, c == null ? 0xFFFF0000 : c | 0xFF000000, 0.65f);
+        int r = ((color >> 16) & 0xFF) * ((tint >> 16) & 0xFF) / 255;
+        int g = ((color >> 8) & 0xFF) * ((tint >> 8) & 0xFF) / 255;
+        int b = (color & 0xFF) * (tint & 0xFF) / 255;
+        return (color & 0xFF000000) | (r << 16) | (g << 8) | b;
     }
 
     /** Zeile der Overlay-Textur für getroffene Nicht-Spieler, wenn „Nur Spieler“ an ist (dort bleibt Minecraft-Rot) */

@@ -87,6 +87,7 @@ public final class MyticClient implements ClientModInitializer {
     public static de.myticlegacy.client.module.StreamerModule streamer;
     public static de.myticlegacy.client.module.ClipModule clips;
     public static de.myticlegacy.client.module.PvpModule pvp;
+    public static de.myticlegacy.client.module.SaturationModule saturation;
     private static KeyMapping streamerKey, galleryKey, clipKey;
     private static final KeyMapping[] profileKeys = new KeyMapping[3];
     public static de.myticlegacy.client.hud.ScreenshotModule screenshot;
@@ -222,6 +223,7 @@ public final class MyticClient implements ClientModInitializer {
         streamer = module(new de.myticlegacy.client.module.StreamerModule());
         clips = module(new de.myticlegacy.client.module.ClipModule());
         pvp = module(new de.myticlegacy.client.module.PvpModule());
+        saturation = module(new de.myticlegacy.client.module.SaturationModule());
         shulkerPreview = module(new ShulkerPreviewModule());
         friends = module(new FriendsModule());
         theme = module(new SimpleModules.Theme());

@@ -19,6 +19,8 @@
     "ShieldMixin",
     "CritMixin",
     "HurtOverlayMixin",
+    "ArmorHitColorMixin",
+    "SaturationMixin",
     "TotemPopMixin",
     "ClipCaptureMixin",
     "VanillaHudMixin",

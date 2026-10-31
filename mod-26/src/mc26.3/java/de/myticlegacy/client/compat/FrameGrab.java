@@ -43,6 +43,16 @@ public final class FrameGrab {
         return target().getColorTexture() instanceof GlTexture;
     }
 
+    /** Für GlSaturation: Framebuffer des Haupt-Ziels (hier nicht direkt verfügbar → 0) */
+    public static int glFramebuffer() {
+        return 0;
+    }
+
+    /** Für GlSaturation: OpenGL-Textur des Haupt-Ziels oder 0 (z. B. Vulkan) */
+    public static int glTexture() {
+        return target().getColorTexture() instanceof GlTexture gl ? gl.glId() : 0;
+    }
+
     public static void grab() {
         RenderTarget target = target();
         GpuTexture tex = target.getColorTexture();

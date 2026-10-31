@@ -15,6 +15,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class HurtOverlayMixin {
     @Inject(method = "getOverlayCoords(Lnet/minecraft/client/renderer/entity/state/LivingEntityRenderState;F)I", at = @At("RETURN"), cancellable = true, require = 0)
     private static void mytic$playersOnly(LivingEntityRenderState state, float white, CallbackInfoReturnable<Integer> cir) {
+        PvpModule.armorHurt(state.hasRedOverlay, state instanceof PlayerRenderState); // für „Rüstung auch färben“ (ArmorHitColorMixin)
         if (state.hasRedOverlay && !(state instanceof PlayerRenderState) && PvpModule.playersOnly())
             cir.setReturnValue(OverlayTexture.pack(OverlayTexture.u(white), PvpModule.VANILLA_HURT_ROW));
     }
