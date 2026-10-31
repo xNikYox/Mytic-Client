@@ -52,7 +52,10 @@ public final class CosmeticsCore {
     private static final long REMOTE_MS = 2 * 60 * 1000;
 
     private static final String PACK = System.getProperty("mytic.cosmetics", "").trim();
-    private static List<Cape> capes;
+    /** volatile: nach dem Laden ohne Sperre lesbar (wird zuletzt gesetzt, nach Flügeln, Auren und Schilden) */
+    private static volatile List<Cape> capes;
+    /** UUID ohne Striche je Spieler – wird pro Spieler und Frame mehrfach gebraucht, daher zwischengespeichert */
+    private static final Map<java.util.UUID, String> KEYS = new ConcurrentHashMap<>();
     /** Flügel aus dem Katalog: {id, name} */
     private static List<String[]> wings = Collections.emptyList();
     /**
@@ -129,6 +132,7 @@ public final class CosmeticsCore {
                 for (JsonElement e : answer.getAsJsonArray("items")) set.add(e.getAsString());
                 boolean changed = !set.equals(owned);
                 owned = set;
+                forgetSelection();
                 admin = answer.has("admin") && answer.get("admin").getAsBoolean();
                 MyticClient.config().ownedCache = new ArrayList<String>(set);
                 MyticClient.config().adminCache = admin;
@@ -165,8 +169,24 @@ public final class CosmeticsCore {
     }
 
     /** Katalog aus cosmetics.json im Paket (leer, wenn das Paket fehlt). */
+    public static List<Cape> capes() {
+        List<Cape> c = capes;
+        return c != null ? c : loadCapes();
+    }
+
+    /** UUID ohne Striche (Schlüssel für die Cosmetics anderer Spieler) */
+    public static String key(java.util.UUID uuid) {
+        String k = KEYS.get(uuid);
+        if (k == null) {
+            if (KEYS.size() > 4096) KEYS.clear();
+            k = uuid.toString().replace("-", "");
+            KEYS.put(uuid, k);
+        }
+        return k;
+    }
+
     @SuppressWarnings("deprecation")
-    public static synchronized List<Cape> capes() {
+    private static synchronized List<Cape> loadCapes() {
         if (capes != null) return capes;
         List<Cape> list = new ArrayList<>();
         if (!PACK.isEmpty() && new File(PACK).isFile()) {
@@ -241,8 +261,20 @@ public final class CosmeticsCore {
      * Nametag-Rohtext in Anzeige-Text umwandeln: &0–&9, &a–&f (Farben) und &k, &l, &m, &n, &o, &r (Format) werden zu
      * Minecraft-Formatcodes; andere §-Zeichen und Steuerzeichen fallen weg. null, wenn nichts Sichtbares übrig bleibt.
      */
+    /** Formatierte Nametags je Rohtext – werden pro Spieler und Frame gebraucht */
+    private static final Map<String, String> NAMETAGS = new ConcurrentHashMap<>();
+
     public static String formatNametag(String raw) {
         if (raw == null) return null;
+        String done = NAMETAGS.get(raw);
+        if (done != null) return done;
+        if (NAMETAGS.size() > 512) NAMETAGS.clear();
+        done = buildNametag(raw);
+        if (done != null) NAMETAGS.put(raw, done);
+        return done;
+    }
+
+    private static String buildNametag(String raw) {
         StringBuilder out = new StringBuilder();
         int visible = 0;
         for (int i = 0; i < raw.length() && out.length() < NAMETAG_RAW * 2; i++) {
@@ -294,11 +326,14 @@ public final class CosmeticsCore {
         String demo = System.getProperty("mytic.auraDemo");
         if ("all".equals(demo) && !auras().isEmpty()) return auras().get((int) ((System.currentTimeMillis() / 5000) % auras().size())).id;
         if (demo != null && aura(demo) != null) return demo;
-        String id = MyticClient.config().aura;
-        return aura(id) != null && owns("aura", id) ? id : null;
+        return memo(SEL_AURA, () -> {
+            String id = MyticClient.config().aura;
+            return aura(id) != null && owns("aura", id) ? id : null;
+        });
     }
 
     public static void selectAura(String id) {
+        forgetSelection();
         MyticClient.config().aura = id;
         MyticClient.config().save();
         push();
@@ -339,11 +374,14 @@ public final class CosmeticsCore {
     public static String selectedShield() {
         String demo = System.getProperty("mytic.shieldDemo");
         if (demo != null && hasShield(demo)) return demo;
-        String id = MyticClient.config().shield;
-        return hasShield(id) && owns("shield", id) ? id : null;
+        return memo(SEL_SHIELD, () -> {
+            String id = MyticClient.config().shield;
+            return hasShield(id) && owns("shield", id) ? id : null;
+        });
     }
 
     public static void selectShield(String id) {
+        forgetSelection();
         MyticClient.config().shield = id;
         MyticClient.config().save();
         push();
@@ -377,8 +415,10 @@ public final class CosmeticsCore {
     /** Eigene Flügel (Vorschau: -Dmytic.wingsDemo=true wechselt alle 4 Sekunden). */
     public static String selectedWings() {
         if (Boolean.getBoolean("mytic.wingsDemo") && !wings().isEmpty()) return wings().get((int) ((System.currentTimeMillis() / 4000) % wings().size()))[0];
-        String id = MyticClient.config().wings;
-        return hasWings(id) && owns("wings", id) ? id : null;
+        return memo(SEL_WINGS, () -> {
+            String id = MyticClient.config().wings;
+            return hasWings(id) && owns("wings", id) ? id : null;
+        });
     }
 
     public static Cape byId(String id) {
@@ -394,11 +434,35 @@ public final class CosmeticsCore {
     // ------------------------------------------------------------------------------------------ Auswahl
 
     public static String selected() {
-        String id = MyticClient.config().cape;
-        return byId(id) != null && owns("cape", id) ? id : null;
+        return memo(SEL_CAPE, () -> {
+            String id = MyticClient.config().cape;
+            return byId(id) != null && owns("cape", id) ? id : null;
+        });
+    }
+
+    // Eigene Auswahl wird pro Frame mehrfach gebraucht (Freischaltung prüfen baut Texte) – kurz merken, bei Auswahl sofort neu
+    private static final class Memo {
+        volatile long at;
+        volatile String value;
+    }
+
+    private static final Memo SEL_CAPE = new Memo(), SEL_WINGS = new Memo(), SEL_SHIELD = new Memo(), SEL_AURA = new Memo();
+
+    private static String memo(Memo m, java.util.function.Supplier<String> compute) {
+        long now = System.nanoTime();
+        if (m.at != 0 && now - m.at < 250_000_000L) return m.value;
+        String v = compute.get();
+        m.value = v;
+        m.at = now;
+        return v;
+    }
+
+    private static void forgetSelection() {
+        SEL_CAPE.at = SEL_WINGS.at = SEL_SHIELD.at = SEL_AURA.at = 0;
     }
 
     public static void select(String id) {
+        forgetSelection();
         MyticClient.config().cape = id;
         MyticClient.config().save();
         push();
@@ -446,6 +510,7 @@ public final class CosmeticsCore {
     }
 
     public static void selectWings(String id) {
+        forgetSelection();
         MyticClient.config().wings = id;
         MyticClient.config().save();
         push();

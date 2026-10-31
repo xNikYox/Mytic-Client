@@ -25,7 +25,7 @@ public final class Shields {
         Object owner = OWNER.get();
         Minecraft mc = Minecraft.getInstance();
         if (!(owner instanceof Entity e) || mc.player == null) return null;
-        return CosmeticsCore.shieldOf(e.getUUID().toString().replace("-", ""), e.getUUID().equals(mc.player.getUUID()));
+        return CosmeticsCore.shieldOf(CosmeticsCore.key(e.getUUID()), e.getUUID().equals(mc.player.getUUID()));
     }
 
     /** ID aus einer Markierung oder null. */

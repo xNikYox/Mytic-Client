@@ -29,7 +29,7 @@ public final class Cosmetics {
     }
 
     private static String uuid(Player player) {
-        return player.getUUID().toString().replace("-", "");
+        return CosmeticsCore.key(player.getUUID());
     }
 
     /** Umhang für diesen Spieler oder null (dann bleibt der normale). */
@@ -81,7 +81,7 @@ public final class Cosmetics {
     public static String wingsFor(Object entity) {
         Minecraft mc = Minecraft.getInstance();
         if (!(entity instanceof net.minecraft.world.entity.Entity e) || mc.player == null) return null;
-        return CosmeticsCore.wingsOf(e.getUUID().toString().replace("-", ""), e.getUUID().equals(mc.player.getUUID()));
+        return CosmeticsCore.wingsOf(CosmeticsCore.key(e.getUUID()), e.getUUID().equals(mc.player.getUUID()));
     }
 
     /** Ein Aura-Sprite im Menü (aus aura/<id>_icon.png: Sprites je 32x32 nebeneinander). */

@@ -18,7 +18,7 @@ public final class Nametags {
     public static Component[] decorate(Object entity, Component name, Component score) {
         Minecraft mc = Minecraft.getInstance();
         if (!(entity instanceof Entity e) || name == null || mc.player == null) return null;
-        String tag = CosmeticsCore.nametagOf(e.getUUID().toString().replace("-", ""), e.getUUID().equals(mc.player.getUUID()));
+        String tag = CosmeticsCore.nametagOf(CosmeticsCore.key(e.getUUID()), e.getUUID().equals(mc.player.getUUID()));
         if (tag == null) return null;
         Component bottom = score == null ? name : name.copy().append(Component.literal(" §7· ")).append(score);
         return new Component[]{Component.literal(tag), bottom};

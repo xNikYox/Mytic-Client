@@ -22,7 +22,7 @@ public final class MiniMe {
     public static PlayerSkin[] skinsFor(Object entity) {
         Minecraft mc = Minecraft.getInstance();
         if (!(entity instanceof Entity e) || mc.player == null) return null;
-        String uuid = e.getUUID().toString().replace("-", "");
+        String uuid = CosmeticsCore.key(e.getUUID());
         boolean self = e.getUUID().equals(mc.player.getUUID());
         PlayerSkin[] skins = null;
         for (int i = 0; i < MiniMeCore.POSITIONS.length; i++) {

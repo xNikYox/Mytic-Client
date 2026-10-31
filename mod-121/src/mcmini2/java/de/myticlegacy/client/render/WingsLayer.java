@@ -78,7 +78,7 @@ public class WingsLayer extends RenderLayer<PlayerRenderState, PlayerModel> {
         if (list == null) return;
         ResourceLocation texture = ResourceLocation.fromNamespaceAndPath("myticclient", "textures/wings/" + id + "_feather.png");
         for (FeatherFx.Feather f : list) {
-            if (!(f.part instanceof ModelPart)) f.part = featherPart();
+            if (!(f.part instanceof ModelPart)) f.part = feather == null ? (feather = featherPart()) : feather; // eins für alle (wird sofort gezeichnet)
             ModelPart part = (ModelPart) f.part;
             part.setRotation(0f, (float) Math.toRadians(f.spin()), (float) Math.toRadians(f.rock()));
             float[] at = FeatherFx.local(f, x, y, z, bodyRot, 0.9375f, 1.501f);
@@ -90,6 +90,8 @@ public class WingsLayer extends RenderLayer<PlayerRenderState, PlayerModel> {
             pose.popPose();
         }
     }
+
+    private static ModelPart feather;
 
     /** Eine Feder: 4x8 Pixel, flach; Textur 8x8 mit Vorder- und Rückseite. */
     private static ModelPart featherPart() {

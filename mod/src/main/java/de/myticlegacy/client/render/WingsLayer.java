@@ -46,7 +46,7 @@ public class WingsLayer extends RenderLayer<AvatarRenderState, PlayerModel> {
     public void submit(PoseStack pose, SubmitNodeCollector collector, int light, AvatarRenderState state, float yRot, float xRot) {
         String id = ((WingsState) state).mytic$wings();
         if (id == null || state.isInvisible) return;
-        Identifier texture = Identifier.fromNamespaceAndPath("myticclient", "textures/wings/" + id + ".png");
+        Identifier texture = WING_TEXTURES.computeIfAbsent(id, w -> Identifier.fromNamespaceAndPath("myticclient", "textures/wings/" + w + ".png"));
         boolean flying = state.isFallFlying;
         float t = state.ageInTicks;
         float flap = (float) Math.sin(t * (flying ? 0.55f : 0.13f)) * (flying ? 22f : 10f);
@@ -66,7 +66,11 @@ public class WingsLayer extends RenderLayer<AvatarRenderState, PlayerModel> {
         collector.submitModelPart(right, pose, RenderTypes.entityCutoutNoCull(texture), light, OverlayTexture.NO_OVERLAY, null);
         // animierte Leucht-Ebene mit voller Helligkeit darüber (Lichtband, Funkeln, pulsierender Rand)
         int frame = (int) ((System.currentTimeMillis() / CosmeticsCore.WING_FX_MS) % CosmeticsCore.WING_FX_FRAMES);
-        Identifier fx = Identifier.fromNamespaceAndPath("myticclient", "textures/wings/" + id + "_fx_" + frame + ".png");
+        Identifier fx = WING_FX.computeIfAbsent(id, w -> {
+            Identifier[] all = new Identifier[CosmeticsCore.WING_FX_FRAMES];
+            for (int i = 0; i < all.length; i++) all[i] = Identifier.fromNamespaceAndPath("myticclient", "textures/wings/" + w + "_fx_" + i + ".png");
+            return all;
+        })[frame];
         collector.submitModelPart(left, pose, RenderTypes.entityTranslucentEmissive(fx), light, OverlayTexture.NO_OVERLAY, null);
         collector.submitModelPart(right, pose, RenderTypes.entityTranslucentEmissive(fx), light, OverlayTexture.NO_OVERLAY, null);
         pose.popPose();
@@ -77,20 +81,27 @@ public class WingsLayer extends RenderLayer<AvatarRenderState, PlayerModel> {
     private static void feathers(PoseStack pose, SubmitNodeCollector collector, int light, AvatarRenderState state, String id) {
         java.util.List<FeatherFx.Feather> list = FeatherFx.update(state.id, state.x, state.y, state.z, state.bodyRot, state.isFallFlying);
         if (list == null) return;
-        Identifier texture = Identifier.fromNamespaceAndPath("myticclient", "textures/wings/" + id + "_feather.png");
+        Identifier texture = FEATHER_TEXTURES.computeIfAbsent(id, w -> Identifier.fromNamespaceAndPath("myticclient", "textures/wings/" + w + "_feather.png"));
+        if (feather == null) feather = featherPart();
         for (FeatherFx.Feather f : list) {
-            if (!(f.part instanceof ModelPart)) f.part = featherPart();
-            ModelPart part = (ModelPart) f.part;
-            part.setRotation(0f, (float) Math.toRadians(f.spin()), (float) Math.toRadians(f.rock()));
             float[] at = FeatherFx.local(f, state.x, state.y, state.z, state.bodyRot, 0.9375f, 1.501f);
             float size = f.size() * 1.6f;
             pose.pushPose();
             pose.translate(at[0], at[1], at[2]);
             pose.scale(size, size, size);
-            collector.submitModelPart(part, pose, RenderTypes.entityCutoutNoCull(texture), light, OverlayTexture.NO_OVERLAY, null);
+            // Drehung in die Pose statt ins Modellteil: alle Federn teilen sich ein Teil, gezeichnet wird erst später
+            pose.mulPose(SPIN.rotationZYX((float) Math.toRadians(f.rock()), (float) Math.toRadians(f.spin()), 0f));
+            collector.submitModelPart(feather, pose, RenderTypes.entityCutoutNoCull(texture), light, OverlayTexture.NO_OVERLAY, null);
             pose.popPose();
         }
     }
+
+    private static ModelPart feather;
+    // Textur-Namen je Flügel einmal anlegen statt pro Frame (nur Render-Thread)
+    private static final java.util.Map<String, Identifier> WING_TEXTURES = new java.util.HashMap<>();
+    private static final java.util.Map<String, Identifier[]> WING_FX = new java.util.HashMap<>();
+    private static final java.util.Map<String, Identifier> FEATHER_TEXTURES = new java.util.HashMap<>();
+    private static final org.joml.Matrix4f SPIN = new org.joml.Matrix4f(); // Hilfsmatrix, nur Render-Thread (mulPose rechnet sie sofort ein)
 
     /** Eine Feder: 4x8 Pixel, flach; Textur 8x8 mit Vorder- und Rückseite. */
     private static ModelPart featherPart() {

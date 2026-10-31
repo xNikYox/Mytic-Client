@@ -37,7 +37,7 @@ public class AuraLayer extends RenderLayer<PlayerRenderState, PlayerModel> {
         if (state.isInvisible || mc.level == null || mc.player == null) return;
         Entity entity = mc.level.getEntity(state.id);
         if (entity == null) return;
-        CosmeticsCore.Aura aura = CosmeticsCore.auraOf(entity.getUUID().toString().replace("-", ""), entity == mc.player);
+        CosmeticsCore.Aura aura = CosmeticsCore.auraOf(CosmeticsCore.key(entity.getUUID()), entity == mc.player);
         if (aura == null) return;
         List<AuraFx.P> list = AuraFx.update(state.id, aura);
         if (list == null) return;
@@ -67,8 +67,13 @@ public class AuraLayer extends RenderLayer<PlayerRenderState, PlayerModel> {
 
     /** Ein Sprite als flaches Viereck, 1 Block groß; Textur je Sprite 32x16 (vorne, hinten gespiegelt). */
     static ModelPart quad(int sprite, int count) {
-        MeshDefinition mesh = new MeshDefinition();
-        mesh.getRoot().addOrReplaceChild("q", CubeListBuilder.create().texOffs(sprite * 32, 0).addBox(-8f, -8f, 0f, 16, 16, 0), PartPose.ZERO);
-        return LayerDefinition.create(mesh, 32 * Math.max(1, count), 16).bakeRoot().getChild("q");
+        // einmal je (Sprite, Anzahl) bauen und für alle Partikel wiederverwenden – das Viereck selbst wird nie gedreht
+        return QUADS.computeIfAbsent(sprite * 1000 + count, k -> {
+            MeshDefinition mesh = new MeshDefinition();
+            mesh.getRoot().addOrReplaceChild("q", CubeListBuilder.create().texOffs(sprite * 32, 0).addBox(-8f, -8f, 0f, 16, 16, 0), PartPose.ZERO);
+            return LayerDefinition.create(mesh, 32 * Math.max(1, count), 16).bakeRoot().getChild("q");
+        });
     }
+
+    private static final java.util.Map<Integer, ModelPart> QUADS = new java.util.HashMap<>();
 }
