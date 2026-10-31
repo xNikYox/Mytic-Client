@@ -77,9 +77,10 @@ public final class Ui {
                 | (Math.round(ag + (bg - ag) * t) << 8) | Math.round(ab + (bb - ab) * t);
     }
 
-    /** Rechteck mit abgerundeten Ecken (Radius in GUI-Pixeln). */
+    /** Rechteck mit abgerundeten Ecken (Radius in GUI-Pixeln); im Menü-Stil „Eckig“ immer mit scharfen Ecken. */
     public static void rect(GuiGraphics g, int x, int y, int w, int h, int r, int color) {
         if (w <= 0 || h <= 0) return;
+        if (square()) r = 0;
         r = Math.min(r, Math.min(w, h) / 2);
         if (r <= 0) {
             g.fill(x, y, x + w, y + h, color);
@@ -153,6 +154,11 @@ public final class Ui {
         return MyticClient.theme == null || !MyticClient.theme.menuStyle.is("Neon"); // Glas nutzt das Lunar-Layout
     }
 
+    /** Menü-Stil „Eckig“ (Standard): dunkelgrau, keine runden Ecken – nutzt das Lunar-Layout */
+    public static boolean square() {
+        return MyticClient.theme != null && MyticClient.theme.menuStyle.is("Eckig");
+    }
+
     /** Menü-Stil „Glas“: milchig durchsichtig, helle Kanten, Akzentfarbe statt Grün */
     public static boolean glass() {
         return MyticClient.theme != null && MyticClient.theme.menuStyle.is("Glas");
@@ -177,6 +183,13 @@ public final class Ui {
             L_CARD_HOVER = a(0xFFFFFF, 0.13f + 0.07f * op);
             L_LINE = 0x33FFFFFF;
             L_GREEN = acc | 0xFF000000;
+        } else if (style.equals("Eckig")) {
+            // dunkles Grau mit klaren Kanten
+            L_PANEL = a(0x1B1B1D, 0.97f * op);
+            L_CARD = a(0x26272A, Math.min(1f, op + 0.15f));
+            L_CARD_HOVER = a(0x313236, Math.min(1f, op + 0.2f));
+            L_LINE = 0x26FFFFFF;
+            L_GREEN = 0xFF33B45A;
         } else {
             L_PANEL = a(0x141414, 0.95f * op);
             L_CARD = a(0x222222, Math.min(1f, op + 0.15f));

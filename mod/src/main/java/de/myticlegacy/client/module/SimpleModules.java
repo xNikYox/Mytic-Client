@@ -54,7 +54,7 @@ public final class SimpleModules {
             menuBackground = new ModeSetting(this, "menuBackground", "Menü-Hintergrund", "Unschärfe", "Unschärfe", "Abdunkeln", "Aus");
             menuSize = new ModeSetting(this, "menuSize", "Menügröße", "Kompakt", "Kompakt", "Groß");
             hudStyle = new ModeSetting(this, "hudStyle", "HUD-Stil", "Lunar", "Lunar", "Neon", "Klassisch");
-            menuStyle = new ModeSetting(this, "menuStyle", "Menü-Stil", "Lunar", "Lunar", "Glas", "Neon");
+            menuStyle = new ModeSetting(this, "menuStyle", "Menü-Stil", "Eckig", "Eckig", "Lunar", "Glas", "Neon");
             menuOpacity = new SliderSetting(this, "menuOpacity", "Menü-Deckkraft", 30, 100, 5, 75, " %");
             titleBackground = new ModeSetting(this, "titleBackground", "Hauptmenü-Hintergrund", "Launcher-Design", "Launcher-Design", "Panorama");
         }
