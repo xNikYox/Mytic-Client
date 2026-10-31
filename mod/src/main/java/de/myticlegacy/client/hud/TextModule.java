@@ -28,8 +28,10 @@ public class TextModule extends HudModule {
     }
 
     /** Werte höchstens 20-mal pro Sekunde neu berechnen (sonst mehrmals pro Bild für Breite, Position und Text). */
-    private static final long REFRESH_NANOS = 50_000_000L;
     private final String[] cached = new String[2];
+    // zuletzt gebauter Anzeigetext und dessen Breite – neu nur, wenn sich Wert oder Einstellungen ändern
+    private final String[] fullFor = new String[2], full = new String[2];
+    private final int[] fullFlags = new int[2], fullWidth = new int[2];
     private final long[] cachedAt = new long[2];
 
     private String value(boolean preview) {
@@ -54,8 +56,17 @@ public class TextModule extends HudModule {
     }
 
     private String full(boolean preview) {
-        String text = lunar() && unit() && showLabel.get() ? value(preview) + " " + label : labelPart() + value(preview);
-        return brackets.get() ? "[" + text + "]" : text;
+        int i = preview ? 1 : 0;
+        String v = value(preview);
+        int flags = (lunar() ? 1 : 0) | (showLabel.get() ? 2 : 0) | (brackets.get() ? 4 : 0);
+        if (v != fullFor[i] || flags != fullFlags[i] || full[i] == null) { // v ist bis zur nächsten Aktualisierung dasselbe Objekt
+            String text = lunar() && unit() && showLabel.get() ? v + " " + label : labelPart() + v;
+            full[i] = brackets.get() ? "[" + text + "]" : text;
+            fullWidth[i] = Ui.font().width(full[i]);
+            fullFor[i] = v;
+            fullFlags[i] = flags;
+        }
+        return full[i];
     }
 
     @Override
@@ -65,7 +76,8 @@ public class TextModule extends HudModule {
 
     @Override
     public int baseWidth() {
-        return Math.max(background.get() ? 52 : 10, Ui.font().width(full(true)) + 12);
+        full(true);
+        return Math.max(background.get() ? 52 : 10, fullWidth[1] + 12);
     }
 
     @Override
@@ -81,7 +93,7 @@ public class TextModule extends HudModule {
         panel(g, w, baseHeight());
         if (lunar()) {
             String text = full(preview);
-            g.drawString(Ui.font(), text, (w - Ui.font().width(text)) / 2, 5, color(), textShadow());
+            g.drawString(Ui.font(), text, (w - fullWidth[preview ? 1 : 0]) / 2, 5, color(), textShadow());
             return;
         }
         var font = Ui.font();

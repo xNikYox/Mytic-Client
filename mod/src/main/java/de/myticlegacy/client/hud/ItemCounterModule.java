@@ -30,7 +30,14 @@ public class ItemCounterModule extends HudModule {
     private record Count(Item item, int amount) {
     }
 
+    private final Cache<List<Count>> countCache = new Cache<>();
+
     private List<Count> counts(boolean preview) {
+        return countCache.get(preview, () -> buildCounts(preview));
+    }
+
+    /** Inventar zählen (über countCache höchstens alle 50 ms statt mehrmals pro Bild) */
+    private List<Count> buildCounts(boolean preview) {
         var player = Minecraft.getInstance().player;
         List<Count> list = new ArrayList<>();
         for (Entry entry : entries) {

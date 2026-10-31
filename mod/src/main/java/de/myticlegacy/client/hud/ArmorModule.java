@@ -33,10 +33,18 @@ public class ArmorModule extends HudModule {
         return false;
     }
 
+    private final Cache<List<ItemStack>> stackCache = new Cache<>();
+    /** Vorschau-Items einmal anlegen statt bei jedem Aufruf */
+    private ItemStack[] demo;
+
     private List<ItemStack> stacks(boolean preview) {
+        return stackCache.get(preview, () -> buildStacks(preview));
+    }
+
+    private List<ItemStack> buildStacks(boolean preview) {
         var player = Minecraft.getInstance().player;
         List<ItemStack> list = new ArrayList<>();
-        ItemStack[] demo = {Module.stack(Items.DIAMOND_HELMET), Module.stack(Items.DIAMOND_CHESTPLATE), Module.stack(Items.DIAMOND_LEGGINGS),
+        if (demo == null) demo = new ItemStack[]{Module.stack(Items.DIAMOND_HELMET), Module.stack(Items.DIAMOND_CHESTPLATE), Module.stack(Items.DIAMOND_LEGGINGS),
                 Module.stack(Items.DIAMOND_BOOTS), Module.stack(Items.DIAMOND_SWORD)};
         for (int i = 0; i < SLOTS.length; i++) {
             if (i == 4 && !showHand.get()) continue;

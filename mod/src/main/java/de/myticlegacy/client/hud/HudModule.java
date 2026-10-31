@@ -58,6 +58,26 @@ public abstract class HudModule extends Module {
         return true;
     }
 
+    /** Höchstens alle 50 ms neu: Breite, Höhe, Position und Zeichnen brauchen dieselben Werte mehrmals pro Bild */
+    protected static final long REFRESH_NANOS = 50_000_000L;
+
+    /** Wert je Ansicht (0 = Spiel, 1 = Vorschau) zwischenspeichern */
+    protected static final class Cache<T> {
+        private final Object[] value = new Object[2];
+        private final long[] at = new long[2];
+
+        @SuppressWarnings("unchecked")
+        public T get(boolean preview, java.util.function.Supplier<T> compute) {
+            int i = preview ? 1 : 0;
+            long now = System.nanoTime();
+            if (value[i] == null || now - at[i] >= REFRESH_NANOS) {
+                value[i] = compute.get();
+                at[i] = now;
+            }
+            return (T) value[i];
+        }
+    }
+
     public float scaleFactor() {
         return scale.floatValue();
     }

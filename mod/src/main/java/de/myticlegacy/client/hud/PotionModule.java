@@ -24,7 +24,14 @@ public class PotionModule extends HudModule {
     private record Line(String name, String time, int color, boolean ending) {
     }
 
+    private final Cache<List<Line>> lineCache = new Cache<>();
+    private final Cache<Integer> widthCache = new Cache<>();
+
     private List<Line> lines(boolean preview) {
+        return lineCache.get(preview, () -> buildLines(preview));
+    }
+
+    private List<Line> buildLines(boolean preview) {
         var mc = Minecraft.getInstance();
         List<Line> lines = new ArrayList<>();
         if (mc.player != null) {
@@ -51,10 +58,12 @@ public class PotionModule extends HudModule {
 
     @Override
     public int baseWidth() {
-        var font = Minecraft.getInstance().font;
-        int w = 70;
-        for (Line line : lines(true)) w = Math.max(w, font.width(line.name + "  " + line.time) + 16);
-        return w;
+        return widthCache.get(true, () -> {
+            var font = Minecraft.getInstance().font;
+            int w = 70;
+            for (Line line : lines(true)) w = Math.max(w, font.width(line.name + "  " + line.time) + 16);
+            return w;
+        });
     }
 
     @Override
