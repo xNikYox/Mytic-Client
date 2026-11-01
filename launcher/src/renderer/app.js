@@ -19,7 +19,7 @@ let logLevel = "all";
 const logLines = [];
 
 const avatar = (uuid) => `https://mc-heads.net/avatar/${uuid}/64`;
-const PAGE_TITLES = { home: "Start", friends: "Freunde", shots: "Screenshots", mods: "Mods", browser: "Mod-Browser", settings: "Einstellungen", console: "Konsole" };
+const PAGE_TITLES = { home: "Start", friends: "Freunde", stats: "Statistiken", shots: "Screenshots", mods: "Mods", browser: "Mod-Browser", settings: "Einstellungen", console: "Konsole" };
 
 // Einfache Linien-Icons pro Kategorie
 const ICONS = {
@@ -162,6 +162,7 @@ function showPage(name) {
   if (name === "console") renderLog(true);
   if (name === "browser" && !browserLoaded) loadBrowser(true);
   if (name === "friends") loadFriends();
+  if (name === "stats") loadStats();
   if (name === "shots") loadShots();
 }
 document.querySelectorAll(".rail-item").forEach((b) => b.addEventListener("click", () => showPage(b.dataset.page)));
@@ -1330,6 +1331,158 @@ $("friend-add").addEventListener("submit", (e) => {
     return data;
   });
 });
+
+// ---------------------------------------------------------------------------------------------- Statistiken
+
+const { formatDuration, formatLastPlayed, formatDay, localDay } = window.statsFormat;
+let statsRequest = 0;
+
+/** Lade-/Leer-Hinweis (warn = gelber Hinweis wie bei den Freunden) */
+function statsState(text, warn = false) {
+  $("stats-state").hidden = !text || warn;
+  $("stats-state").textContent = warn ? "" : text || "";
+  $("stats-notice").hidden = !text || !warn;
+  $("stats-notice").textContent = warn ? text : "";
+}
+
+async function loadStats() {
+  const request = ++statsRequest;
+  if (!selectedAccount()) {
+    $("stats-body").hidden = true;
+    statsState("Freundesliste nicht verfügbar – Anmeldung nötig", true);
+    return;
+  }
+  if ($("stats-body").hidden) statsState("Statistiken werden geladen …");
+  let data;
+  try {
+    data = await api.stats();
+  } catch (error) {
+    if (request !== statsRequest) return;
+    const text = errorText(error);
+    $("stats-body").hidden = true;
+    statsState(/401|anmeld|konto/i.test(text) ? "Freundesliste nicht verfügbar – Anmeldung nötig" : `Statistiken konnten nicht geladen werden: ${text}`, true);
+    return;
+  }
+  if (request !== statsRequest) return;
+  if (!data || !data.configured) {
+    $("stats-body").hidden = true;
+    statsState("Freundesliste nicht verfügbar – Anmeldung nötig", true);
+    return;
+  }
+  const totals = data.totals || {};
+  if (!totals.launches && !totals.seconds) {
+    $("stats-body").hidden = true;
+    statsState("Noch keine Daten – spiel eine Runde");
+    return;
+  }
+  statsState("");
+  $("stats-body").hidden = false;
+  renderStatsTiles(totals);
+  renderStatsChart(Array.isArray(data.days) ? data.days : []);
+  renderStatsList($("stats-servers"), data.servers, "Noch auf keinem Server gespielt", (s) => `zuletzt ${formatLastPlayed(s.last)}`);
+  renderStatsList($("stats-versions"), data.versions, "Noch keine Daten", (s) => `${s.launches || 0} ${s.launches === 1 ? "Start" : "Starts"} · zuletzt ${formatLastPlayed(s.last)}`);
+  renderStatsList($("stats-profiles"), data.profiles, "Noch keine Daten", (s) => `${s.launches || 0} ${s.launches === 1 ? "Start" : "Starts"} · zuletzt ${formatLastPlayed(s.last)}`);
+  renderChess(data.chess || {});
+}
+
+function renderStatsTiles(totals) {
+  const tiles = [
+    ["Spielzeit gesamt", formatDuration(totals.seconds), null],
+    ["Heute", formatDuration(totals.today), null],
+    ["Letzte 7 Tage", formatDuration(totals.week), null],
+    ["Starts", (Number(totals.launches) || 0).toLocaleString("de-DE"), totals.first ? `seit ${formatLastPlayed(totals.first)}` : null],
+    ["Längste Sitzung", formatDuration(totals.longest), null],
+    ["Zuletzt gespielt", formatLastPlayed(totals.last), null],
+  ];
+  $("stats-tiles").replaceChildren(...tiles.map(([label, value, sub]) => {
+    const tile = el("div", "glass stats-tile");
+    tile.append(el("small", null, label), el("b", null, value));
+    if (sub) tile.append(el("span", null, sub));
+    return tile;
+  }));
+}
+
+function renderStatsChart(days) {
+  const max = Math.max(0, ...days.map((d) => Number(d.seconds) || 0));
+  const today = localDay();
+  $("stats-axis-max").textContent = max ? formatDuration(max) : "–";
+  $("stats-day-first").textContent = days.length ? formatDay(days[0].day) : "";
+  $("stats-bars").replaceChildren(...days.map((d) => {
+    const seconds = Number(d.seconds) || 0;
+    const launches = Number(d.launches) || 0;
+    const column = el("div", `stats-col${d.day === today ? " today" : ""}`);
+    const bar = el("div", `stats-bar${seconds ? "" : " empty"}`);
+    bar.style.height = max && seconds ? `${Math.max(2, (seconds / max) * 100)}%` : "";
+    const tip = el("span", "stats-tip", `${d.day === today ? "Heute" : formatDay(d.day)}\n${formatDuration(seconds)} · ${launches} ${launches === 1 ? "Start" : "Starts"}`);
+    column.setAttribute("aria-label", tip.textContent.replace("\n", ": "));
+    column.append(bar, tip);
+    return column;
+  }));
+}
+
+function renderStatsList(target, items, emptyText, detail) {
+  const list = (Array.isArray(items) ? items : []).filter((i) => i && i.name).slice(0, 8);
+  if (!list.length) {
+    target.replaceChildren(el("p", "sub", emptyText));
+    return;
+  }
+  const total = list.reduce((sum, i) => sum + (Number(i.seconds) || 0), 0) || 1;
+  target.replaceChildren(...list.map((item) => {
+    const seconds = Number(item.seconds) || 0;
+    const share = seconds / total;
+    const row = el("div", "stats-row");
+    const head = el("div", "stats-row-head");
+    head.append(el("b", null, item.name), el("span", null, `${formatDuration(seconds)} · ${Math.round(share * 100)} %`));
+    const track = el("div", "stats-track");
+    const fill = el("i");
+    fill.style.width = `${Math.max(seconds ? 2 : 0, share * 100)}%`;
+    track.append(fill);
+    row.append(head, track, el("small", null, detail(item)));
+    return row;
+  }));
+}
+
+function renderChess(chess) {
+  const target = $("stats-chess");
+  const played = Number(chess.played) || 0;
+  if (!played) {
+    target.replaceChildren(el("p", "sub", "Noch keine Schachpartie – fordere im Spiel einen Freund heraus."));
+    return;
+  }
+  const parts = [["wins", "Siege", chess.wins], ["losses", "Niederlagen", chess.losses], ["draws", "Remis", chess.draws]].map(([cls, label, n]) => [cls, label, Number(n) || 0]);
+  const summary = el("div", "chess-summary");
+  summary.append(el("b", null, played.toLocaleString("de-DE")), el("span", null, played === 1 ? "Partie" : "Partien"));
+  const bar = el("div", "chess-bar");
+  const legend = el("div", "chess-legend");
+  for (const [cls, label, n] of parts) {
+    if (n) {
+      const part = el("i", cls);
+      part.style.flexGrow = String(n);
+      part.title = `${label}: ${n}`;
+      bar.append(part);
+    }
+    const item = el("span", cls);
+    item.append(el("i"), el("b", null, String(n)), document.createTextNode(` ${label}`));
+    legend.append(item);
+  }
+  const children = [summary, bar, legend];
+  const opponents = (Array.isArray(chess.opponents) ? chess.opponents : []).filter((o) => o && o.name).slice(0, 5);
+  if (opponents.length) {
+    children.push(el("h4", null, "Häufigste Gegner"));
+    const list = el("div", "chess-opponents");
+    list.append(...opponents.map((o) => {
+      const row = el("div", "chess-opponent");
+      row.append(
+        el("b", null, o.name),
+        el("span", null, `${Number(o.played) || 0} ${o.played === 1 ? "Partie" : "Partien"}`),
+        el("small", null, `${Number(o.wins) || 0} S · ${Number(o.losses) || 0} N · ${Number(o.draws) || 0} R`),
+      );
+      return row;
+    }));
+    children.push(list);
+  }
+  target.replaceChildren(...children);
+}
 
 // ---------------------------------------------------------------------------------------------- Screenshots
 

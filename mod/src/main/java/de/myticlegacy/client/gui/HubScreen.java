@@ -16,7 +16,7 @@ public class HubScreen extends MyticScreen {
     private static final int TILE_W = 96;
     private static final int TILE_H = 108;
     private static final int GAP = 12;
-    private static final String[] LABELS = {"Freunde", "Mods", "Cosmetics", "Screenshots"};
+    private static final String[] LABELS = {"Freunde", "Mods", "Cosmetics", "Screenshots", "Statistiken"};
     private static final int N = LABELS.length;
     private final long openedAt = System.currentTimeMillis();
     private final int shotCount = Shots.list().size(); // einmal beim Öffnen zählen, nicht in jedem Bild
@@ -24,6 +24,7 @@ public class HubScreen extends MyticScreen {
 
     public HubScreen() {
         super(Component.literal(MyticClient.NAME));
+        de.myticlegacy.client.stats.Stats.refresh(false);
     }
 
     @Override
@@ -58,6 +59,11 @@ public class HubScreen extends MyticScreen {
         if (i == 3) {
             int n = shotCount;
             return n + (n == 1 ? " Bild" : " Bilder");
+        }
+        if (i == 4) {
+            if (!Friends.available()) return "Nur über den Launcher";
+            var stats = de.myticlegacy.client.stats.Stats.data();
+            return stats == null ? "Lädt …" : "Heute " + de.myticlegacy.client.stats.Stats.duration(stats.today);
         }
         de.myticlegacy.client.cosmetics.CosmeticsCore.Cape cape = de.myticlegacy.client.cosmetics.CosmeticsCore.byId(de.myticlegacy.client.cosmetics.CosmeticsCore.selected());
         return cape != null ? cape.name : "Kein Umhang";
@@ -134,7 +140,7 @@ public class HubScreen extends MyticScreen {
     private static ItemStack[] icons;
 
     private static ItemStack icon(int i) {
-        if (icons == null || icons[i].isEmpty()) icons = new ItemStack[]{Module.stack(Items.PLAYER_HEAD), Module.stack(Items.COMPARATOR), Module.stack(Items.ELYTRA), Module.stack(Items.PAINTING)};
+        if (icons == null || icons[i].isEmpty()) icons = new ItemStack[]{Module.stack(Items.PLAYER_HEAD), Module.stack(Items.COMPARATOR), Module.stack(Items.ELYTRA), Module.stack(Items.PAINTING), Module.stack(Items.CLOCK)};
         return icons[i];
     }
 
@@ -142,7 +148,8 @@ public class HubScreen extends MyticScreen {
         if (i == 0) Compat.setScreen(new FriendsScreen());
         else if (i == 1) Compat.setScreen(new ModMenuScreen(null));
         else if (i == 2) Compat.setScreen(new CosmeticsScreen());
-        else Compat.setScreen(new ScreenshotsScreen());
+        else if (i == 3) Compat.setScreen(new ScreenshotsScreen());
+        else Compat.setScreen(new de.myticlegacy.client.stats.StatsScreen());
     }
 
     @Override
@@ -160,7 +167,7 @@ public class HubScreen extends MyticScreen {
     @Override
     protected boolean onKey(Input.Key event) {
         int key = event.key();
-        if (key == InputConstants.KEY_1 || key == InputConstants.KEY_2 || key == InputConstants.KEY_3 || key == InputConstants.KEY_4) {
+        if (key == InputConstants.KEY_1 || key == InputConstants.KEY_2 || key == InputConstants.KEY_3 || key == InputConstants.KEY_4 || key == InputConstants.KEY_5) {
             open(key - InputConstants.KEY_1);
             return true;
         }

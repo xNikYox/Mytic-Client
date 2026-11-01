@@ -456,3 +456,69 @@ select option { background: #15101f; }
 .shot-info b { font-size: 12.5px; font-weight: 600; }
 .shot-info small { font-size: 11.5px; opacity: .6; }
 .shot-actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px 10px; }
+
+/* Statistiken */
+.stats-state { padding: 18px 4px; }
+.stats-state[hidden], .stats-body[hidden] { display: none; }
+.stats-body { display: grid; gap: 16px; }
+.stats-tiles { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
+.stats-tile { padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.stats-tile small { font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stats-tile b { font: 700 20px/1.25 "Outfit", sans-serif; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stats-tile span { font-size: 11.5px; color: var(--faint); }
+.stats-panel { padding: 14px 18px 18px; min-width: 0; }
+.stats-panel h3 { margin: 4px 0 10px; font: 700 13px "Outfit", sans-serif; letter-spacing: .14em; text-transform: uppercase; color: var(--accent-2); }
+.stats-legend { color: var(--muted); font-size: 12px; }
+.stats-legend i { display: inline-block; width: 9px; height: 9px; margin-right: 6px; border-radius: 3px; background: var(--accent); box-shadow: 0 0 8px var(--accent-glow); }
+.stats-chart { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: 180px auto; gap: 6px 10px; }
+.stats-axis { display: flex; flex-direction: column; justify-content: space-between; align-items: flex-end; font-size: 11px; color: var(--faint); white-space: nowrap; }
+.stats-bars {
+  display: flex; align-items: flex-end; gap: 4px; height: 100%; padding-top: 1px;
+  border-top: 1px dashed var(--glass-line-strong); border-bottom: 1px solid var(--glass-line-strong);
+}
+.stats-col { position: relative; flex: 1; height: 100%; display: flex; align-items: flex-end; border-radius: 5px 5px 0 0; }
+.stats-col:hover { background: rgba(255, 255, 255, .04); }
+.stats-bar { width: 100%; border-radius: 5px 5px 0 0; background: linear-gradient(180deg, rgba(var(--c1-rgb), .6), rgba(var(--c1-rgb), .18)); transition: background .15s; }
+.stats-bar.empty { height: 2px; background: rgba(255, 255, 255, .06); }
+.stats-col:hover .stats-bar:not(.empty) { background: linear-gradient(180deg, rgba(var(--c1-rgb), .9), rgba(var(--c1-rgb), .35)); }
+.stats-col.today .stats-bar:not(.empty) { background: linear-gradient(180deg, var(--accent-2), var(--accent)); box-shadow: 0 0 14px var(--accent-glow); }
+.stats-col.today .stats-bar.empty { background: var(--accent); }
+.stats-tip {
+  position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); z-index: 5; pointer-events: none;
+  padding: 6px 10px; border-radius: 9px; white-space: pre-line; text-align: center; font-size: 12px; line-height: 1.4;
+  background: var(--glass-strong); border: 1px solid var(--glass-line-strong); color: var(--text); backdrop-filter: blur(14px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .4); opacity: 0; transition: opacity .12s; width: max-content;
+}
+.stats-col:hover .stats-tip { opacity: 1; }
+.stats-col:nth-child(-n+4) .stats-tip { left: 0; transform: none; }
+.stats-col:nth-last-child(-n+4) .stats-tip { left: auto; right: 0; transform: none; }
+.stats-days { display: flex; justify-content: space-between; font-size: 11px; color: var(--faint); }
+.stats-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.stats-list { display: grid; gap: 10px; }
+.stats-list .sub { margin: 0; }
+.stats-row { display: grid; gap: 4px; min-width: 0; }
+.stats-row-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.stats-row-head b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stats-row-head span { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.stats-row small { font-size: 11.5px; color: var(--faint); }
+.stats-track { height: 6px; border-radius: 99px; background: rgba(255, 255, 255, .06); overflow: hidden; }
+.stats-track i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--accent), var(--c1)); }
+.chess-summary { display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px; }
+.chess-summary b { font: 700 26px/1 "Outfit", sans-serif; }
+.chess-summary span { color: var(--muted); }
+.chess-bar { display: flex; height: 10px; border-radius: 99px; overflow: hidden; gap: 2px; background: rgba(255, 255, 255, .06); }
+.chess-bar i { flex: 1 1 0; min-width: 4px; }
+.chess-bar .wins, .chess-legend .wins i { background: var(--green); }
+.chess-bar .losses, .chess-legend .losses i { background: var(--danger); }
+.chess-bar .draws, .chess-legend .draws i { background: var(--faint); }
+.chess-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 8px; font-size: 12.5px; color: var(--muted); }
+.chess-legend i { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; }
+.chess-legend b { color: var(--text); font-weight: 600; }
+#stats-chess h4 { margin: 16px 0 6px; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.chess-opponents { display: grid; gap: 6px; }
+.chess-opponent { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: baseline; gap: 12px; padding: 6px 10px; border-radius: 10px; background: rgba(255, 255, 255, .03); border: 1px solid var(--glass-line); }
+.chess-opponent b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chess-opponent span { font-size: 12.5px; color: var(--muted); }
+.chess-opponent small { font-size: 12px; color: var(--faint); white-space: nowrap; }
+@media (max-width: 1100px) { .stats-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 900px) { .stats-grid { grid-template-columns: 1fr; } .stats-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

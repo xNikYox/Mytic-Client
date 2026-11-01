@@ -247,7 +247,8 @@ test("Einladungen: Eingaben, Grenzen, ablehnen, zurückziehen, verfallen", async
     ids.push(res.data.game.id);
   }
   assert.equal((await s.call("POST", "/api/games", { to: "Gina", time: 300 }, alice)).status, 429);
-  assert.equal((await s.call("POST", "/api/games", { to: "Alice", time: 300 }, s.t("Bob"))).status, 409);
+  // doppelt einladen geht nicht (Gegenseitig: siehe Test „Revanche“ – dort wird angenommen)
+  assert.equal((await s.call("POST", "/api/games", { to: "Bob", time: 300 }, alice)).status, 409);
   // ablehnen (nur Eingeladener) und zurückziehen (nur Einladender)
   assert.equal((await s.call("POST", `/api/games/${ids[0]}/decline`, null, alice)).status, 403);
   assert.equal((await s.call("POST", `/api/games/${ids[0]}/decline`, null, s.t("Bob"))).data.game.status, "declined");
@@ -314,4 +315,25 @@ test("Partie: Verlassen und Verbindung verloren", async () => {
   }
   const still = await s.call("GET", "/api/games", null, s.t("Erin"));
   assert.equal(still.data.games.find((g) => g.id === third.id).status, "active");
+});
+
+test("Revanche: beide fordern sich gegenseitig heraus → Partie startet", async () => {
+  const s = await setup();
+  const first = await s.start("Alice", "Bob");
+  await s.call("POST", `/api/games/${first.id}/resign`, null, s.t("Bob"));
+  // nach der Partie: Alice drückt zuerst „Revanche“, dann Bob
+  const a = await s.call("POST", "/api/games", { to: "Bob", time: 180, color: "random" }, s.t("Alice"));
+  assert.equal(a.status, 200);
+  assert.equal(a.data.game.status, "invited");
+  const again = await s.call("POST", "/api/games", { to: "Bob", time: 300, color: "white" }, s.t("Alice"));
+  assert.equal(again.status, 409);
+  assert.match(again.data.error, /schon herausgefordert/);
+  const b = await s.call("POST", "/api/games", { to: "Alice", time: 600, color: "white" }, s.t("Bob"));
+  assert.equal(b.status, 200, JSON.stringify(b.data));
+  assert.equal(b.data.game.id, a.data.game.id, "Bobs Herausforderung nimmt Alices Einladung an");
+  assert.equal(b.data.game.status, "active");
+  assert.equal(b.data.game.time, 180, "es gelten Alices Einstellungen");
+  const running = await s.call("POST", "/api/games", { to: "Alice", time: 300, color: "random" }, s.t("Bob"));
+  assert.equal(running.status, 409);
+  assert.match(running.data.error, /spielt schon eine Partie/);
 });

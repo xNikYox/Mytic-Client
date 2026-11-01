@@ -82,6 +82,51 @@ CREATE TABLE IF NOT EXISTS games (
 CREATE INDEX IF NOT EXISTS games_inviter ON games (inviter, status);
 CREATE INDEX IF NOT EXISTS games_invitee ON games (invitee, status);
 CREATE INDEX IF NOT EXISTS games_status ON games (status, created);
+-- Spielstatistik je Konto (vom Launcher/Mod gemeldet): Summen, Tage (Ortszeit), Server, Versionen und Profile
+CREATE TABLE IF NOT EXISTS stat_totals (
+  uuid TEXT PRIMARY KEY,
+  launches INTEGER NOT NULL DEFAULT 0,
+  seconds INTEGER NOT NULL DEFAULT 0,
+  longest INTEGER NOT NULL DEFAULT 0,
+  first INTEGER NOT NULL DEFAULT 0,
+  last INTEGER NOT NULL DEFAULT 0,
+  play_at INTEGER NOT NULL DEFAULT 0,
+  win_start INTEGER NOT NULL DEFAULT 0,
+  win_sec INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS stat_days (
+  uuid TEXT NOT NULL,
+  day TEXT NOT NULL,
+  seconds INTEGER NOT NULL DEFAULT 0,
+  launches INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (uuid, day)
+);
+CREATE TABLE IF NOT EXISTS stat_servers (
+  uuid TEXT NOT NULL,
+  name TEXT NOT NULL,
+  seconds INTEGER NOT NULL DEFAULT 0,
+  last INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (uuid, name)
+);
+CREATE TABLE IF NOT EXISTS stat_items (
+  uuid TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  name TEXT NOT NULL,
+  seconds INTEGER NOT NULL DEFAULT 0,
+  launches INTEGER NOT NULL DEFAULT 0,
+  last INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (uuid, kind, name)
+);
+CREATE TABLE IF NOT EXISTS stat_sessions (
+  uuid TEXT NOT NULL,
+  session TEXT NOT NULL,
+  seconds INTEGER NOT NULL DEFAULT 0,
+  updated INTEGER NOT NULL,
+  PRIMARY KEY (uuid, session)
+);
+CREATE INDEX IF NOT EXISTS stat_sessions_updated ON stat_sessions (updated);
+CREATE INDEX IF NOT EXISTS games_white ON games (white, status);
+CREATE INDEX IF NOT EXISTS games_black ON games (black, status);
 `;
 
 /** Spätere Erweiterungen bestehender Datenbanken (Fehler "Spalte gibt es schon" wird ignoriert). */

@@ -36,10 +36,18 @@ const GAME_TIMES = [180, 300, 600];     // Bedenkzeit je Spieler in Sekunden
 const GAME_COLORS = ["random", "white", "black"];
 const GAME_INVITES = 5;                 // offene ausgehende Einladungen je Spieler
 const GAME_ACTIVE = 3;                  // laufende Partien je Spieler
+const STAT_PLAY_MAX = 120;               // Sekunden je Spielzeit-Meldung (Client meldet etwa jede Minute)
+const STAT_WINDOW_MS = 60 * 1000;       // Zeitfenster gegen zu schnelle Meldungen …
+const STAT_WINDOW_SEC = 150;            // … darin höchstens so viele Sekunden gutschreiben
+const STAT_SLACK_SEC = 5;               // Spielraum: Gutschrift höchstens (Zeit seit letzter Meldung + 5 s)
+const STAT_SESSION_KEEP_MS = 2 * 24 * 60 * 60 * 1000; // Sitzungen (für "längste Sitzung") danach löschen
+const STAT_DAYS = 30;                   // Tagesreihe in GET /api/stats
+const STAT_TZ_MAX = 840;                // Zeitzone: Minuten östlich von UTC, -840 … 840
+const STAT_SINGLEPLAYER = "Einzelspieler";
 
 /** Anfragen je Adresse und Minute (pro Topf). */
 export const RATE_LIMITS = {
-  all: 120,      // alle API-Anfragen
+  all: 120,      // alle API-Anfragen (auch Statistik: Start + ~1 Spielzeit-Meldung je Minute)
   auth: 20,      // Anmeldung ohne Konto (challenge, login, offline)
   upload: 10,    // Screenshot-Upload
   view: 300,     // öffentliche Screenshot-Links
@@ -553,10 +561,78 @@ export function createApi(db, options = {}) {
     return next;
   }
 
+  /** Einladung annehmen: Farben verteilen (Zufall = 50/50), Uhren starten. */
+  async function startGame(row) {
+    for (const uuid of [row.inviter, row.invitee]) {
+      if ((await openGames(uuid)).filter((g) => g.status === "active").length >= GAME_ACTIVE) throw new HttpError(429, `Höchstens ${GAME_ACTIVE} Partien gleichzeitig`);
+    }
+    const inviterWhite = row.color === "white" || (row.color === "random" && crypto.getRandomValues(new Uint8Array(1))[0] < 128);
+    const [white, black] = inviterWhite ? [row.inviter, row.invitee] : [row.invitee, row.inviter];
+    const t = now();
+    await db.run("UPDATE games SET status = 'active', white = ?, black = ?, white_ms = ?, black_ms = ?, turn_since = ?, white_seen = ?, black_seen = ?, updated = ? WHERE id = ? AND status = 'invited'",
+      [white, black, row.time_s * 1000, row.time_s * 1000, t, t, t, t, row.id]);
+    return db.get("SELECT * FROM games WHERE id = ?", [row.id]);
+  }
+
   /** Laufende Partie, in der ich mitspiele; meine Farbe ("w"/"b"). */
   function myColor(row, me) {
     if (row.status !== "active") throw new HttpError(409, "Partie läuft nicht");
     return row.white === me.uuid ? "w" : "b";
+  }
+
+  // ------------------------------------------------------------------ Statistik
+  /** Zeitzone aus der Anfrage: Minuten östlich von UTC (MEZ = 60), begrenzt; Unsinn → 0. */
+  function statTz(value) {
+    const tz = Math.round(Number(value));
+    return Number.isFinite(tz) ? Math.max(-STAT_TZ_MAX, Math.min(STAT_TZ_MAX, tz)) : 0;
+  }
+
+  /** Tag "JJJJ-MM-TT" in der Ortszeit des Spielers. */
+  function statDay(t, tz) {
+    return new Date(t + tz * 60 * 1000).toISOString().slice(0, 10);
+  }
+
+  /** Version, Profil und Server der Meldung (bereinigt, gekürzt). */
+  function statNames(data) {
+    return {
+      version: clean(data.version, 32),
+      profile: clean(data.profile, 40),
+      server: clean(data.server, 64) || STAT_SINGLEPLAYER,
+    };
+  }
+
+  /** Zeile in stat_totals anlegen (falls neu); first = erste Meldung. */
+  async function statEnsure(uuid, t) {
+    await db.run("INSERT INTO stat_totals (uuid, first, last) VALUES (?, ?, ?) ON CONFLICT(uuid) DO NOTHING", [uuid, t, t]);
+  }
+
+  /** Version und Profil hochzählen (leere Namen werden übersprungen). */
+  async function statItems(uuid, names, seconds, launches, t) {
+    for (const kind of ["version", "profile"]) {
+      if (!names[kind]) continue;
+      await db.run("INSERT INTO stat_items (uuid, kind, name, seconds, launches, last) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(uuid, kind, name) DO UPDATE SET seconds = seconds + excluded.seconds, launches = launches + excluded.launches, last = excluded.last",
+        [uuid, kind, names[kind], seconds, launches, t]);
+    }
+  }
+
+  /** Schach-Bilanz aus beendeten Partien (games, status 'over'). */
+  async function chessStats(uuid) {
+    const rows = await db.all("SELECT g.white, g.black, g.result, u.name AS opponent FROM games g LEFT JOIN users u ON u.uuid = (CASE WHEN g.white = ? THEN g.black ELSE g.white END) WHERE g.status = 'over' AND (g.white = ? OR g.black = ?)",
+      [uuid, uuid, uuid]);
+    const total = { played: 0, wins: 0, losses: 0, draws: 0 };
+    const opponents = new Map();
+    for (const row of rows) {
+      const white = row.white === uuid;
+      const key = white ? row.black : row.white;
+      if (!opponents.has(key)) opponents.set(key, { name: row.opponent || "?", played: 0, wins: 0, losses: 0, draws: 0 });
+      const outcome = row.result === "1/2-1/2" ? "draws" : (row.result === "1-0") === white ? "wins" : "losses";
+      for (const entry of [total, opponents.get(key)]) {
+        entry.played++;
+        entry[outcome]++;
+      }
+    }
+    const top = [...opponents.values()].sort((x, y) => y.played - x.played || x.name.localeCompare(y.name)).slice(0, 5);
+    return { ...total, opponents: top };
   }
 
   const routes = {
@@ -900,6 +976,96 @@ export function createApi(db, options = {}) {
       return overview(me);
     },
 
+    // ------------------------------------------------------------------ Statistik
+    /** Start des Spiels: { version, profile, tz } (tz = Minuten östlich von UTC). */
+    "POST /api/stats/launch": async (request) => {
+      const me = await auth(request);
+      const data = await body(request);
+      const names = statNames(data);
+      const t = now();
+      const day = statDay(t, statTz(data.tz));
+      await statEnsure(me.uuid, t);
+      await db.run("UPDATE stat_totals SET launches = launches + 1, last = ? WHERE uuid = ?", [t, me.uuid]);
+      await db.run("INSERT INTO stat_days (uuid, day, seconds, launches) VALUES (?, ?, 0, 1) ON CONFLICT(uuid, day) DO UPDATE SET launches = launches + 1", [me.uuid, day]);
+      await statItems(me.uuid, names, 0, 1, t);
+      return { ok: true };
+    },
+
+    /**
+     * Gespielte Zeit seit der letzten Meldung: { seconds: 1–120, server, version, profile, session, tz }.
+     * Gegen Missbrauch: höchstens (Zeit seit letzter Meldung + 5 s) und 150 s je Minute werden gutgeschrieben.
+     */
+    "POST /api/stats/play": async (request) => {
+      const me = await auth(request);
+      const data = await body(request);
+      const seconds = data.seconds;
+      if (!Number.isInteger(seconds) || seconds < 1 || seconds > STAT_PLAY_MAX) throw new HttpError(400, `Ungültige Spielzeit (1–${STAT_PLAY_MAX} Sekunden)`);
+      const session = data.session === undefined || data.session === null || data.session === "" ? null : data.session;
+      if (session !== null && (typeof session !== "string" || !/^[A-Za-z0-9]{1,32}$/.test(session))) throw new HttpError(400, "Ungültige Sitzung");
+      const names = statNames(data);
+      const t = now();
+      const day = statDay(t, statTz(data.tz));
+      await statEnsure(me.uuid, t);
+      // alte Sitzungen aufräumen (die längste steht schon in stat_totals) – vor dem Hochzählen, sonst lebt eine alte Sitzung weiter
+      await db.run("DELETE FROM stat_sessions WHERE updated < ?", [t - STAT_SESSION_KEEP_MS]);
+      const totals = await db.get("SELECT play_at, win_start, win_sec FROM stat_totals WHERE uuid = ?", [me.uuid]);
+      // zu schnelle Meldungen kürzen: nicht mehr als seit der letzten Meldung vergangen ist (+ Spielraum) …
+      let credit = seconds;
+      if (totals.play_at) credit = Math.min(credit, Math.floor(Math.max(0, t - totals.play_at) / 1000) + STAT_SLACK_SEC);
+      // … und höchstens STAT_WINDOW_SEC je Zeitfenster
+      const fresh = t - totals.win_start >= STAT_WINDOW_MS;
+      const windowStart = fresh ? t : totals.win_start;
+      const windowUsed = fresh ? 0 : totals.win_sec;
+      credit = Math.max(0, Math.min(credit, STAT_WINDOW_SEC - windowUsed));
+      await db.run("UPDATE stat_totals SET seconds = seconds + ?, last = ?, play_at = ?, win_start = ?, win_sec = ? WHERE uuid = ?",
+        [credit, t, t, windowStart, windowUsed + credit, me.uuid]);
+      if (credit > 0) {
+        await db.run("INSERT INTO stat_days (uuid, day, seconds, launches) VALUES (?, ?, ?, 0) ON CONFLICT(uuid, day) DO UPDATE SET seconds = seconds + excluded.seconds", [me.uuid, day, credit]);
+        await db.run("INSERT INTO stat_servers (uuid, name, seconds, last) VALUES (?, ?, ?, ?) ON CONFLICT(uuid, name) DO UPDATE SET seconds = seconds + excluded.seconds, last = excluded.last",
+          [me.uuid, names.server, credit, t]);
+        await statItems(me.uuid, names, credit, 0, t);
+        if (session) {
+          await db.run("INSERT INTO stat_sessions (uuid, session, seconds, updated) VALUES (?, ?, ?, ?) ON CONFLICT(uuid, session) DO UPDATE SET seconds = seconds + excluded.seconds, updated = excluded.updated",
+            [me.uuid, session, credit, t]);
+          const row = await db.get("SELECT seconds FROM stat_sessions WHERE uuid = ? AND session = ?", [me.uuid, session]);
+          await db.run("UPDATE stat_totals SET longest = MAX(longest, ?) WHERE uuid = ?", [row.seconds, me.uuid]);
+        }
+      }
+      return { ok: true };
+    },
+
+    /** Eigene Statistik; ?tz=<Minuten östlich von UTC> bestimmt "heute" und die Tagesreihe. */
+    "GET /api/stats": async (request) => {
+      const me = await auth(request);
+      const t = now();
+      const tz = statTz(new URL(request.url).searchParams.get("tz"));
+      const totals = (await db.get("SELECT launches, seconds, longest, first, last FROM stat_totals WHERE uuid = ?", [me.uuid])) || { launches: 0, seconds: 0, longest: 0, first: 0, last: 0 };
+      // die letzten STAT_DAYS Tage (Ortszeit), älteste zuerst, auch Tage ohne Spielzeit
+      const dayList = [];
+      for (let i = STAT_DAYS - 1; i >= 0; i--) dayList.push(statDay(t - i * 24 * 60 * 60 * 1000, tz));
+      const rows = await db.all("SELECT day, seconds, launches FROM stat_days WHERE uuid = ? AND day >= ?", [me.uuid, dayList[0]]);
+      const byDay = new Map(rows.map((r) => [r.day, r]));
+      const days = dayList.map((day) => ({ day, seconds: byDay.get(day)?.seconds || 0, launches: byDay.get(day)?.launches || 0 }));
+      const servers = await db.all("SELECT name, seconds, last FROM stat_servers WHERE uuid = ? ORDER BY seconds DESC, last DESC LIMIT 10", [me.uuid]);
+      const items = (kind) => db.all("SELECT name, seconds, launches, last FROM stat_items WHERE uuid = ? AND kind = ? ORDER BY seconds DESC, launches DESC, last DESC LIMIT 50", [me.uuid, kind]);
+      return {
+        totals: {
+          launches: totals.launches,
+          seconds: totals.seconds,
+          longest: totals.longest,
+          first: totals.first,
+          last: totals.last,
+          today: days[days.length - 1].seconds,
+          week: days.slice(-7).reduce((sum, d) => sum + d.seconds, 0),
+        },
+        days,
+        servers,
+        versions: await items("version"),
+        profiles: await items("profile"),
+        chess: await chessStats(me.uuid),
+      };
+    },
+
     // ------------------------------------------------------------------ Schach
     /** Meine Einladungen (ein- und ausgehend), laufende Partien und kürzlich beendete. */
     "GET /api/games": async (request) => {
@@ -928,9 +1094,12 @@ export function createApi(db, options = {}) {
       const t = now();
       await db.run("DELETE FROM games WHERE status IN ('declined', 'cancelled', 'expired') AND updated < ?", [t - GAME_KEEP_MS]);
       const mine = await openGames(me.uuid);
-      if (mine.some((g) => (g.status === "invited" || g.status === "active") && (g.inviter === target.uuid || g.invitee === target.uuid))) {
-        throw new HttpError(409, `Mit ${target.name} gibt es schon eine Einladung oder Partie`);
-      }
+      const between = mine.filter((g) => (g.status === "invited" || g.status === "active") && (g.inviter === target.uuid || g.invitee === target.uuid));
+      // beide drücken „Revanche“: die Einladung des anderen gilt als angenommen
+      const theirs = between.find((g) => g.status === "invited" && g.inviter === target.uuid);
+      if (theirs) return gameResponse(await startGame(theirs));
+      if (between.some((g) => g.status === "active")) throw new HttpError(409, `Ihr spielt schon eine Partie – /myticgame öffnet sie`);
+      if (between.length) throw new HttpError(409, `Du hast ${target.name} schon herausgefordert – warte auf Antwort`);
       if (mine.filter((g) => g.status === "invited" && g.inviter === me.uuid).length >= GAME_INVITES) throw new HttpError(429, "Zu viele offene Einladungen");
       if (mine.filter((g) => g.status === "active").length >= GAME_ACTIVE) throw new HttpError(429, `Höchstens ${GAME_ACTIVE} Partien gleichzeitig`);
       const id = randomHex(8);
@@ -944,15 +1113,7 @@ export function createApi(db, options = {}) {
       const row = await loadGame(id, me);
       if (row.invitee !== me.uuid) throw new HttpError(403, "Nur der Eingeladene kann annehmen");
       if (row.status !== "invited") throw new HttpError(409, "Einladung ist nicht mehr offen");
-      for (const uuid of [row.inviter, row.invitee]) {
-        if ((await openGames(uuid)).filter((g) => g.status === "active").length >= GAME_ACTIVE) throw new HttpError(429, `Höchstens ${GAME_ACTIVE} Partien gleichzeitig`);
-      }
-      const inviterWhite = row.color === "white" || (row.color === "random" && crypto.getRandomValues(new Uint8Array(1))[0] < 128);
-      const [white, black] = inviterWhite ? [row.inviter, row.invitee] : [row.invitee, row.inviter];
-      const t = now();
-      await db.run("UPDATE games SET status = 'active', white = ?, black = ?, white_ms = ?, black_ms = ?, turn_since = ?, white_seen = ?, black_seen = ?, updated = ? WHERE id = ? AND status = 'invited'",
-        [white, black, row.time_s * 1000, row.time_s * 1000, t, t, t, t, row.id]);
-      return gameResponse(await db.get("SELECT * FROM games WHERE id = ?", [row.id]));
+      return gameResponse(await startGame(row));
     },
 
     "POST /api/games/:id/decline": async (request, ip, id) => {

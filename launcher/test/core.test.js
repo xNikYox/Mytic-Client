@@ -655,3 +655,34 @@ test("Java-Speicher: ZGC ab Java 21 mit genug Kernen, sonst G1; eigener GC hat V
   const own = memoryArgs({ memory: 4096, javaMajor: 21, cpus: 8, userArgs: "-XX:+UseShenandoahGC -Dx=1" });
   assert.deepEqual(own, ["-Xms4096M", "-Xmx4096M"], "eigener GC → keine weiteren GC-Schalter");
 });
+
+test("Statistik: Spielzeit formatieren", () => {
+  const { formatDuration, formatLastPlayed, formatDay, localDay } = require("../src/renderer/stats-format");
+  assert.equal(formatDuration(0), "0 Min");
+  assert.equal(formatDuration(null), "0 Min");
+  assert.equal(formatDuration(-5), "0 Min");
+  assert.equal(formatDuration(45 * 60), "45 Min");
+  assert.equal(formatDuration(45 * 60 + 29), "45 Min");
+  assert.equal(formatDuration(3600), "1 Std");
+  assert.equal(formatDuration(12 * 3600 + 5 * 60), "12 Std 5 Min");
+  assert.equal(formatDuration(59 * 60 + 40), "1 Std");
+  assert.equal(formatDuration(130 * 3600), "130 Std");
+  const now = new Date(2026, 9, 31, 18, 0).getTime();
+  assert.equal(formatLastPlayed(0, now), "noch nie");
+  assert.equal(formatLastPlayed(new Date(2026, 9, 31, 14, 32).getTime(), now), "heute, 14:32");
+  assert.equal(formatLastPlayed(new Date(2026, 9, 30, 9, 5).getTime() / 1000, now), "gestern, 09:05");
+  assert.equal(formatLastPlayed(new Date(2026, 9, 12, 9, 5).getTime(), now), "12.10.2026");
+  assert.match(formatDay("2026-10-31"), /31\.10\./);
+  assert.equal(localDay(now), "2026-10-31");
+});
+
+test("Statistik: Profilname für -Dmytic.profile", () => {
+  const { statsProfileName, tzOffset } = require("../src/core/stats");
+  assert.equal(statsProfileName("PvP"), "PvP");
+  assert.equal(statsProfileName("Für Freunde"), "Fuer Freunde");
+  assert.equal(statsProfileName("a\"b; rm -rf /"), "ab rm -rf");
+  assert.equal(statsProfileName("  "), "Standard");
+  assert.equal(statsProfileName("x".repeat(60)).length, 40);
+  assert.match(statsProfileName("Ünïcødé ✨ Profil 1.21"), /^[\w .-]{1,40}$/);
+  assert.equal(typeof tzOffset(), "number");
+});

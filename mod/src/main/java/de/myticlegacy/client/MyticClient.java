@@ -336,6 +336,7 @@ public final class MyticClient implements ClientModInitializer {
         }
         tickFriends(mc);
         de.myticlegacy.client.games.Games.tick(mc);
+        de.myticlegacy.client.stats.Stats.tick(mc);
         if (mc.level == null) sessionStart = 0;
         else if (sessionStart == 0) sessionStart = System.currentTimeMillis();
 

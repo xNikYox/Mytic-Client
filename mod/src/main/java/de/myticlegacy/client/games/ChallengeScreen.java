@@ -128,6 +128,11 @@ public class ChallengeScreen extends PanelScreen {
         int time = TIMES[timeIndex];
         String color = COLOR_LABEL[colorIndex];
         Games.invite(opponent, time, COLORS[colorIndex], game -> {
+            if (game.active()) { // hatte uns schon herausgefordert (z. B. beide „Revanche“) → Partie läuft sofort
+                Games.notice("§d" + opponent + "§7 hatte dich schon herausgefordert – die Partie beginnt.");
+                Compat.setScreen(new ChessScreen(game.id));
+                return;
+            }
             Games.notice("§7Schach-Herausforderung an §d" + opponent + "§7 gesendet §8(" + time / 60 + " Min, " + color + ")§7 – warte auf Antwort …");
             if (Compat.screen(minecraft) == this) back();
         }, error -> {

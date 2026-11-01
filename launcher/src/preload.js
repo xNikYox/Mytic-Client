@@ -51,6 +51,7 @@ contextBridge.exposeInMainWorld("mytic", {
   friendAccept: (uuid) => ipcRenderer.invoke("friends:accept", uuid),
   friendDeny: (uuid) => ipcRenderer.invoke("friends:deny", uuid),
   friendRemove: (uuid) => ipcRenderer.invoke("friends:remove", uuid),
+  stats: () => ipcRenderer.invoke("stats:get"),
   shots: () => ipcRenderer.invoke("shots:list"),
   shotThumb: (file) => ipcRenderer.invoke("shots:thumb", file),
   shotOpen: (file) => ipcRenderer.invoke("shots:open", file),

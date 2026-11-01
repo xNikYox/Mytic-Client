@@ -4,6 +4,7 @@ const importer = require("./core/importer");
 const { ModUpdater } = require("./core/modupdates");
 const autofix = require("./core/autofix");
 const { FriendsClient } = require("./core/friends");
+const { statsProfileName, tzOffset } = require("./core/stats");
 const { CosmeticsUpdater } = require("./core/cosmetics");
 const fs = require("node:fs");
 const fsp = require("node:fs/promises");
@@ -800,6 +801,13 @@ for (const action of ["request", "accept", "deny", "remove"]) {
   });
 }
 
+/** Spielstatistik vom Friends-Server (Tage in lokaler Zeitzone). */
+ipc.handle("stats:get", async () => {
+  if (!friends.configured) return { configured: false };
+  const data = await friends.call(await activeAccount(), "GET", `api/stats?tz=${tzOffset()}`);
+  return { configured: true, ...data };
+});
+
 // ------------------------------------------------------------------------------ Screenshots
 
 /** Screenshot-Ordner: gemeinsamer Spielordner (Fabric) und eigene Ordner der 1.8.9-Profile (game-<version>) */
@@ -907,7 +915,9 @@ ipc.handle("game:launch", async () => {
     const cosmeticsPack = await cosmetics.prepare();
     // Design des Launchers auch als Hintergrund des Mytic-Hauptmenüs
     const friendsInGame = await friendsLaunch(account);
-    const extraJvm = [...friendsInGame.jvm, ...(cosmeticsPack ? [`-Dmytic.cosmetics=${cosmeticsPack}`] : []), `-Dmytic.launcherTheme=${current.launcherTheme || "sunset"}`];
+    // Profilname für die Spielzeit pro Profil (die Mod meldet ihn mit)
+    const statsProfile = statsProfileName(profile.name);
+    const extraJvm = [...friendsInGame.jvm, ...(cosmeticsPack ? [`-Dmytic.cosmetics=${cosmeticsPack}`] : []), `-Dmytic.launcherTheme=${current.launcherTheme || "sunset"}`, `-Dmytic.profile=${statsProfile}`];
     const command = buildCommand(install, DIRS, account, { ...current, modsDir: profileMods, extraJvm, addMods: cosmeticsPack ? [cosmeticsPack] : [] });
     emit("status", "Minecraft startet …");
     emit("log", `[Launcher] Starte Minecraft ${profile.mcVersion} (Fabric) als ${account.name} – Profil „${profile.name}“`);
@@ -947,6 +957,11 @@ ipc.handle("game:launch", async () => {
       },
     });
     emit("game", { running: true });
+    // Start für die Statistik melden – nebenbei, darf den Start nie aufhalten oder scheitern lassen
+    if (friendsInGame.env.MYTIC_FRIENDS_TOKEN) {
+      friends.call(account, "POST", "api/stats/launch", { version: profile.mcVersion, profile: statsProfile, tz: tzOffset() })
+        .catch((error) => emit("log", `[Statistik] Start nicht gemeldet: ${error.message}`));
+    }
     if (current.afterLaunch === "minimize") win.minimize();
     if (current.afterLaunch === "hide") win.hide();
     return true;
