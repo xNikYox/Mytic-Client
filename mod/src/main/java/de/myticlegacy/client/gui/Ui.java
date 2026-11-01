@@ -82,6 +82,7 @@ public final class Ui {
     public static void rect(GuiGraphics g, int x, int y, int w, int h, int r, int color) {
         if (w <= 0 || h <= 0) return;
         if (square()) r = 0;
+        else if (gold()) r = Math.min(r, 2);
         r = Math.min(r, Math.min(w, h) / 2);
         if (r <= 0) {
             g.fill(x, y, x + w, y + h, color);
@@ -146,6 +147,8 @@ public final class Ui {
     public static int L_CARD_HOVER = 0xFF2C2C2C;
     public static int L_LINE = 0x22FFFFFF;
     public static int L_GREEN = 0xFF33B45A;
+    /** Auswahl-Farbe (aktive Kategorie) */
+    public static int L_SELECT = 0xFFFFFFFF;
     private static String paletteKey = "";
     public static final int L_RED = 0xFFD8434B;
 
@@ -165,6 +168,40 @@ public final class Ui {
         return MyticClient.theme != null && MyticClient.theme.menuStyle.is("Glas");
     }
 
+    /** Menü-Stil „Gold“: fast schwarz mit Goldkanten, kaum Rundungen – nutzt das Lunar-Layout */
+    public static boolean gold() {
+        return MyticClient.theme != null && MyticClient.theme.menuStyle.is("Gold");
+    }
+
+    /** Menü-Stil „Seitenleiste“: Kategorien links als Icon-Leiste, große Karten mit Schalter oben rechts */
+    public static boolean sidebar() {
+        return MyticClient.theme != null && MyticClient.theme.menuStyle.is("Seitenleiste");
+    }
+
+    /** Eckenradius der Mod-Karten je Stil (Lunar weicher, Glas am rundesten) */
+    public static int cardRadius() {
+        if (glass()) return 8;
+        if (sidebar()) return 6;
+        if (MyticClient.theme != null && MyticClient.theme.menuStyle.is("Lunar")) return 6;
+        return 4;
+    }
+
+    /** Farbe für ausgewählte Kategorien/Markierungen: Gold, Blau (Seitenleiste/Lunar) oder Schalter-Farbe */
+    public static int selection() {
+        refreshPalette();
+        return L_SELECT;
+    }
+
+    /** Textfarbe im Lunar-Layout (Gold: cremeweiß) */
+    public static int lText() {
+        return gold() ? 0xFFF5EFE1 : 0xFFFFFFFF;
+    }
+
+    /** Gedämpfte Textfarbe im Lunar-Layout */
+    public static int lMuted() {
+        return gold() ? 0xFFA39A85 : sidebar() ? 0xFF8B93A7 : 0xFF9A9A9A;
+    }
+
     private static int a(int rgb, float alpha) {
         return (Math.round(Math.max(0, Math.min(1, alpha)) * 255) << 24) | (rgb & 0xFFFFFF);
     }
@@ -180,36 +217,61 @@ public final class Ui {
         String key = style + op + acc + "/" + menuColor + "/" + highlight;
         if (key.equals(paletteKey)) return;
         paletteKey = key;
+        boolean customHighlight = highlight != (SimpleModules.Theme.HIGHLIGHT_DEFAULT | 0xFF000000);
         if (style.equals("Glas")) {
-            L_PANEL = a(0x0C0C14, 0.62f * op);
-            L_CARD = a(0xFFFFFF, 0.07f + 0.05f * op);
-            L_CARD_HOVER = a(0xFFFFFF, 0.13f + 0.07f * op);
-            L_LINE = 0x33FFFFFF;
+            // milchig, hellere Kanten
+            L_PANEL = a(0x0C0C14, 0.58f * op);
+            L_CARD = a(0xFFFFFF, 0.08f + 0.05f * op);
+            L_CARD_HOVER = a(0xFFFFFF, 0.15f + 0.07f * op);
+            L_LINE = 0x40FFFFFF;
             L_GREEN = acc | 0xFF000000;
+            L_SELECT = 0xFFFFFFFF;
         } else if (style.equals("Eckig")) {
             // dunkles Grau mit klaren Kanten
             L_PANEL = a(0x1B1B1D, 0.97f * op);
             L_CARD = a(0x26272A, Math.min(1f, op + 0.15f));
-            L_CARD_HOVER = a(0x313236, Math.min(1f, op + 0.2f));
-            L_LINE = 0x26FFFFFF;
+            L_CARD_HOVER = a(0x303135, Math.min(1f, op + 0.2f));
+            L_LINE = 0x1FFFFFFF;
             L_GREEN = highlight;
+            L_SELECT = highlight;
+        } else if (style.equals("Gold")) {
+            // fast schwarz, Gold für Kanten, Schalter und Auswahl
+            int goldTone = customHighlight ? highlight : 0xFFD4AF37;
+            L_PANEL = a(0x0E0D0B, 0.97f * op);
+            L_CARD = a(0x17150F, Math.min(1f, op + 0.15f));
+            L_CARD_HOVER = a(0x201D14, Math.min(1f, op + 0.2f));
+            L_LINE = withAlpha(goldTone, 0x30);
+            L_GREEN = goldTone;
+            L_SELECT = goldTone;
+        } else if (style.equals("Seitenleiste")) {
+            // kühles Blaugrau, blaue Auswahl
+            int blue = customHighlight ? highlight : 0xFF3B82F6;
+            L_PANEL = a(0x11141C, 0.97f * op);
+            L_CARD = a(0x171C27, Math.min(1f, op + 0.15f));
+            L_CARD_HOVER = a(0x1E2433, Math.min(1f, op + 0.2f));
+            L_LINE = 0x14FFFFFF;
+            L_GREEN = blue;
+            L_SELECT = blue;
         } else {
-            L_PANEL = a(0x141414, 0.95f * op);
-            L_CARD = a(0x222222, Math.min(1f, op + 0.15f));
-            L_CARD_HOVER = a(0x2C2C2C, Math.min(1f, op + 0.2f));
-            L_LINE = 0x22FFFFFF;
-            L_GREEN = highlight;
+            // Lunar Soft: weicher, blaue Auswahl, grüne Schalter
+            L_PANEL = a(0x141416, 0.93f * op);
+            L_CARD = a(0x222225, Math.min(1f, op + 0.15f));
+            L_CARD_HOVER = a(0x2C2C30, Math.min(1f, op + 0.2f));
+            L_LINE = 0x1CFFFFFF;
+            L_GREEN = customHighlight ? highlight : 0xFF3CCF7A;
+            L_SELECT = 0xFF4F9CF9;
         }
         // Eigene Menü-Farbe (Design → Menü-Farbe): abgedunkelt, damit weiße Schrift lesbar bleibt; Karten etwas heller
-        if (!style.equals("Glas") && menuColor != SimpleModules.Theme.MENU_COLOR_DEFAULT) {
+        if (!style.equals("Glas") && !style.equals("Gold") && menuColor != SimpleModules.Theme.MENU_COLOR_DEFAULT) {
             int panel = mix(0xFF111113, menuColor, 0.35f);
             L_PANEL = a(panel, 0.97f * op);
             L_CARD = a(mix(panel, 0xFFFFFFFF, 0.07f), Math.min(1f, op + 0.15f));
             L_CARD_HOVER = a(mix(panel, 0xFFFFFFFF, 0.13f), Math.min(1f, op + 0.2f));
         }
-        PANEL = a(0x0A0716, 0.95f * op);
-        SURFACE = a(0x130D24, Math.min(1f, op + 0.15f));
-        SURFACE_HOVER = a(0x1F1638, Math.min(1f, op + 0.2f));
+        // Neon (Synthwave): tiefes Violett
+        PANEL = a(0x100924, 0.94f * op);
+        SURFACE = a(0x1A1033, Math.min(1f, op + 0.15f));
+        SURFACE_HOVER = a(0x26164A, Math.min(1f, op + 0.2f));
     }
 
     /** Schlichtes Panel wie bei Lunar: dunkelgrau, feiner heller Rand, keine Leuchteffekte. */
@@ -219,8 +281,16 @@ public final class Ui {
             return;
         }
         rect(g, x - 2, y + 2, w + 4, h + 2, r + 2, 0x45000000);
-        rect(g, x, y, w, h, r, 0x2EFFFFFF);
+        rect(g, x, y, w, h, r, gold() ? withAlpha(L_GREEN, 0x60) : sidebar() ? 0x1EFFFFFF : 0x2EFFFFFF);
         rect(g, x + 1, y + 1, w - 2, h - 2, Math.max(0, r - 1), L_PANEL);
+        // Gold: zweite, feine Innenkante wie ein Rahmen
+        if (gold()) {
+            int c = withAlpha(L_GREEN, 0x1C);
+            g.fill(x + 3, y + 3, x + w - 3, y + 4, c);
+            g.fill(x + 3, y + h - 4, x + w - 3, y + h - 3, c);
+            g.fill(x + 3, y + 4, x + 4, y + h - 4, c);
+            g.fill(x + w - 4, y + 4, x + w - 3, y + h - 4, c);
+        }
     }
 
     /** Glas-Panel: weicher Schatten, helle Kante (oben heller), milchige Fläche, Lichtreflex und Akzent-Schimmer */
@@ -237,8 +307,8 @@ public final class Ui {
         float t = animate(key, on, 14f);
         if (lunar()) {
             if (glass() && t > 0.01f) glow(g, x, y, 20, 10, 5, withAlpha(accent(), Math.round(120 * t)), 2, 0.6f);
-            rect(g, x, y, 20, 10, 5, mix(glass() ? 0x55FFFFFF : 0xFF4A4A4A, L_GREEN, t));
-            rect(g, x + 1 + Math.round(10 * t), y + 1, 8, 8, 4, 0xFFFFFFFF);
+            rect(g, x, y, 20, 10, 5, mix(glass() ? 0x55FFFFFF : gold() ? 0xFF2A261A : sidebar() ? 0xFF2A3142 : 0xFF4A4A4A, L_GREEN, t));
+            rect(g, x + 1 + Math.round(10 * t), y + 1, 8, 8, 4, gold() ? mix(0xFF8A8270, 0xFF1A1608, t) : 0xFFFFFFFF);
             return;
         }
         if (t > 0.01f) glow(g, x, y, 20, 10, 5, withAlpha(accent2(), Math.round(200 * t)), 3, 0.8f);
