@@ -258,12 +258,18 @@ test("Einladungen: Eingaben, Grenzen, ablehnen, zurückziehen, verfallen", async
   // zufällige Farbe: einer ist Weiß, einer Schwarz
   const random = (await s.call("POST", `/api/games/${ids[2]}/accept`, null, s.t("Dave"))).data.game;
   assert.deepEqual([random.white.uuid, random.black.uuid].sort(), [s.users.Alice.uuid, s.users.Dave.uuid].sort());
-  // nach 10 Minuten verfallen offene Einladungen
-  s.tick(10 * 60 * 1000);
+  // nach 60 Sekunden verfallen offene Einladungen
+  s.tick(59 * 1000);
+  assert.equal((await s.call("GET", "/api/games", null, alice)).data.games.filter((g) => g.status === "invited").length, 2);
+  s.tick(1000);
   assert.equal((await s.call("POST", `/api/games/${ids[3]}/accept`, null, s.t("Erin"))).status, 409);
+  // der Einladende sieht sie noch ~2 Minuten als „abgelaufen“
+  const expired = (await s.call("GET", "/api/games", null, alice)).data.games.filter((g) => g.status === "expired");
+  assert.deepEqual(expired.map((g) => g.id).sort(), [ids[3], ids[4]].sort());
+  s.tick(10 * 60 * 1000);
   const list = await s.call("GET", "/api/games", null, alice);
-  // (die angenommene 5-Minuten-Partie ist inzwischen auf Zeit verloren, die Einladungen sind verfallen)
-  assert.deepEqual(list.data.games.map((g) => [g.status, g.reason]), [["over", "timeout"]]);
+  // (die angenommene Partie endete schon bei der Abfrage nach 60 s – Dave ohne Lebenszeichen –, die verfallenen Einladungen sind aus der Liste)
+  assert.deepEqual(list.data.games, []);
   assert.equal((await s.call("POST", "/api/games", { to: "Erin", time: 300 }, alice)).status, 200);
 });
 

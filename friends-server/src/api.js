@@ -28,12 +28,18 @@ const CHALLENGES_TOTAL = 5000;        // offene Anmelde-Aufgaben insgesamt
 const CHALLENGES_PER_IP = 10;         // offene Anmelde-Aufgaben je Adresse
 const ADMIN_KEY_MIN = 16;
 // Schach-Partien unter Spielern
-const GAME_INVITE_MS = 10 * 60 * 1000;  // Einladung verfällt nach 10 Minuten
+const GAME_INVITE_MS = 60 * 1000;       // Einladung verfällt nach 60 Sekunden (danach noch GAME_RECENT_MS als „abgelaufen“ sichtbar)
 const GAME_RECENT_MS = 2 * 60 * 1000;   // beendete Partien bleiben so lange in der Liste
 const GAME_ABANDON_MS = 30 * 1000; // so lange ohne Lebenszeichen (Abfrage) → Partie verloren (Absturz, Minecraft beendet)
 const GAME_KEEP_MS = 7 * 24 * 60 * 60 * 1000; // abgelehnte/zurückgezogene/verfallene Einladungen danach löschen
 const GAME_TIMES = [60, 180, 300, 600]; // Bedenkzeit je Spieler in Sekunden (1, 3, 5, 10 Minuten)
 const GAME_COLORS = ["random", "white", "black"];
+const GAME_KINDS = ["chess", "xo"];      // Schach, X und O (Tic-Tac-Toe)
+const XO_ROUNDS = [1, 3, 5];             // X und O: Runden (best of)
+const XO_MOVE_TIMES = [0, 5, 10, 30];    // X und O: Sekunden je Zug, 0 = ohne Limit
+const XO_EMPTY = ".........";            // 3×3-Brett zeilenweise, "." frei, "x"/"o" belegt
+const XO_LINES = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]];
+const XO_SETTLE_MAX = 10;                // höchstens so viele verpasste Runden auf einmal nachholen
 const GAME_INVITES = 5;                 // offene ausgehende Einladungen je Spieler
 const GAME_ACTIVE = 3;                  // laufende Partien je Spieler
 const STAT_PLAY_MAX = 120;               // Sekunden je Spielzeit-Meldung (Client meldet etwa jede Minute)
@@ -476,13 +482,16 @@ export function createApi(db, options = {}) {
   async function settleGame(row) {
     const t = now();
     if (row.status === "invited" && row.created <= t - GAME_INVITE_MS) {
-      await db.run("UPDATE games SET status = 'expired', updated = ? WHERE id = ? AND status = 'invited'", [t, row.id]);
-      return { ...row, status: "expired", updated: t };
+      // updated = Zeitpunkt des Verfalls: so bleibt die Einladung GAME_RECENT_MS lang als „abgelaufen“ in der Liste
+      const expired = row.created + GAME_INVITE_MS;
+      await db.run("UPDATE games SET status = 'expired', updated = ? WHERE id = ? AND status = 'invited'", [expired, row.id]);
+      return { ...row, status: "expired", updated: expired };
     }
+    if (row.status === "active" && isXo(row)) row = await settleXo(row, t);
     if (row.status === "active") {
       const clock = gameClock(row, t);
       const turn = gameTurn(row);
-      if ((turn === "w" ? clock.white : clock.black) <= 0) {
+      if (!isXo(row) && (turn === "w" ? clock.white : clock.black) <= 0) {
         const result = turn === "w" ? "0-1" : "1-0";
         await db.run("UPDATE games SET status = 'over', result = ?, reason = 'timeout', white_ms = ?, black_ms = ?, draw_offer = NULL, updated = ? WHERE id = ? AND status = 'active'",
           [result, clock.white, clock.black, t, row.id]);
@@ -500,6 +509,98 @@ export function createApi(db, options = {}) {
       }
     }
     return row;
+  }
+
+  // ------------------------------------------------------------------ X und O
+
+  function isXo(row) {
+    return row.kind === "xo";
+  }
+
+  /** Spielstand vor der ersten Runde: X beginnt. */
+  function xoInitial() {
+    return { board: XO_EMPTY, round: 1, starter: "x", turn: "x", score: { x: 0, o: 0 }, results: [] };
+  }
+
+  /** Spielstand aus der Spalte state (JSON); Einladung oder kaputt → Anfangsstand. */
+  function xoState(row) {
+    try {
+      const state = row.state ? JSON.parse(row.state) : null;
+      if (state && typeof state.board === "string") return state;
+    } catch {
+      // kaputt → Anfangsstand
+    }
+    return xoInitial();
+  }
+
+  /** Anzahl Zeichen auf dem Brett der laufenden Runde (= ply beim Zug). */
+  function xoPly(state) {
+    return state.board.replace(/\./g, "").length;
+  }
+
+  function xoWinLine(board) {
+    return XO_LINES.find(([a, b, c]) => board[a] !== "." && board[a] === board[b] && board[a] === board[c]) || null;
+  }
+
+  /** Runde beenden (Ergebnis samt Endbrett in results); winner = "x"/"o", sobald einer die Partie gewonnen hat, sonst nächste Runde. */
+  function xoFinishRound(state, rounds, entry) {
+    const next = { ...state, score: { ...state.score }, results: [...state.results, { ...entry, board: state.board }] };
+    if (entry.winner) next.score[entry.winner]++;
+    const need = Math.ceil(rounds / 2);
+    if (next.score.x >= need || next.score.o >= need) return { state: next, winner: next.score.x >= need ? "x" : "o" };
+    // Unentschieden zählt nicht; nächste Runde, Anfang wechselt (x, o, x …)
+    next.board = XO_EMPTY;
+    next.round++;
+    next.starter = state.starter === "x" ? "o" : "x";
+    next.turn = next.starter;
+    return { state: next, winner: null };
+  }
+
+  /** Zeit je Zug: wer zu lange braucht, verliert die Runde (nachgeholt, höchstens XO_SETTLE_MAX Runden). */
+  async function settleXo(row, t) {
+    const limit = (row.move_s || 0) * 1000;
+    if (!limit) return row;
+    let state = xoState(row);
+    let since = row.turn_since;
+    let winner = null;
+    for (let i = 0; i < XO_SETTLE_MAX && !winner && t - since > limit; i++) {
+      const loser = state.turn;
+      since += limit; // nächste Runde beginnt mit dem Ablauf, nicht erst beim Nachholen
+      ({ state, winner } = xoFinishRound(state, row.rounds, { winner: loser === "x" ? "o" : "x", reason: "timeout", line: null }));
+    }
+    if (since === row.turn_since) return row;
+    // nur anwenden, wenn niemand anderes inzwischen nachgeholt oder gezogen hat (turn_since unverändert)
+    if (winner) {
+      await db.run("UPDATE games SET status = 'over', result = ?, reason = 'rounds', state = ?, turn_since = ?, draw_offer = NULL, updated = ? WHERE id = ? AND status = 'active' AND turn_since = ?",
+        [winner === "x" ? "1-0" : "0-1", JSON.stringify(state), since, t, row.id, row.turn_since]);
+    } else {
+      await db.run("UPDATE games SET state = ?, turn_since = ?, updated = ? WHERE id = ? AND status = 'active' AND turn_since = ?",
+        [JSON.stringify(state), since, t, row.id, row.turn_since]);
+    }
+    return db.get("SELECT * FROM games WHERE id = ?", [row.id]);
+  }
+
+  /** X und O: Zeichen setzen; Reihe → Punkt, volles Brett → Unentschieden; danach nächste Runde oder Partie-Ende. */
+  async function xoMove(row, side, data) {
+    const state = xoState(row);
+    if (data.ply !== xoPly(state)) throw new HttpError(409, "Partie hat sich geändert – bitte neu laden");
+    if (state.turn !== side) throw new HttpError(409, "Du bist nicht am Zug");
+    const cell = typeof data.move === "string" && /^[0-8]$/.test(data.move) ? Number(data.move) : data.move;
+    if (!Number.isInteger(cell) || cell < 0 || cell > 8) throw new HttpError(400, "Ungültiges Feld");
+    if (state.board[cell] !== ".") throw new HttpError(400, "Feld ist belegt");
+    const t = now();
+    const board = state.board.slice(0, cell) + side + state.board.slice(cell + 1);
+    let next = { ...state, board, turn: side === "x" ? "o" : "x" };
+    let winner = null;
+    const line = xoWinLine(board);
+    if (line || !board.includes(".")) {
+      const entry = line ? { winner: side, reason: "line", line } : { winner: null, reason: "draw", line: null };
+      ({ state: next, winner } = xoFinishRound(next, row.rounds, entry));
+    }
+    const updated = { ...row, state: JSON.stringify(next), turn_since: t, draw_offer: null, updated: t };
+    if (winner) return endGame(updated, winner === "x" ? "1-0" : "0-1", "rounds", updated);
+    await db.run("UPDATE games SET state = ?, turn_since = ?, draw_offer = NULL, updated = ? WHERE id = ?", [updated.state, t, t, row.id]);
+    return updated;
   }
 
   /** Partie, an der ich beteiligt bin (sonst 404), mit nachgeholten Zeitabläufen. */
@@ -526,25 +627,36 @@ export function createApi(db, options = {}) {
     }
     const t = now();
     const person = (uuid) => (uuid ? { uuid, name: names.get(uuid) || null } : null);
-    return rows.map((row) => ({
-      id: row.id,
-      status: row.status,
-      inviter: person(row.inviter),
-      invitee: person(row.invitee),
-      white: person(row.white),
-      black: person(row.black),
-      color: row.color,
-      time: row.time_s,
-      moves: gameMoves(row),
-      fen: row.fen,
-      turn: gameTurn(row),
-      clock: gameClock(row, t),
-      drawOffer: row.draw_offer || null,
-      result: row.result || null,
-      reason: row.reason || null,
-      created: row.created,
-      updated: row.updated,
-    }));
+    return rows.map((row) => {
+      const xo = isXo(row) ? xoState(row) : null;
+      const limit = (row.move_s || 0) * 1000;
+      return {
+        id: row.id,
+        kind: xo ? "xo" : "chess",
+        status: row.status,
+        inviter: person(row.inviter),
+        invitee: person(row.invitee),
+        white: person(row.white),   // X und O: Spieler X
+        black: person(row.black),   // X und O: Spieler O
+        color: row.color,
+        time: row.time_s,
+        rounds: xo ? row.rounds : null,
+        moveTime: xo ? row.move_s : null,
+        moves: gameMoves(row),
+        fen: xo ? null : row.fen,
+        turn: xo ? (xo.turn === "x" ? "w" : "b") : gameTurn(row),
+        clock: xo ? null : gameClock(row, t),
+        drawOffer: row.draw_offer || null,
+        result: row.result || null,
+        reason: row.reason || null,
+        xo: xo && {
+          ...xo,
+          moveLeft: row.status === "active" && limit ? Math.max(0, limit - (t - row.turn_since)) : null,
+        },
+        created: row.created,
+        updated: row.updated,
+      };
+    });
   }
 
   async function gameResponse(row) {
@@ -556,12 +668,12 @@ export function createApi(db, options = {}) {
     const t = now();
     const clock = gameClock(row, t);
     const next = { ...row, white_ms: clock.white, black_ms: clock.black, ...extra, status: "over", result, reason, draw_offer: null, updated: t };
-    await db.run("UPDATE games SET status = 'over', result = ?, reason = ?, white_ms = ?, black_ms = ?, moves = ?, fen = ?, draw_offer = NULL, updated = ? WHERE id = ?",
-      [result, reason, next.white_ms, next.black_ms, next.moves, next.fen, t, row.id]);
+    await db.run("UPDATE games SET status = 'over', result = ?, reason = ?, white_ms = ?, black_ms = ?, moves = ?, fen = ?, state = ?, draw_offer = NULL, updated = ? WHERE id = ?",
+      [result, reason, next.white_ms, next.black_ms, next.moves, next.fen, next.state ?? null, t, row.id]);
     return next;
   }
 
-  /** Einladung annehmen: Farben verteilen (Zufall = 50/50), Uhren starten. */
+  /** Einladung annehmen: Farben verteilen (Zufall = 50/50; X und O: Weiß = X), Uhren bzw. erste Runde starten. */
   async function startGame(row) {
     for (const uuid of [row.inviter, row.invitee]) {
       if ((await openGames(uuid)).filter((g) => g.status === "active").length >= GAME_ACTIVE) throw new HttpError(429, `Höchstens ${GAME_ACTIVE} Partien gleichzeitig`);
@@ -569,8 +681,9 @@ export function createApi(db, options = {}) {
     const inviterWhite = row.color === "white" || (row.color === "random" && crypto.getRandomValues(new Uint8Array(1))[0] < 128);
     const [white, black] = inviterWhite ? [row.inviter, row.invitee] : [row.invitee, row.inviter];
     const t = now();
-    await db.run("UPDATE games SET status = 'active', white = ?, black = ?, white_ms = ?, black_ms = ?, turn_since = ?, white_seen = ?, black_seen = ?, updated = ? WHERE id = ? AND status = 'invited'",
-      [white, black, row.time_s * 1000, row.time_s * 1000, t, t, t, t, row.id]);
+    const state = isXo(row) ? JSON.stringify(xoInitial()) : null;
+    await db.run("UPDATE games SET status = 'active', white = ?, black = ?, white_ms = ?, black_ms = ?, turn_since = ?, white_seen = ?, black_seen = ?, state = ?, updated = ? WHERE id = ? AND status = 'invited'",
+      [white, black, row.time_s * 1000, row.time_s * 1000, t, t, t, state, t, row.id]);
     return db.get("SELECT * FROM games WHERE id = ?", [row.id]);
   }
 
@@ -617,7 +730,7 @@ export function createApi(db, options = {}) {
 
   /** Schach-Bilanz aus beendeten Partien (games, status 'over'). */
   async function chessStats(uuid) {
-    const rows = await db.all("SELECT g.white, g.black, g.result, u.name AS opponent FROM games g LEFT JOIN users u ON u.uuid = (CASE WHEN g.white = ? THEN g.black ELSE g.white END) WHERE g.status = 'over' AND (g.white = ? OR g.black = ?)",
+    const rows = await db.all("SELECT g.white, g.black, g.result, u.name AS opponent FROM games g LEFT JOIN users u ON u.uuid = (CASE WHEN g.white = ? THEN g.black ELSE g.white END) WHERE g.status = 'over' AND (g.kind IS NULL OR g.kind = 'chess') AND (g.white = ? OR g.black = ?)",
       [uuid, uuid, uuid]);
     const total = { played: 0, wins: 0, losses: 0, draws: 0 };
     const opponents = new Map();
@@ -1072,20 +1185,30 @@ export function createApi(db, options = {}) {
       const me = await auth(request);
       await markSeen(me.uuid);
       const open = (await openGames(me.uuid)).filter((g) => g.status === "invited" || g.status === "active");
-      const recent = await db.all("SELECT * FROM games WHERE (inviter = ? OR invitee = ?) AND status IN ('over', 'declined', 'cancelled') AND updated > ?",
+      const recent = await db.all("SELECT * FROM games WHERE (inviter = ? OR invitee = ?) AND status IN ('over', 'declined', 'cancelled', 'expired') AND updated > ?",
         [me.uuid, me.uuid, now() - GAME_RECENT_MS]);
       const ids = new Set(open.map((g) => g.id));
       const rows = [...open, ...recent.filter((g) => !ids.has(g.id))].sort((x, y) => y.updated - x.updated);
       return { games: await gameViews(rows), serverTime: now() };
     },
 
-    /** Einladen: { to: Minecraft-Name, time: 60|180|300|600, color: "random"|"white"|"black" (eigene Farbe) }. */
+    /**
+     * Einladen: { to: Minecraft-Name, game: "chess"|"xo" (fehlt = Schach), color: "random"|"white"|"black" (eigene Farbe) }.
+     * Schach: time: 60|180|300|600. X und O: rounds: 1|3|5, moveTime: 0|5|10|30 (Sekunden je Zug, 0 = ohne); Weiß = X.
+     */
     "POST /api/games": async (request) => {
       const me = await auth(request);
       const data = await body(request);
-      const time = Number(data.time);
+      const kind = data.game === undefined || data.game === null ? "chess" : data.game;
+      if (!GAME_KINDS.includes(kind)) throw new HttpError(400, "Unbekanntes Spiel");
+      const xo = kind === "xo";
+      const time = xo ? 0 : Number(data.time);
+      const rounds = xo ? Number(data.rounds) : null;
+      const moveTime = xo ? Number(data.moveTime) : null;
       const color = data.color === undefined ? "random" : data.color;
-      if (!GAME_TIMES.includes(time)) throw new HttpError(400, "Ungültige Bedenkzeit");
+      if (!xo && !GAME_TIMES.includes(time)) throw new HttpError(400, "Ungültige Bedenkzeit");
+      if (xo && !XO_ROUNDS.includes(rounds)) throw new HttpError(400, "Ungültige Rundenzahl");
+      if (xo && !XO_MOVE_TIMES.includes(moveTime)) throw new HttpError(400, "Ungültige Zeit je Zug");
       if (!GAME_COLORS.includes(color)) throw new HttpError(400, "Ungültige Farbe");
       if (typeof data.to !== "string" || !NAME.test(data.to.trim())) throw new HttpError(400, "Ungültiger Name");
       const target = await findUser(data.to);
@@ -1097,14 +1220,17 @@ export function createApi(db, options = {}) {
       const between = mine.filter((g) => (g.status === "invited" || g.status === "active") && (g.inviter === target.uuid || g.invitee === target.uuid));
       // beide drücken „Revanche“: die Einladung des anderen gilt als angenommen
       const theirs = between.find((g) => g.status === "invited" && g.inviter === target.uuid);
+      if (theirs && (theirs.kind || "chess") !== kind) {
+        throw new HttpError(409, `${target.name} hat dich schon zu ${theirs.kind === "xo" ? "X und O" : "Schach"} herausgefordert – nimm die Einladung an oder lehne sie ab`);
+      }
       if (theirs) return gameResponse(await startGame(theirs));
       if (between.some((g) => g.status === "active")) throw new HttpError(409, `Ihr spielt schon eine Partie – /myticgame öffnet sie`);
       if (between.length) throw new HttpError(409, `Du hast ${target.name} schon herausgefordert – warte auf Antwort`);
       if (mine.filter((g) => g.status === "invited" && g.inviter === me.uuid).length >= GAME_INVITES) throw new HttpError(429, "Zu viele offene Einladungen");
       if (mine.filter((g) => g.status === "active").length >= GAME_ACTIVE) throw new HttpError(429, `Höchstens ${GAME_ACTIVE} Partien gleichzeitig`);
       const id = randomHex(8);
-      await db.run("INSERT INTO games (id, inviter, invitee, color, time_s, status, moves, fen, white_ms, black_ms, turn_since, created, updated) VALUES (?, ?, ?, ?, ?, 'invited', '', ?, ?, ?, 0, ?, ?)",
-        [id, me.uuid, target.uuid, color, time, START_FEN, time * 1000, time * 1000, t, t]);
+      await db.run("INSERT INTO games (id, inviter, invitee, color, time_s, status, moves, fen, white_ms, black_ms, turn_since, kind, rounds, move_s, created, updated) VALUES (?, ?, ?, ?, ?, 'invited', '', ?, ?, ?, 0, ?, ?, ?, ?, ?)",
+        [id, me.uuid, target.uuid, color, time, xo ? "" : START_FEN, time * 1000, time * 1000, kind, rounds, moveTime, t, t]);
       return gameResponse(await db.get("SELECT * FROM games WHERE id = ?", [id]));
     },
 
@@ -1134,12 +1260,16 @@ export function createApi(db, options = {}) {
       return gameResponse(await db.get("SELECT * FROM games WHERE id = ?", [row.id]));
     },
 
-    /** Zug: { move: "e2e4" | "e7e8q", ply: Anzahl bereits gespielter Halbzüge }. */
+    /**
+     * Zug: { move: "e2e4" | "e7e8q", ply: Anzahl bereits gespielter Halbzüge }.
+     * X und O: { move: 0..8 (Feld zeilenweise), ply: Anzahl Zeichen auf dem Brett der laufenden Runde }.
+     */
     "POST /api/games/:id/move": async (request, ip, id) => {
       const me = await auth(request);
       const data = await body(request);
       const row = await loadGame(id, me);
       const color = myColor(row, me);
+      if (isXo(row)) return gameResponse(await xoMove(row, color === "w" ? "x" : "o", data));
       const moves = gameMoves(row);
       if (data.ply !== moves.length) throw new HttpError(409, "Partie hat sich geändert – bitte neu laden");
       if (gameTurn(row) !== color) throw new HttpError(409, "Du bist nicht am Zug");
@@ -1173,6 +1303,7 @@ export function createApi(db, options = {}) {
       const { action } = await body(request);
       const row = await loadGame(id, me);
       myColor(row, me);
+      if (isXo(row)) throw new HttpError(409, "Remis gibt es bei X und O nicht");
       const opponentOffered = Boolean(row.draw_offer) && row.draw_offer !== me.uuid;
       if (action === "offer") {
         // hat der Gegner schon angeboten, gilt das eigene Angebot als Annahme

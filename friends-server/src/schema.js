@@ -143,4 +143,9 @@ export const MIGRATIONS = [
   "ALTER TABLE users ADD COLUMN aura TEXT",
   "ALTER TABLE users ADD COLUMN nametag TEXT",
   "ALTER TABLE challenges ADD COLUMN ip TEXT",
+  // Zweites Spiel „X und O“: Spielart, Runden (best of), Zeit je Zug (Sekunden, 0 = ohne) und Spielstand (JSON)
+  "ALTER TABLE games ADD COLUMN kind TEXT DEFAULT 'chess'",
+  "ALTER TABLE games ADD COLUMN rounds INTEGER",
+  "ALTER TABLE games ADD COLUMN move_s INTEGER",
+  "ALTER TABLE games ADD COLUMN state TEXT",
 ];

@@ -46,7 +46,7 @@ public final class GameCommand {
         if (!ready()) return 0;
         Games.Game active = Games.active();
         if (active != null) {
-            Games.openLater(new ChessScreen(active.id));
+            Games.openLater(Games.screenFor(active));
             return 1;
         }
         Games.Game invite = Games.incomingInvite();
@@ -72,7 +72,7 @@ public final class GameCommand {
             Games.notice("§7Keine offene Herausforderung.");
             return 0;
         }
-        Games.accept(invite.id, game -> Games.openLater(new ChessScreen(game.id)), error -> Games.notice("§c" + error));
+        Games.accept(invite.id, game -> Games.openLater(Games.screenFor(game)), error -> Games.notice("§c" + error));
         return 1;
     }
 

@@ -34,6 +34,14 @@ public final class Games {
         public final int time;
         public final List<String> moves;
         public final long clockWhite, clockBlack, fetchedAt;
+        /** "chess" oder "xo" (X und O); bei X und O sind white/black = X/O */
+        public final String kind;
+        public final int rounds, moveTime;
+        /** X und O: Brett (9 Zeichen „.XO“), Runde, wer dran ist ("x"/"o"), Punkte, Restzeit des Zugs (ms, -1 = ohne Limit) */
+        public final String xoBoard, xoTurn;
+        public final int xoRound, xoScoreX, xoScoreO;
+        public final long xoMoveLeft;
+        public final List<XoResult> xoResults;
 
         Game(JsonObject o) {
             id = str(o, "id");
@@ -61,6 +69,59 @@ public final class Games {
             clockWhite = clock != null && clock.has("white") ? clock.get("white").getAsLong() : time * 1000L;
             clockBlack = clock != null && clock.has("black") ? clock.get("black").getAsLong() : time * 1000L;
             fetchedAt = System.currentTimeMillis();
+            kind = o.has("kind") && !o.get("kind").isJsonNull() ? o.get("kind").getAsString() : "chess";
+            rounds = o.has("rounds") && o.get("rounds").isJsonPrimitive() ? o.get("rounds").getAsInt() : 1;
+            moveTime = o.has("moveTime") && o.get("moveTime").isJsonPrimitive() ? o.get("moveTime").getAsInt() : 0;
+            JsonObject xo = obj(o, "xo");
+            // Server schreibt „x“/„o“ klein, die Anzeige arbeitet mit „X“/„O“
+            xoBoard = xo != null && str(xo, "board") != null ? str(xo, "board").toUpperCase(java.util.Locale.ROOT) : ".........";
+            xoTurn = xo != null && str(xo, "turn") != null ? str(xo, "turn") : "x";
+            xoRound = xo != null && xo.has("round") ? xo.get("round").getAsInt() : 1;
+            JsonObject score = obj(xo, "score");
+            xoScoreX = score != null && score.has("x") ? score.get("x").getAsInt() : 0;
+            xoScoreO = score != null && score.has("o") ? score.get("o").getAsInt() : 0;
+            xoMoveLeft = xo != null && xo.has("moveLeft") && !xo.get("moveLeft").isJsonNull() ? xo.get("moveLeft").getAsLong() : -1;
+            List<XoResult> res = new ArrayList<>();
+            if (xo != null && xo.has("results") && xo.get("results").isJsonArray()) {
+                for (JsonElement e : xo.getAsJsonArray("results")) {
+                    JsonObject r = e.getAsJsonObject();
+                    int[] line = new int[0];
+                    if (r.has("line") && r.get("line").isJsonArray()) {
+                        JsonArray a = r.getAsJsonArray("line");
+                        line = new int[a.size()];
+                        for (int i = 0; i < line.length; i++) line[i] = a.get(i).getAsInt();
+                    }
+                    String endBoard = str(r, "board");
+                    res.add(new XoResult(str(r, "winner"), str(r, "reason"), line, endBoard == null ? null : endBoard.toUpperCase(java.util.Locale.ROOT)));
+                }
+            }
+            xoResults = Collections.unmodifiableList(res);
+        }
+
+        public boolean xo() {
+            return "xo".equals(kind);
+        }
+
+        /** Mein Symbol bei X und O ("x" = white) */
+        public String mySymbol() {
+            return meWhite() ? "x" : "o";
+        }
+
+        /** Restzeit des aktuellen Zugs jetzt (ms) oder -1 ohne Limit */
+        public long moveLeft() {
+            if (xoMoveLeft < 0 || !active()) return -1;
+            return Math.max(0, xoMoveLeft - (System.currentTimeMillis() - fetchedAt));
+        }
+
+        /** Spielname für Meldungen */
+        public String gameName() {
+            return xo() ? "X und O" : "Schach";
+        }
+
+        /** Einstellungen kurz, z. B. „5 Min“ oder „Best of 3, 10 s/Zug“ */
+        public String settings() {
+            if (!xo()) return time / 60 + " Min";
+            return (rounds == 1 ? "1 Runde" : "Best of " + rounds) + ", " + (moveTime > 0 ? moveTime + " s/Zug" : "ohne Zeitlimit");
         }
 
         public boolean active() {
@@ -82,6 +143,7 @@ public final class Games {
         }
 
         public boolean myTurn() {
+            if (xo()) return active() && xoTurn.equals(mySymbol());
             return active() && ("w".equals(turn) == meWhite());
         }
 
@@ -109,6 +171,15 @@ public final class Games {
                 return Chess.start();
             }
         }
+    }
+
+    /** Ergebnis einer X-und-O-Runde: Gewinner ("x"/"o"/null), Grund, Gewinnreihe, Endbrett */
+    public record XoResult(String winner, String reason, int[] line, String board) {
+    }
+
+    /** Fenster für eine Partie (Schach oder X und O) */
+    public static Screen screenFor(Game g) {
+        return g.xo() ? new XoScreen(g.id) : new ChessScreen(g.id);
     }
 
     private static volatile List<Game> games = Collections.emptyList();
@@ -179,7 +250,8 @@ public final class Games {
             Compat.setScreen(s);
         }
         if (!available() || polling) return;
-        boolean busy = active() != null || Compat.screen(mc) instanceof ChessScreen || Compat.screen(mc) instanceof ChallengeScreen || hasOutgoing();
+        Screen open = Compat.screen(mc);
+        boolean busy = active() != null || open instanceof ChessScreen || open instanceof XoScreen || open instanceof ChallengeScreen || hasOutgoing();
         long interval = busy ? 1500 : 5000;
         long now = System.currentTimeMillis();
         if (!pollSoon && now - lastPoll < interval) return;
@@ -221,39 +293,44 @@ public final class Games {
                 if (g.incoming()) announcedInvites.add(g.id);
                 continue;
             }
-            boolean viewing = screen instanceof ChessScreen cs && cs.gameId().equals(g.id);
+            boolean viewing = (screen instanceof ChessScreen cs && cs.gameId().equals(g.id)) || (screen instanceof XoScreen xs && xs.gameId().equals(g.id));
             if (g.incoming() && announcedInvites.add(g.id)) {
-                chat(mc, "§d" + g.inviterName + "§7 fordert dich zu §fSchach§7 heraus §8(" + g.time / 60 + " Min, "
-                        + colorText(g.color, true) + ")§7 – §f/myticgame annehmen§7 oder §f/myticgame ablehnen");
-                Msg.actionBar("Schach-Herausforderung von " + g.inviterName);
+                chat(mc, "§d" + g.inviterName + "§7 fordert dich zu §f" + g.gameName() + "§7 heraus §8(" + g.settings() + ", "
+                        + colorText(g, true) + ")§7 – §f/myticgame annehmen§7 oder §f/myticgame ablehnen §8(1 Minute Zeit)");
+                Msg.actionBar(g.gameName() + "-Herausforderung von " + g.inviterName);
             }
             if (g.active() && "invited".equals(before)) {
                 // Partie beginnt: Herausforderer bekommt das Brett, wenn gerade nichts anderes offen ist
-                if (screen == null && me != null && me.equals(g.inviterUuid)) Compat.setScreen(new ChessScreen(g.id));
-                else if (!viewing) chat(mc, "§7Schach gegen §d" + g.opponentName() + "§7 beginnt – §f/myticgame§7 öffnet das Brett");
+                if (screen == null && me != null && me.equals(g.inviterUuid)) Compat.setScreen(screenFor(g));
+                else if (!viewing) chat(mc, "§7" + g.gameName() + " gegen §d" + g.opponentName() + "§7 beginnt – §f/myticgame§7 öffnet das Spiel");
             }
             if (g.active() && movesBefore != null && g.moves.size() > movesBefore && g.myTurn() && !viewing) {
                 Msg.actionBar(g.opponentName() + " hat gezogen – du bist dran (/myticgame)");
             }
             if (g.over() && before != null && !"over".equals(before) && !viewing) chat(mc, resultText(g));
             if ("declined".equals(g.status) && "invited".equals(before) && me != null && me.equals(g.inviterUuid))
-                chat(mc, "§d" + g.inviteeName + "§7 hat die Schach-Herausforderung abgelehnt.");
-            if ("expired".equals(g.status) && "invited".equals(before)) chat(mc, "§7Schach-Herausforderung abgelaufen.");
+                chat(mc, "§d" + g.inviteeName + "§7 hat die " + g.gameName() + "-Herausforderung abgelehnt.");
+            if ("expired".equals(g.status) && "invited".equals(before))
+                chat(mc, me != null && me.equals(g.inviterUuid) ? "§d" + g.inviteeName + "§7 hat nicht innerhalb einer Minute angenommen – Herausforderung abgelehnt."
+                        : "§7Herausforderung von §d" + g.inviterName + "§7 ist abgelaufen.");
         }
     }
 
-    public static String colorText(String color, boolean forInvitee) {
-        if (color == null || color.equals("random")) return "Farbe: Zufall";
+    public static String colorText(Game g, boolean forInvitee) {
+        String color = g.color;
+        if (color == null || color.equals("random")) return g.xo() ? "Symbol: Zufall" : "Farbe: Zufall";
         boolean inviterWhite = color.equals("white");
-        return (forInvitee ? (inviterWhite ? "du spielst Schwarz" : "du spielst Weiß") : (inviterWhite ? "du spielst Weiß" : "du spielst Schwarz"));
+        boolean meWhite = forInvitee != inviterWhite;
+        return g.xo() ? (meWhite ? "du bist X" : "du bist O") : (meWhite ? "du spielst Weiß" : "du spielst Schwarz");
     }
 
     public static String resultText(Game g) {
         boolean meWhite = g.meWhite();
         String why = reasonText(g.reason);
-        if ("1/2-1/2".equals(g.result)) return "§7Schach gegen §d" + g.opponentName() + "§7: §fRemis§7 (" + why + ")";
+        String score = g.xo() ? " " + (meWhite ? g.xoScoreX + ":" + g.xoScoreO : g.xoScoreO + ":" + g.xoScoreX) : "";
+        if ("1/2-1/2".equals(g.result)) return "§7" + g.gameName() + " gegen §d" + g.opponentName() + "§7: §fRemis§7 (" + why + ")";
         boolean won = ("1-0".equals(g.result)) == meWhite;
-        return "§7Schach gegen §d" + g.opponentName() + "§7: " + (won ? "§aGewonnen" : "§cVerloren") + "§7 (" + why + ")";
+        return "§7" + g.gameName() + " gegen §d" + g.opponentName() + "§7: " + (won ? "§aGewonnen" : "§cVerloren") + score + "§7 (" + why + ")";
     }
 
     public static String reasonText(String reason) {
@@ -266,6 +343,7 @@ public final class Games {
             case "agreement" -> "Remis vereinbart";
             case "left" -> "Spiel verlassen";
             case "abandoned" -> "Verbindung verloren";
+            case "rounds" -> "Runden";
             default -> reason;
         };
     }
@@ -288,6 +366,25 @@ public final class Games {
         body.addProperty("time", time);
         body.addProperty("color", color);
         send("api/games", body, ok, error);
+    }
+
+    /** X und O herausfordern: rounds 1/3/5, moveTime Sekunden pro Zug (0 = ohne), color "random"/"white"(X)/"black"(O) */
+    public static void inviteXo(String name, int rounds, int moveTime, String color, Consumer<Game> ok, Consumer<String> error) {
+        JsonObject body = new JsonObject();
+        body.addProperty("to", name);
+        body.addProperty("game", "xo");
+        body.addProperty("rounds", rounds);
+        body.addProperty("moveTime", moveTime);
+        body.addProperty("color", color);
+        send("api/games", body, ok, error);
+    }
+
+    /** X und O: Feld 0–8 setzen; ply = Zeichen auf dem Brett in dieser Runde */
+    public static void place(String id, int cell, int ply, Consumer<String> error) {
+        JsonObject body = new JsonObject();
+        body.addProperty("move", cell);
+        body.addProperty("ply", ply);
+        send("api/games/" + id + "/move", body, null, error);
     }
 
     public static void accept(String id, Consumer<Game> ok, Consumer<String> error) {
