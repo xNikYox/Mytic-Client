@@ -23,6 +23,11 @@ public class ShipsScreen extends GameScreen {
     private boolean horizontal = true, sentFleet;
     /** Schuss unterwegs (bis der Server antwortet) */
     private int pendingShot = -1, pendingCount = -1;
+    /** letzter Schuss: zum Aufblinken merken, wann er neu war */
+    private int flashCell = -1;
+    private boolean flashByMe;
+    private long flashAt;
+    private static final int LAST = 0xFFFFD84A; // Markierung des letzten Schusses (gelb, unabhängig vom Design)
 
     public ShipsScreen(String id) {
         super("Schiffe versenken", id);
@@ -155,6 +160,11 @@ public class ShipsScreen extends GameScreen {
         Games.Ships sh = game.ships;
         boolean setup = setup(game);
         if (sh != null && pendingShot >= 0 && sh.myShotCount() >= pendingCount) pendingShot = -1;
+        if (sh != null && sh.lastCell >= 0 && (sh.lastCell != flashCell || sh.lastByMe != flashByMe)) { // neuer Schuss → aufblinken
+            flashCell = sh.lastCell;
+            flashByMe = sh.lastByMe;
+            flashAt = System.currentTimeMillis();
+        }
         List<int[]> myFleet = setup && (sh == null || !sh.myReady) ? placed : sh.myFleet;
         int mySunk = sh == null ? 0 : sh.mySunk.size(), theirSunk = sh == null ? 0 : sh.theirSunk.size();
         // Überschriften
@@ -201,7 +211,9 @@ public class ShipsScreen extends GameScreen {
             if (own && has(fleet, c)) fill = 0xFF8C93A6;
             if (!own && sh != null && sh.opFleet != null && has(sh.opFleet, c)) fill = 0xFF8C93A6; // nach dem Ende: gegnerische Flotte
             Character shot = shots.get(c);
-            if (shot != null && shot == 'h') fill = Ui.mix(water, Ui.RED, 0.75f);
+            if (shot != null && shot == 'm') fill = Ui.mix(water, 0xFF000000, 0.35f); // Wasser: Feld dunkler
+            if (shot != null && shot == 'a') fill = Ui.mix(water, 0xFF000000, 0.2f);
+            if (shot != null && shot == 'h') fill = Ui.mix(water, Ui.RED, 0.9f);
             if (has(sunk, c)) fill = Ui.mix(0xFF000000, Ui.RED, 0.45f);
             if (ghost != null && contains(ghost, c)) fill = ghostOk ? Ui.mix(water, ChessScreen.highlight(), 0.55f) : Ui.mix(water, Ui.RED, 0.55f);
             if (c == hover && shot == null && !has(sunk, c)) fill = Ui.mix(water, ChessScreen.highlight(), 0.45f);
@@ -209,11 +221,23 @@ public class ShipsScreen extends GameScreen {
             g.fill(x + 1, y + 1, x + s, y + s, fill);
             if (shot != null) {
                 int cx = x + s / 2 + 1, cy = y + s / 2 + 1;
-                if (shot == 'h') XoScreen.symbol(g, 'X', cx, cy, s * 0.55f, 0xFFFFFFFF);
-                else disc(g, cx, cy, Math.max(1, s / 7), shot == 'a' ? 0x55FFFFFF : 0xB0FFFFFF);
+                if (shot == 'h') XoScreen.symbol(g, 'X', cx, cy, s * 0.7f, 0xFFFFFFFF);
+                else if (shot == 'm') disc(g, cx, cy, Math.max(2, s / 4), 0xF0FFFFFF); // Wasser: großer heller Punkt
+                else disc(g, cx, cy, Math.max(1, s / 8), 0x66FFFFFF); // automatisch markiert: klein und blass
             }
-            if (sh != null && sh.lastCell == c && sh.lastByMe != own) Ui.outline(g, x + 1, y + 1, s - 1, s - 1, 0, 0xFFFFFFFF, 0x00000000);
+            // letzter Schuss: erst aufblinken, dann dicker gelber Rahmen bis zum nächsten Schuss
+            if (sh != null && sh.lastCell == c && sh.lastByMe != own) {
+                long since = System.currentTimeMillis() - flashAt;
+                if (flashCell == c && since < 1200 && (since / 150) % 2 == 0) g.fill(x + 1, y + 1, x + s, y + s, 0x99FFFFFF);
+                Ui.outline(g, x, y, s + 1, s + 1, 0, LAST, 0x00000000);
+                Ui.outline(g, x + 1, y + 1, s - 1, s - 1, 0, LAST, 0x00000000);
+            }
         }
+    }
+
+    /** Feld als Koordinate, z. B. „C5“ */
+    private static String coord(int cell) {
+        return (char) ('A' + cell % N) + String.valueOf(cell / N + 1);
     }
 
     private static boolean contains(int[] a, int v) {
@@ -277,7 +301,7 @@ public class ShipsScreen extends GameScreen {
             String last = "";
             if (sh != null && sh.lastCell >= 0) {
                 String who = sh.lastByMe ? "Du: " : game.opponentName() + ": ";
-                last = who + (sh.lastResult == 's' ? "versenkt! " : sh.lastResult == 'h' ? "Treffer! " : "Wasser ");
+                last = who + coord(sh.lastCell) + " – " + (sh.lastResult == 's' ? "versenkt! " : sh.lastResult == 'h' ? "Treffer! " : "Wasser ");
             }
             state = last + (game.myTurn() ? "· du schießt" : "· " + game.opponentName() + " zielt");
             if (game.myTurn()) color = ChessScreen.highlight();
