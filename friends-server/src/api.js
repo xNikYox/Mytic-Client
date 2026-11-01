@@ -32,7 +32,7 @@ const GAME_INVITE_MS = 10 * 60 * 1000;  // Einladung verfällt nach 10 Minuten
 const GAME_RECENT_MS = 2 * 60 * 1000;   // beendete Partien bleiben so lange in der Liste
 const GAME_ABANDON_MS = 30 * 1000; // so lange ohne Lebenszeichen (Abfrage) → Partie verloren (Absturz, Minecraft beendet)
 const GAME_KEEP_MS = 7 * 24 * 60 * 60 * 1000; // abgelehnte/zurückgezogene/verfallene Einladungen danach löschen
-const GAME_TIMES = [180, 300, 600];     // Bedenkzeit je Spieler in Sekunden
+const GAME_TIMES = [60, 180, 300, 600]; // Bedenkzeit je Spieler in Sekunden (1, 3, 5, 10 Minuten)
 const GAME_COLORS = ["random", "white", "black"];
 const GAME_INVITES = 5;                 // offene ausgehende Einladungen je Spieler
 const GAME_ACTIVE = 3;                  // laufende Partien je Spieler
@@ -1079,7 +1079,7 @@ export function createApi(db, options = {}) {
       return { games: await gameViews(rows), serverTime: now() };
     },
 
-    /** Einladen: { to: Minecraft-Name, time: 180|300|600, color: "random"|"white"|"black" (eigene Farbe) }. */
+    /** Einladen: { to: Minecraft-Name, time: 60|180|300|600, color: "random"|"white"|"black" (eigene Farbe) }. */
     "POST /api/games": async (request) => {
       const me = await auth(request);
       const data = await body(request);

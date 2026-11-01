@@ -337,3 +337,11 @@ test("Revanche: beide fordern sich gegenseitig heraus → Partie startet", async
   assert.equal(running.status, 409);
   assert.match(running.data.error, /spielt schon eine Partie/);
 });
+
+test("Bedenkzeit 1 Minute (Bullet)", async () => {
+  const s = await setup();
+  const game = await s.start("Alice", "Bob", 60);
+  assert.equal(game.time, 60);
+  assert.deepEqual(game.clock, { white: 60000, black: 60000 });
+  assert.equal((await s.call("POST", "/api/games", { to: "Dave", time: 120 }, s.t("Carol"))).status, 400, "2 Minuten gibt es nicht");
+});

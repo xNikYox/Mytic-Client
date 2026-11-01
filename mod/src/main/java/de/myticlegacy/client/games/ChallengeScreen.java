@@ -9,13 +9,13 @@ import net.minecraft.client.gui.GuiGraphics;
 
 /** „Neues Spiel“ (/myticgame <name>): Bedenkzeit 3/5/10 Minuten und Farbe Zufall/Weiß/Schwarz, dann herausfordern. */
 public class ChallengeScreen extends PanelScreen {
-    private static final int[] TIMES = {180, 300, 600};
-    private static final String[] TIME_LABEL = {"3 Min", "5 Min", "10 Min"};
-    private static final String[] TIME_SUB = {"Blitz", "", "Schnell"};
+    private static final int[] TIMES = {60, 180, 300, 600};
+    private static final String[] TIME_LABEL = {"1 Min", "3 Min", "5 Min", "10 Min"};
+    private static final String[] TIME_SUB = {"Bullet", "Blitz", "", "Schnell"};
     private static final String[] COLORS = {"random", "white", "black"};
     private static final String[] COLOR_LABEL = {"Zufall", "Weiß", "Schwarz"};
     /** letzte Wahl merken (bis zum Neustart) */
-    private static int timeIndex = 1, colorIndex = 0;
+    private static int timeIndex = 2, colorIndex = 0;
 
     private final String opponent;
     private String status = "";
@@ -50,8 +50,13 @@ public class ChallengeScreen extends PanelScreen {
         return py + HEADER + 10 + row * 44;
     }
 
+    /** Anzahl Knöpfe je Zeile: Bedenkzeit (4), Farbe (3) */
+    private static int count(int row) {
+        return row == 0 ? TIMES.length : COLORS.length;
+    }
+
     private int[] option(int row, int i) {
-        int x0 = px + 12, w = (pw - 24 - 2 * 6) / 3;
+        int n = count(row), x0 = px + 12, w = (pw - 24 - (n - 1) * 6) / n;
         return new int[]{x0 + i * (w + 6), rowY(row) + 12, w, 24};
     }
 
@@ -68,9 +73,9 @@ public class ChallengeScreen extends PanelScreen {
         Ui.text(g, "Schach gegen", headerX, py + 13, Ui.lunar() ? 0xFF9A9A9A : Ui.MUTED, false);
         Ui.text(g, opponent, headerX + font.width("Schach gegen "), py + 13, Ui.lunar() ? 0xFFFFFFFF : Ui.accent(), false);
         label(g, "BEDENKZEIT", 0);
-        for (int i = 0; i < 3; i++) choice(g, option(0, i), TIME_LABEL[i], TIME_SUB[i], i == timeIndex, mouseX, mouseY);
+        for (int i = 0; i < TIMES.length; i++) choice(g, option(0, i), TIME_LABEL[i], TIME_SUB[i], i == timeIndex, mouseX, mouseY);
         label(g, "DEINE FARBE", 1);
-        for (int i = 0; i < 3; i++) choice(g, option(1, i), COLOR_LABEL[i], i == 0 ? "50/50" : "", i == colorIndex, mouseX, mouseY);
+        for (int i = 0; i < COLORS.length; i++) choice(g, option(1, i), COLOR_LABEL[i], i == 0 ? "50/50" : "", i == colorIndex, mouseX, mouseY);
         if (!status.isEmpty()) Ui.text(g, status, px + 12, py + ph - FOOTER + 10, statusError ? Ui.RED : Ui.lunar() ? 0xFF9A9A9A : Ui.MUTED, false);
         ChessScreen.button(g, cancelButton(), "Abbrechen", false, mouseX, mouseY);
         ChessScreen.button(g, sendButton(), sending ? "Sende …" : "Herausfordern", true, mouseX, mouseY);
@@ -98,7 +103,7 @@ public class ChallengeScreen extends PanelScreen {
     @Override
     protected boolean clickContent(double mx, double my) {
         for (int row = 0; row < 2; row++) {
-            for (int i = 0; i < 3; i++) {
+            for (int i = 0; i < count(row); i++) {
                 int[] r = option(row, i);
                 if (Ui.inside(mx, my, r[0], r[1], r[2], r[3])) {
                     if (row == 0) timeIndex = i;
