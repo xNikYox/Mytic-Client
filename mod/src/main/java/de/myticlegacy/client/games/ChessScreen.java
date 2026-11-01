@@ -36,6 +36,8 @@ public class ChessScreen extends PanelScreen {
     private String status = "";
     private long statusAt;
     private long resignArmed;
+    /** Nachfrage „Partie verlassen?“ offen; leaving = bewusst verlassen (dann kein zweites Aufgeben in removed) */
+    private boolean confirmLeave, leaving;
     private boolean overlayClosed;
     /** Zugliste in Kurzschreibweise (neu berechnet, wenn sich die Zahl der Züge ändert) */
     private List<String> san = new ArrayList<>();
@@ -72,9 +74,32 @@ public class ChessScreen extends PanelScreen {
         by = py + HEADER + 8;
     }
 
+    /** Esc, ‹ oder ✕: in einer laufenden Partie erst nachfragen – Verlassen zählt als Aufgeben */
     @Override
     protected void back() {
+        Games.Game game = game();
+        if (game != null && game.active() && !leaving) {
+            confirmLeave = !confirmLeave; // zweites Esc = weiterspielen
+            return;
+        }
         Compat.setScreen(null);
+    }
+
+    private void leave() {
+        leaving = true;
+        Games.resign(id, true);
+        Compat.setScreen(null);
+    }
+
+    /** Fenster wird anders geschlossen (Tod, Server-Fenster, Trennung …): Partie gilt als verlassen */
+    @Override
+    public void removed() {
+        Games.Game game = game();
+        if (game != null && game.active() && !leaving) {
+            leaving = true;
+            Games.resign(id, true);
+        }
+        super.removed();
     }
 
     // ------------------------------------------------------------------------------------------ Farben (wie Mod-Menü)
@@ -118,7 +143,8 @@ public class ChessScreen extends PanelScreen {
     private static void piece(GuiGraphics g, char p, int x, int y, int size) {
         int col = ORDER.indexOf(Character.toUpperCase(p));
         if (col < 0) return;
-        Blit.region(g, PIECES, x, y, size, size, col * 32, Chess.white(p) ? 0 : 32, 32, 32, 192, 64);
+        // Figuren „cburnett“ (Colin M.L. Burnett, BSD-Lizenz) als 128-px-Bilder, weich skaliert (pieces.png.mcmeta)
+        Blit.region(g, PIECES, x, y, size, size, col * 128, Chess.white(p) ? 0 : 128, 128, 128, 768, 256);
     }
 
     // ------------------------------------------------------------------------------------------ Stellung
@@ -189,6 +215,8 @@ public class ChessScreen extends PanelScreen {
         drawFooter(g, game, mouseX, mouseY);
         if (game.over() && !overlayClosed) drawResult(g, game, mouseX, mouseY);
         if (game.invited()) drawWaiting(g, game, mouseX, mouseY);
+        if (confirmLeave && game.active()) drawLeave(g, mouseX, mouseY);
+        else confirmLeave = false;
         if (dragging && dragMoved && selected >= 0 && pos.board[selected] != 0) {
             int size = sq + 4;
             piece(g, pos.board[selected], (int) dragX - size / 2, (int) dragY - size / 2, size);
@@ -206,7 +234,12 @@ public class ChessScreen extends PanelScreen {
         }
         int check = game.active() && pos.inCheck() ? pos.king(pos.whiteToMove) : -1;
         List<Integer> targets = new ArrayList<>();
-        if (selected >= 0 && game.myTurn()) for (Chess.Move m : pos.legal()) if (m.from() == selected && !targets.contains(m.to())) targets.add(m.to());
+        if (selected >= 0 && game.myTurn()) for (Chess.Move m : pos.legal()) {
+            if (m.from() != selected) continue;
+            if (!targets.contains(m.to())) targets.add(m.to());
+            // Rochade: Turm ist ebenfalls Ziel (König auf den Turm ziehen)
+            if (Character.toUpperCase(pos.board[m.from()]) == 'K' && Math.abs(m.to() - m.from()) == 2) targets.add(m.to() > m.from() ? m.from() + 3 : m.from() - 4);
+        }
         int hover = dragging && dragMoved ? squareAt(mx, my, flipped) : -1;
         int hi = highlight();
         for (int i = 0; i < 64; i++) {
@@ -333,7 +366,7 @@ public class ChessScreen extends PanelScreen {
     }
 
     private void drawFooter(GuiGraphics g, Games.Game game, int mx, int my) {
-        Ui.text(g, "Ziehen oder klicken · Esc: schließen", px + 12, py + ph - FOOTER + 10, muted(), false);
+        Ui.text(g, "Ziehen oder klicken · Verlassen = aufgeben", px + 12, py + ph - FOOTER + 10, muted(), false);
         button(g, flipButton(), "Drehen", false, mx, my);
         if (!game.active()) return;
         boolean offerIn = game.drawOffer != null && !game.drawOffer.equals(Games.myUuid());
@@ -365,6 +398,26 @@ public class ChessScreen extends PanelScreen {
         button(g, overlayButton(1), "Schließen", false, mx, my);
     }
 
+    private int[] leaveButton(int i) {
+        int w = 84, cx = bx + 4 * sq;
+        return new int[]{cx - w - 3 + i * (w + 6), by + 4 * sq + 8, w, 16};
+    }
+
+    private void drawLeave(GuiGraphics g, int mx, int my) {
+        g.fill(bx, by, bx + 8 * sq, by + 8 * sq, 0xAA000000);
+        int w = 190, h = 62, x = bx + 4 * sq - w / 2, y = by + 4 * sq - 32;
+        int panel = Ui.lunar() ? Ui.L_PANEL | 0xFF000000 : Ui.PANEL | 0xFF000000;
+        Ui.rect(g, x, y, w, h, radius(6), panel);
+        Ui.outline(g, x, y, w, h, radius(6), Ui.lunar() ? Ui.L_LINE : Ui.LINE, panel);
+        Ui.centered(g, "Partie verlassen?", x + w / 2, y + 7, text(), true);
+        Ui.centered(g, "Dann gewinnt " + game().opponentName() + ".", x + w / 2, y + 19, muted(), false);
+        button(g, leaveButton(0), "Weiterspielen", true, mx, my);
+        int[] r = leaveButton(1);
+        boolean hover = Ui.inside(mx, my, r[0], r[1], r[2], r[3]);
+        Ui.rect(g, r[0], r[1], r[2], r[3], radius(4), hover ? Ui.RED : Ui.withAlpha(Ui.RED, 120));
+        Ui.centered(g, "Verlassen", r[0] + r[2] / 2, r[1] + 4, 0xFFFFFFFF, false);
+    }
+
     private int[] withdrawButton() {
         return new int[]{bx + 4 * sq - 45, by + 4 * sq + 6, 90, 16};
     }
@@ -385,6 +438,11 @@ public class ChessScreen extends PanelScreen {
         Games.Game game = game();
         if (game == null) return false;
         double mx = event.x(), my = event.y();
+        if (confirmLeave) {
+            if (inside(leaveButton(0), mx, my)) confirmLeave = false;
+            else if (inside(leaveButton(1), mx, my)) leave();
+            return true;
+        }
         if (inside(flipButton(), mx, my)) {
             userFlip = !userFlip;
             return true;
@@ -408,7 +466,10 @@ public class ChessScreen extends PanelScreen {
                 return true;
             }
             if (inside(resignButton(), mx, my)) {
-                if (System.currentTimeMillis() - resignArmed < 3000) Games.resign(id);
+                if (System.currentTimeMillis() - resignArmed < 3000) {
+                    leaving = true; // bewusst aufgegeben: beim Schließen nicht noch einmal
+                    Games.resign(id, false);
+                }
                 else resignArmed = System.currentTimeMillis();
                 return true;
             }
@@ -452,6 +513,7 @@ public class ChessScreen extends PanelScreen {
 
     private boolean tryMove(Games.Game game, Chess pos, int from, int to) {
         Chess.Move m = pos.find(from, to);
+        if (m == null) m = castleOntoRook(pos, from, to);
         if (m == null) return false;
         int ply = game.moves.size();
         local = pos.apply(m);
@@ -465,6 +527,13 @@ public class ChessScreen extends PanelScreen {
             statusAt = System.currentTimeMillis();
         });
         return true;
+    }
+
+    /** Rochade auch so wie in vielen Schach-Apps: König auf den eigenen Turm ziehen oder klicken */
+    private static Chess.Move castleOntoRook(Chess pos, int from, int to) {
+        char k = pos.board[from], r = pos.board[to];
+        if (Character.toUpperCase(k) != 'K' || Character.toUpperCase(r) != 'R' || Chess.white(k) != Chess.white(r) || (from >> 3) != (to >> 3)) return null;
+        return pos.find(from, from + (to > from ? 2 : -2));
     }
 
     private static boolean inside(int[] r, double mx, double my) {

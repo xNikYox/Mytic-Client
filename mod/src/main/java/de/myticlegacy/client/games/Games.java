@@ -123,6 +123,9 @@ public final class Games {
     /** Bildschirm, der nach dem Schließen des Chats geöffnet wird (Befehle laufen aus dem Chat heraus) */
     private static Screen openNext;
     private static int openDelay;
+    /** War der Spieler in einer Welt? (Verlassen der Welt/des Servers = Partie aufgeben) */
+    private static boolean inWorld;
+    private static boolean hookAdded;
 
     public static List<Game> all() {
         return games;
@@ -163,6 +166,13 @@ public final class Games {
     // ------------------------------------------------------------------------------------------ Abfragen
 
     public static void tick(Minecraft mc) {
+        if (!hookAdded && available()) {
+            hookAdded = true;
+            Runtime.getRuntime().addShutdownHook(new Thread(Games::leaveAllNow, "Mytic Games verlassen"));
+        }
+        boolean nowInWorld = mc.level != null;
+        if (inWorld && !nowInWorld) leaveAll();
+        inWorld = nowInWorld;
         if (openNext != null && --openDelay <= 0) {
             Screen s = openNext;
             openNext = null;
@@ -254,6 +264,8 @@ public final class Games {
             case "resign" -> "Aufgegeben";
             case "timeout" -> "Zeit abgelaufen";
             case "agreement" -> "Remis vereinbart";
+            case "left" -> "Spiel verlassen";
+            case "abandoned" -> "Verbindung verloren";
             default -> reason;
         };
     }
@@ -297,8 +309,30 @@ public final class Games {
         send("api/games/" + id + "/move", body, null, error);
     }
 
-    public static void resign(String id) {
-        send("api/games/" + id + "/resign", new JsonObject(), null, null);
+    /** Aufgeben; left = Brett geschlossen, Welt/Server verlassen oder Minecraft beendet */
+    public static void resign(String id, boolean left) {
+        JsonObject body = new JsonObject();
+        if (left) body.addProperty("reason", "left");
+        send("api/games/" + id + "/resign", body, null, null);
+    }
+
+    /** Alle laufenden Partien verlassen (Welt/Server verlassen) */
+    private static void leaveAll() {
+        for (Game g : games) if (g.active()) resign(g.id, true);
+    }
+
+    /** Beim Beenden von Minecraft: laufende Partien sofort verlassen (blockierend, kurz) – sonst merkt der Server es nach 30 s */
+    private static void leaveAllNow() {
+        for (Game g : games) {
+            if (!g.active()) continue;
+            try {
+                JsonObject body = new JsonObject();
+                body.addProperty("reason", "left");
+                Friends.post("api/games/" + g.id + "/resign", body);
+            } catch (Exception ignored) {
+                // dann eben über das fehlende Lebenszeichen
+            }
+        }
     }
 
     public static void draw(String id, String action) {

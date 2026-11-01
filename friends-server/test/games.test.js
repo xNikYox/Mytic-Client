@@ -284,3 +284,34 @@ test("Partien abfragen: eigener Topf, verdrängt die übrigen Anfragen nicht", a
   for (let i = 0; i < 130; i++) assert.equal((await s.call("GET", "/api/games", null, s.t("Alice"))).status, 200);
   assert.equal((await s.call("GET", "/api/friends", null, s.t("Alice"))).status, 200);
 });
+
+test("Partie: Verlassen und Verbindung verloren", async () => {
+  const s = await setup();
+  // Brett geschlossen / Welt verlassen: Aufgeben mit Grund "left"
+  const game = await s.start("Alice", "Bob");
+  const left = await s.call("POST", `/api/games/${game.id}/resign`, { reason: "left" }, s.t("Bob"));
+  assert.equal(left.data.game.result, "1-0");
+  assert.equal(left.data.game.reason, "left");
+
+  // Absturz: Dave fragt 31 s lang nicht ab → Carol gewinnt beim nächsten Abfragen
+  const second = await s.start("Carol", "Dave");
+  await s.move(second.id, s.t("Carol"), "e2e4", 0);
+  s.tick(20000);
+  let list = await s.call("GET", "/api/games", null, s.t("Carol"));
+  assert.equal(list.data.games[0].status, "active", "20 s ohne Lebenszeichen sind noch erlaubt");
+  s.tick(11000);
+  list = await s.call("GET", "/api/games", null, s.t("Carol"));
+  assert.equal(list.data.games[0].status, "over");
+  assert.equal(list.data.games[0].result, "1-0");
+  assert.equal(list.data.games[0].reason, "abandoned");
+
+  // wer regelmäßig abfragt, bleibt drin – auch wenn der Gegner lange nachdenkt
+  const third = await s.start("Erin", "Frank", 600);
+  for (let i = 0; i < 10; i++) {
+    s.tick(15000);
+    await s.call("GET", "/api/games", null, s.t("Erin"));
+    await s.call("GET", "/api/games", null, s.t("Frank"));
+  }
+  const still = await s.call("GET", "/api/games", null, s.t("Erin"));
+  assert.equal(still.data.games.find((g) => g.id === third.id).status, "active");
+});

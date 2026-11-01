@@ -86,6 +86,9 @@ CREATE INDEX IF NOT EXISTS games_status ON games (status, created);
 
 /** Spätere Erweiterungen bestehender Datenbanken (Fehler "Spalte gibt es schon" wird ignoriert). */
 export const MIGRATIONS = [
+  // Schach: letztes Lebenszeichen je Spieler (Absturz/Beenden → nach 30 s verloren)
+  "ALTER TABLE games ADD COLUMN white_seen INTEGER",
+  "ALTER TABLE games ADD COLUMN black_seen INTEGER",
   "ALTER TABLE users ADD COLUMN cape TEXT",
   "ALTER TABLE users ADD COLUMN minime TEXT",
   "ALTER TABLE users ADD COLUMN wings TEXT",

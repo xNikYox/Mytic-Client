@@ -30,6 +30,7 @@ const ADMIN_KEY_MIN = 16;
 // Schach-Partien unter Spielern
 const GAME_INVITE_MS = 10 * 60 * 1000;  // Einladung verfällt nach 10 Minuten
 const GAME_RECENT_MS = 2 * 60 * 1000;   // beendete Partien bleiben so lange in der Liste
+const GAME_ABANDON_MS = 30 * 1000; // so lange ohne Lebenszeichen (Abfrage) → Partie verloren (Absturz, Minecraft beendet)
 const GAME_KEEP_MS = 7 * 24 * 60 * 60 * 1000; // abgelehnte/zurückgezogene/verfallene Einladungen danach löschen
 const GAME_TIMES = [180, 300, 600];     // Bedenkzeit je Spieler in Sekunden
 const GAME_COLORS = ["random", "white", "black"];
@@ -456,7 +457,14 @@ export function createApi(db, options = {}) {
     return gameMoves(row).length % 2 ? "b" : "w";
   }
 
-  /** Zeitabläufe nachholen (beim Lesen und Schreiben): verfallene Einladung, abgelaufene Uhr der Seite am Zug. */
+  /** Lebenszeichen: jede Anfrage eines Spielers hält seine laufenden Partien am Leben. */
+  async function markSeen(uuid) {
+    const t = now();
+    await db.run("UPDATE games SET white_seen = ? WHERE white = ? AND status = 'active'", [t, uuid]);
+    await db.run("UPDATE games SET black_seen = ? WHERE black = ? AND status = 'active'", [t, uuid]);
+  }
+
+  /** Zeitabläufe nachholen (beim Lesen und Schreiben): verfallene Einladung, abgelaufene Uhr der Seite am Zug, Spieler ohne Lebenszeichen. */
   async function settleGame(row) {
     const t = now();
     if (row.status === "invited" && row.created <= t - GAME_INVITE_MS) {
@@ -472,12 +480,23 @@ export function createApi(db, options = {}) {
           [result, clock.white, clock.black, t, row.id]);
         return { ...row, status: "over", result, reason: "timeout", white_ms: clock.white, black_ms: clock.black, draw_offer: null, updated: t };
       }
+      // Absturz oder Minecraft beendet: wer länger als GAME_ABANDON_MS nichts von sich hören ließ, verliert
+      const seenW = row.white_seen || row.turn_since, seenB = row.black_seen || row.turn_since;
+      const goneW = t - seenW > GAME_ABANDON_MS, goneB = t - seenB > GAME_ABANDON_MS;
+      if (goneW || goneB) {
+        const whiteLost = goneW && (!goneB || seenW <= seenB);
+        const result = whiteLost ? "0-1" : "1-0";
+        await db.run("UPDATE games SET status = 'over', result = ?, reason = 'abandoned', white_ms = ?, black_ms = ?, draw_offer = NULL, updated = ? WHERE id = ? AND status = 'active'",
+          [result, clock.white, clock.black, t, row.id]);
+        return { ...row, status: "over", result, reason: "abandoned", white_ms: clock.white, black_ms: clock.black, draw_offer: null, updated: t };
+      }
     }
     return row;
   }
 
   /** Partie, an der ich beteiligt bin (sonst 404), mit nachgeholten Zeitabläufen. */
   async function loadGame(id, me) {
+    await markSeen(me.uuid);
     const row = await db.get("SELECT * FROM games WHERE id = ? AND (inviter = ? OR invitee = ?)", [String(id), me.uuid, me.uuid]);
     if (!row) throw new HttpError(404, "Partie nicht gefunden");
     return settleGame(row);
@@ -885,6 +904,7 @@ export function createApi(db, options = {}) {
     /** Meine Einladungen (ein- und ausgehend), laufende Partien und kürzlich beendete. */
     "GET /api/games": async (request) => {
       const me = await auth(request);
+      await markSeen(me.uuid);
       const open = (await openGames(me.uuid)).filter((g) => g.status === "invited" || g.status === "active");
       const recent = await db.all("SELECT * FROM games WHERE (inviter = ? OR invitee = ?) AND status IN ('over', 'declined', 'cancelled') AND updated > ?",
         [me.uuid, me.uuid, now() - GAME_RECENT_MS]);
@@ -930,8 +950,8 @@ export function createApi(db, options = {}) {
       const inviterWhite = row.color === "white" || (row.color === "random" && crypto.getRandomValues(new Uint8Array(1))[0] < 128);
       const [white, black] = inviterWhite ? [row.inviter, row.invitee] : [row.invitee, row.inviter];
       const t = now();
-      await db.run("UPDATE games SET status = 'active', white = ?, black = ?, white_ms = ?, black_ms = ?, turn_since = ?, updated = ? WHERE id = ? AND status = 'invited'",
-        [white, black, row.time_s * 1000, row.time_s * 1000, t, t, row.id]);
+      await db.run("UPDATE games SET status = 'active', white = ?, black = ?, white_ms = ?, black_ms = ?, turn_since = ?, white_seen = ?, black_seen = ?, updated = ? WHERE id = ? AND status = 'invited'",
+        [white, black, row.time_s * 1000, row.time_s * 1000, t, t, t, t, row.id]);
       return gameResponse(await db.get("SELECT * FROM games WHERE id = ?", [row.id]));
     },
 
@@ -977,11 +997,13 @@ export function createApi(db, options = {}) {
       return gameResponse(updated);
     },
 
+    /** Aufgeben; { reason: "left" } = Brett geschlossen, Welt/Server verlassen oder Minecraft beendet. */
     "POST /api/games/:id/resign": async (request, ip, id) => {
       const me = await auth(request);
+      const data = await body(request).catch(() => ({}));
       const row = await loadGame(id, me);
       const color = myColor(row, me);
-      return gameResponse(await endGame(row, color === "w" ? "0-1" : "1-0", "resign"));
+      return gameResponse(await endGame(row, color === "w" ? "0-1" : "1-0", data && data.reason === "left" ? "left" : "resign"));
     },
 
     /** Remis: { action: "offer" | "accept" | "decline" }. */

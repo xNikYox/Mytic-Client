@@ -1,0 +1,4 @@
+Schachfiguren (pieces.png): „cburnett“-Satz von Colin M.L. Burnett
+Quelle: https://commons.wikimedia.org/wiki/Category:SVG_chess_pieces (Chess_klt45.svg … Chess_pdt45.svg)
+Lizenz: vom Urheber unter GFDL, BSD und GPL veröffentlicht – hier verwendet unter der BSD-Lizenz.
+Copyright (c) Colin M.L. Burnett. Für den Mytic Client in 128 px gerastert.
