@@ -62,8 +62,11 @@ public class Connect4Screen extends GameScreen {
         return new ChallengeScreen(game.opponentName(), ChallengeScreen.C4);
     }
 
+    /** Feste, klassische Steinfarben – bei beiden Spielern gleich und immer unterscheidbar (nicht aus dem Design) */
+    private static final int RED = 0xFFE5484D, YELLOW = 0xFFF2C230;
+
     private static int color(char v) {
-        return v == 'a' ? Ui.accent() : ChessScreen.highlight();
+        return v == 'a' ? RED : YELLOW;
     }
 
     private static int count(String board) {

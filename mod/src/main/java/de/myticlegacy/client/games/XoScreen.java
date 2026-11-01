@@ -76,7 +76,16 @@ public class XoScreen extends PanelScreen {
 
     /** Farbe eines Symbols: X in Akzentfarbe, O in Schalter-Farbe */
     private static int color(char sym) {
-        return sym == 'X' ? Ui.accent() : ChessScreen.highlight();
+        int x = Ui.accent() | 0xFF000000, o = ChessScreen.highlight() | 0xFF000000;
+        // Akzent und Schalter-Farbe zu ähnlich (z. B. beide blau) → O bekommt ein gut unterscheidbares Orange
+        if (distance(x, o) < 140) o = distance(x, 0xFFFF9F43) < 140 ? 0xFF4DA3FF : 0xFFFF9F43;
+        return sym == 'X' ? x : o;
+    }
+
+    /** Farbabstand (RGB) */
+    private static int distance(int a, int b) {
+        int dr = ((a >> 16) & 0xFF) - ((b >> 16) & 0xFF), dg = ((a >> 8) & 0xFF) - ((b >> 8) & 0xFF), db = (a & 0xFF) - (b & 0xFF);
+        return (int) Math.sqrt(dr * dr + dg * dg + db * db);
     }
 
     // ------------------------------------------------------------------------------------------ Verlassen
