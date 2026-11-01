@@ -296,6 +296,8 @@ public final class Games {
     private static final Set<String> announcedInvites = new HashSet<>();
     private static final Map<String, Integer> seenMoves = new HashMap<>();
     private static final Map<String, String> seenStatus = new HashMap<>();
+    /** War ich beim letzten Abruf dran? (für den Ton „du bist dran“) */
+    private static final Map<String, Boolean> seenMyTurn = new HashMap<>();
     private static boolean firstPoll = true;
     /** Bildschirm, der nach dem Schließen des Chats geöffnet wird (Befehle laufen aus dem Chat heraus) */
     private static Screen openNext;
@@ -396,6 +398,15 @@ public final class Games {
         for (Game g : list) {
             String before = seenStatus.put(g.id, g.status);
             Integer movesBefore = seenMoves.put(g.id, g.moves.size());
+            Boolean turnBefore = seenMyTurn.put(g.id, g.myTurn());
+            if (!quiet) {
+                // Töne (Modul „Spiele“): ich bin (wieder) dran, Spiel vorbei
+                if (g.myTurn() && !Boolean.TRUE.equals(turnBefore)) de.myticlegacy.client.module.GamesModule.play(de.myticlegacy.client.module.GamesModule.Sound.TURN);
+                if (g.over() && before != null && !"over".equals(before)) {
+                    boolean draw = "1/2-1/2".equals(g.result), won = !draw && ("1-0".equals(g.result) == g.meWhite());
+                    de.myticlegacy.client.module.GamesModule.play(won ? de.myticlegacy.client.module.GamesModule.Sound.WIN : de.myticlegacy.client.module.GamesModule.Sound.LOSE);
+                }
+            }
             if (quiet) {
                 if (g.incoming()) announcedInvites.add(g.id);
                 continue;
@@ -405,6 +416,7 @@ public final class Games {
                 chat(mc, "§d" + g.inviterName + "§7 fordert dich zu §f" + g.gameName() + "§7 heraus §8(" + g.settings() + ", "
                         + colorText(g, true) + ")§7 – §f/myticgame annehmen§7 oder §f/myticgame ablehnen §8(1 Minute Zeit)");
                 Msg.actionBar(g.gameName() + "-Herausforderung von " + g.inviterName);
+                de.myticlegacy.client.module.GamesModule.play(de.myticlegacy.client.module.GamesModule.Sound.INVITE);
             }
             if (g.active() && "invited".equals(before)) {
                 // Partie beginnt: Herausforderer bekommt das Brett, wenn gerade nichts anderes offen ist

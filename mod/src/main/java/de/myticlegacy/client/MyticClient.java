@@ -234,6 +234,7 @@ public final class MyticClient implements ClientModInitializer {
         cloudSync = module(new de.myticlegacy.client.module.CloudSyncModule());
         profileCode = module(new de.myticlegacy.client.module.ProfileCodeModule());
         totemPops = module(new de.myticlegacy.client.module.TotemPopModule());
+        module(new de.myticlegacy.client.module.GamesModule());
 
         menuKey = Compat.registerKey("key.myticclient.menu", InputConstants.KEY_RSHIFT);
         zoomKey = Compat.registerKey("key.myticclient.zoom", InputConstants.KEY_C);
