@@ -20,5 +20,7 @@
   "key.myticclient.hudprofile3": "HUD-Profil 3",
   "key.myticclient.pack1": "Pack-Overlay 1 umschalten",
   "key.myticclient.pack2": "Pack-Overlay 2 umschalten",
-  "key.myticclient.pack3": "Pack-Overlay 3 umschalten"
+  "key.myticclient.pack3": "Pack-Overlay 3 umschalten",
+  "key.myticclient.gameaccept": "Spiel-Herausforderung annehmen",
+  "key.myticclient.gamedecline": "Spiel-Herausforderung ablehnen"
 }

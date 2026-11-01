@@ -245,6 +245,7 @@ public final class MyticClient implements ClientModInitializer {
         streamerKey = Compat.registerKey("key.myticclient.streamer", InputConstants.UNKNOWN.getValue());
         galleryKey = Compat.registerKey("key.myticclient.screenshots", InputConstants.UNKNOWN.getValue());
         clipKey = Compat.registerKey("key.myticclient.clip", InputConstants.KEY_F8);
+        de.myticlegacy.client.games.GameToast.registerKeys(); // Herausforderung annehmen (J) / ablehnen (K)
         for (int i = 0; i < profileKeys.length; i++) profileKeys[i] = Compat.registerKey("key.myticclient.hudprofile" + (i + 1), InputConstants.UNKNOWN.getValue());
         for (int i = 0; i < AutoTextModule.SLOTS; i++) autoTextKeys[i] = Compat.registerKey("key.myticclient.autotext" + (i + 1), -1);
         for (int i = 0; i < packKeys.length; i++) packKeys[i] = Compat.registerKey("key.myticclient.pack" + (i + 1), -1);
@@ -314,6 +315,7 @@ public final class MyticClient implements ClientModInitializer {
         for (HudModule module : HUD) {
             if (module.enabled()) module.draw(graphics, false);
         }
+        de.myticlegacy.client.games.GameToast.render(graphics); // Herausforderung oben rechts
     }
 
     /** Status für die Freundesliste weitergeben und Benachrichtigungen im Chat zeigen. */
@@ -338,6 +340,7 @@ public final class MyticClient implements ClientModInitializer {
         }
         tickFriends(mc);
         de.myticlegacy.client.games.Games.tick(mc);
+        de.myticlegacy.client.games.GameToast.tick(mc);
         de.myticlegacy.client.stats.Stats.tick(mc);
         if (mc.level == null) sessionStart = 0;
         else if (sessionStart == 0) sessionStart = System.currentTimeMillis();
