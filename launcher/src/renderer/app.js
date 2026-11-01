@@ -1382,7 +1382,6 @@ async function loadStats() {
   renderStatsList($("stats-servers"), data.servers, "Noch auf keinem Server gespielt", (s) => `zuletzt ${formatLastPlayed(s.last)}`);
   renderStatsList($("stats-versions"), data.versions, "Noch keine Daten", (s) => `${s.launches || 0} ${s.launches === 1 ? "Start" : "Starts"} · zuletzt ${formatLastPlayed(s.last)}`);
   renderStatsList($("stats-profiles"), data.profiles, "Noch keine Daten", (s) => `${s.launches || 0} ${s.launches === 1 ? "Start" : "Starts"} · zuletzt ${formatLastPlayed(s.last)}`);
-  renderChess(data.chess || {});
 }
 
 function renderStatsTiles(totals) {
@@ -1442,47 +1441,6 @@ function renderStatsList(target, items, emptyText, detail) {
   }));
 }
 
-function renderChess(chess) {
-  const target = $("stats-chess");
-  const played = Number(chess.played) || 0;
-  if (!played) {
-    target.replaceChildren(el("p", "sub", "Noch keine Schachpartie – fordere im Spiel einen Freund heraus."));
-    return;
-  }
-  const parts = [["wins", "Siege", chess.wins], ["losses", "Niederlagen", chess.losses], ["draws", "Remis", chess.draws]].map(([cls, label, n]) => [cls, label, Number(n) || 0]);
-  const summary = el("div", "chess-summary");
-  summary.append(el("b", null, played.toLocaleString("de-DE")), el("span", null, played === 1 ? "Partie" : "Partien"));
-  const bar = el("div", "chess-bar");
-  const legend = el("div", "chess-legend");
-  for (const [cls, label, n] of parts) {
-    if (n) {
-      const part = el("i", cls);
-      part.style.flexGrow = String(n);
-      part.title = `${label}: ${n}`;
-      bar.append(part);
-    }
-    const item = el("span", cls);
-    item.append(el("i"), el("b", null, String(n)), document.createTextNode(` ${label}`));
-    legend.append(item);
-  }
-  const children = [summary, bar, legend];
-  const opponents = (Array.isArray(chess.opponents) ? chess.opponents : []).filter((o) => o && o.name).slice(0, 5);
-  if (opponents.length) {
-    children.push(el("h4", null, "Häufigste Gegner"));
-    const list = el("div", "chess-opponents");
-    list.append(...opponents.map((o) => {
-      const row = el("div", "chess-opponent");
-      row.append(
-        el("b", null, o.name),
-        el("span", null, `${Number(o.played) || 0} ${o.played === 1 ? "Partie" : "Partien"}`),
-        el("small", null, `${Number(o.wins) || 0} S · ${Number(o.losses) || 0} N · ${Number(o.draws) || 0} R`),
-      );
-      return row;
-    }));
-    children.push(list);
-  }
-  target.replaceChildren(...children);
-}
 
 // ---------------------------------------------------------------------------------------------- Screenshots
 

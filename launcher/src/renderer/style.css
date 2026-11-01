@@ -494,6 +494,7 @@ select option { background: #15101f; }
 .stats-col:nth-last-child(-n+4) .stats-tip { left: auto; right: 0; transform: none; }
 .stats-days { display: flex; justify-content: space-between; font-size: 11px; color: var(--faint); }
 .stats-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.stats-wide { grid-column: 1 / -1; }
 .stats-list { display: grid; gap: 10px; }
 .stats-list .sub { margin: 0; }
 .stats-row { display: grid; gap: 4px; min-width: 0; }
@@ -503,22 +504,5 @@ select option { background: #15101f; }
 .stats-row small { font-size: 11.5px; color: var(--faint); }
 .stats-track { height: 6px; border-radius: 99px; background: rgba(255, 255, 255, .06); overflow: hidden; }
 .stats-track i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--accent), var(--c1)); }
-.chess-summary { display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px; }
-.chess-summary b { font: 700 26px/1 "Outfit", sans-serif; }
-.chess-summary span { color: var(--muted); }
-.chess-bar { display: flex; height: 10px; border-radius: 99px; overflow: hidden; gap: 2px; background: rgba(255, 255, 255, .06); }
-.chess-bar i { flex: 1 1 0; min-width: 4px; }
-.chess-bar .wins, .chess-legend .wins i { background: var(--green); }
-.chess-bar .losses, .chess-legend .losses i { background: var(--danger); }
-.chess-bar .draws, .chess-legend .draws i { background: var(--faint); }
-.chess-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 8px; font-size: 12.5px; color: var(--muted); }
-.chess-legend i { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; }
-.chess-legend b { color: var(--text); font-weight: 600; }
-#stats-chess h4 { margin: 16px 0 6px; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
-.chess-opponents { display: grid; gap: 6px; }
-.chess-opponent { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: baseline; gap: 12px; padding: 6px 10px; border-radius: 10px; background: rgba(255, 255, 255, .03); border: 1px solid var(--glass-line); }
-.chess-opponent b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.chess-opponent span { font-size: 12.5px; color: var(--muted); }
-.chess-opponent small { font-size: 12px; color: var(--faint); white-space: nowrap; }
 @media (max-width: 1100px) { .stats-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 900px) { .stats-grid { grid-template-columns: 1fr; } .stats-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

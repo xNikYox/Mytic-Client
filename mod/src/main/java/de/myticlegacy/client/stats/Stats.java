@@ -28,16 +28,11 @@ public final class Stats {
     public record Day(String day, long seconds, long launches) {
     }
 
-    public record Opponent(String name, int played, int wins, int losses, int draws) {
-    }
-
     /** Stand vom Server */
     public static final class Data {
         public long launches, seconds, longest, last, today, week;
         public final List<Day> days = new ArrayList<>();
         public final List<Entry> servers = new ArrayList<>(), versions = new ArrayList<>(), profiles = new ArrayList<>();
-        public int chessPlayed, chessWins, chessLosses, chessDraws;
-        public final List<Opponent> opponents = new ArrayList<>();
     }
 
     private static final String SESSION = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
@@ -127,13 +122,6 @@ public final class Stats {
         for (JsonObject e : arr(o, "servers")) d.servers.add(new Entry(str(e, "name"), num(e, "seconds"), 0));
         for (JsonObject e : arr(o, "versions")) d.versions.add(new Entry(str(e, "name"), num(e, "seconds"), num(e, "launches")));
         for (JsonObject e : arr(o, "profiles")) d.profiles.add(new Entry(str(e, "name"), num(e, "seconds"), num(e, "launches")));
-        JsonObject c = obj(o, "chess");
-        d.chessPlayed = (int) num(c, "played");
-        d.chessWins = (int) num(c, "wins");
-        d.chessLosses = (int) num(c, "losses");
-        d.chessDraws = (int) num(c, "draws");
-        for (JsonObject e : arr(c, "opponents"))
-            d.opponents.add(new Opponent(str(e, "name"), (int) num(e, "played"), (int) num(e, "wins"), (int) num(e, "losses"), (int) num(e, "draws")));
         return d;
     }
 

@@ -7,7 +7,7 @@ import net.minecraft.client.gui.GuiGraphics;
 
 import java.util.List;
 
-/** Statistiken im Spiel (Rechts-Shift → Statistiken): Kennzahlen, Verlauf der letzten 14 Tage, Server, Versionen, Schach. */
+/** Statistiken im Spiel (Rechts-Shift → Statistiken): Kennzahlen, Verlauf der letzten 14 Tage, Server, Versionen, Profile. */
 public class StatsScreen extends PanelScreen {
     public StatsScreen() {
         super("Statistiken");
@@ -97,27 +97,11 @@ public class StatsScreen extends PanelScreen {
         int sy = top + chartH + 8;
         list(g, "MEISTGESPIELTE SERVER", d.servers, x0, sy, leftW, bottom - sy, false);
 
-        // Versionen und Schach
+        // Versionen und Profile
         int vh = (bottom - top) / 2 - 4;
         list(g, "VERSIONEN", d.versions, rightX, top, rightW, vh, true);
-        int cy = top + vh + 8, ch = bottom - cy;
-        Ui.rect(g, rightX, cy, rightW, ch, radius(4), card());
-        Ui.scaled(g, "SCHACH", rightX + 6, cy + 5, 0.7f, muted(), false);
-        if (d.chessPlayed == 0) Ui.text(g, "Noch keine Partie – /myticgame <name>", rightX + 6, cy + 16, muted(), false);
-        else {
-            Ui.text(g, d.chessPlayed + " Partien", rightX + 6, cy + 16, text(), false);
-            int barW = rightW - 12, wW = barW * d.chessWins / d.chessPlayed, dW = barW * d.chessDraws / d.chessPlayed;
-            g.fill(rightX + 6, cy + 28, rightX + 6 + wW, cy + 33, hi());
-            g.fill(rightX + 6 + wW, cy + 28, rightX + 6 + wW + dW, cy + 33, 0xFF8A8A8A);
-            g.fill(rightX + 6 + wW + dW, cy + 28, rightX + 6 + barW, cy + 33, Ui.RED);
-            Ui.scaled(g, d.chessWins + " S · " + d.chessDraws + " R · " + d.chessLosses + " N", rightX + 6, cy + 37, 0.75f, muted(), false);
-            int oy = cy + 48;
-            for (Stats.Opponent o : d.opponents) {
-                if (oy > cy + ch - 10) break;
-                Ui.scaled(g, o.name() + "  " + o.wins() + "-" + o.draws() + "-" + o.losses(), rightX + 6, oy, 0.75f, text(), false);
-                oy += 9;
-            }
-        }
+        int py2 = top + vh + 8;
+        list(g, "PROFILE", d.profiles, rightX, py2, rightW, bottom - py2, true);
     }
 
     /** Liste mit Anteils-Balken */
