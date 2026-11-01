@@ -196,6 +196,7 @@ public final class MyticClient implements ClientModInitializer {
         hud(warnings);
         hud(new TargetHudModule());
         hud(new de.myticlegacy.client.hud.PitchModule());
+        hud(new de.myticlegacy.client.hud.YawModule());
         de.myticlegacy.client.hud.VanillaHudModule.createAll();
         for (var v : de.myticlegacy.client.hud.VanillaHudModule.all()) hud(v);
         hud(new TextModule("watermark", "Wasserzeichen", "Mytic-Client-Schriftzug im HUD", () -> Items.AMETHYST_SHARD, false, 10000, 175, "", p -> "Mytic Client"));
