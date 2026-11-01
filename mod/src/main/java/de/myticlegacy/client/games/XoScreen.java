@@ -376,7 +376,7 @@ public class XoScreen extends PanelScreen {
             return true;
         }
         if (game.over() && !overlayClosed) {
-            if (inside(overlayButton(0), mx, my)) Compat.setScreen(new ChallengeScreen(game.opponentName(), true));
+            if (inside(overlayButton(0), mx, my)) Compat.setScreen(new ChallengeScreen(game.opponentName(), ChallengeScreen.XO));
             else if (inside(overlayButton(1), mx, my)) overlayClosed = true;
             return true;
         }

@@ -455,7 +455,7 @@ public class ChessScreen extends PanelScreen {
             return true;
         }
         if (game.over() && !overlayClosed) {
-            if (inside(overlayButton(0), mx, my)) Compat.setScreen(new ChallengeScreen(game.opponentName(), false));
+            if (inside(overlayButton(0), mx, my)) Compat.setScreen(new ChallengeScreen(game.opponentName(), ChallengeScreen.CHESS));
             else if (inside(overlayButton(1), mx, my)) overlayClosed = true;
             return true;
         }

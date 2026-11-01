@@ -42,6 +42,14 @@ public final class Games {
         public final int xoRound, xoScoreX, xoScoreO;
         public final long xoMoveLeft;
         public final List<XoResult> xoResults;
+        /** Vier gewinnt: Brett (42 Zeichen „.ab“, Zeile 0 oben), wer dran ist ("a" = Weiß/beginnt), Punkte, Runden */
+        public final String c4Board, c4Turn;
+        public final int c4Round, c4ScoreA, c4ScoreB;
+        public final List<XoResult> c4Results;
+        /** Schiffe versenken (nur meine Sicht – die gegnerische Flotte kommt erst nach dem Ende) */
+        public final Ships ships;
+        /** Restzeit des aktuellen Zugs/Schusses beim Abruf (ms) oder -1 */
+        private final long moveLeftAtFetch;
 
         Game(JsonObject o) {
             id = str(o, "id");
@@ -80,7 +88,7 @@ public final class Games {
             JsonObject score = obj(xo, "score");
             xoScoreX = score != null && score.has("x") ? score.get("x").getAsInt() : 0;
             xoScoreO = score != null && score.has("o") ? score.get("o").getAsInt() : 0;
-            xoMoveLeft = xo != null && xo.has("moveLeft") && !xo.get("moveLeft").isJsonNull() ? xo.get("moveLeft").getAsLong() : -1;
+            xoMoveLeft = longOr(xo, "moveLeft", -1);
             List<XoResult> res = new ArrayList<>();
             if (xo != null && xo.has("results") && xo.get("results").isJsonArray()) {
                 for (JsonElement e : xo.getAsJsonArray("results")) {
@@ -96,6 +104,25 @@ public final class Games {
                 }
             }
             xoResults = Collections.unmodifiableList(res);
+            JsonObject c4 = obj(o, "c4");
+            c4Board = c4 != null && str(c4, "board") != null ? str(c4, "board") : ".".repeat(42);
+            c4Turn = c4 != null && str(c4, "turn") != null ? str(c4, "turn") : "a";
+            c4Round = c4 != null && c4.has("round") ? c4.get("round").getAsInt() : 1;
+            JsonObject c4score = obj(c4, "score");
+            c4ScoreA = c4score != null && c4score.has("a") ? c4score.get("a").getAsInt() : 0;
+            c4ScoreB = c4score != null && c4score.has("b") ? c4score.get("b").getAsInt() : 0;
+            c4Results = results(c4);
+            JsonObject sh = obj(o, "ships");
+            ships = sh == null ? null : new Ships(sh);
+            moveLeftAtFetch = xo != null ? xoMoveLeft : c4 != null ? longOr(c4, "moveLeft", -1) : sh != null ? longOr(sh, "moveLeft", -1) : -1;
+        }
+
+        public boolean c4() {
+            return "c4".equals(kind);
+        }
+
+        public boolean shipsGame() {
+            return "ships".equals(kind);
         }
 
         public boolean xo() {
@@ -109,18 +136,19 @@ public final class Games {
 
         /** Restzeit des aktuellen Zugs jetzt (ms) oder -1 ohne Limit */
         public long moveLeft() {
-            if (xoMoveLeft < 0 || !active()) return -1;
-            return Math.max(0, xoMoveLeft - (System.currentTimeMillis() - fetchedAt));
+            if (moveLeftAtFetch < 0 || !active()) return -1;
+            return Math.max(0, moveLeftAtFetch - (System.currentTimeMillis() - fetchedAt));
         }
 
         /** Spielname für Meldungen */
         public String gameName() {
-            return xo() ? "X und O" : "Schach";
+            return xo() ? "X und O" : c4() ? "Vier gewinnt" : shipsGame() ? "Schiffe versenken" : "Schach";
         }
 
         /** Einstellungen kurz, z. B. „5 Min“ oder „Best of 3, 10 s/Zug“ */
         public String settings() {
-            if (!xo()) return time / 60 + " Min";
+            if (shipsGame()) return moveTime > 0 ? moveTime + " s pro Schuss" : "ohne Zeitlimit";
+            if (!xo() && !c4()) return time / 60 + " Min";
             return (rounds == 1 ? "1 Runde" : "Best of " + rounds) + ", " + (moveTime > 0 ? moveTime + " s/Zug" : "ohne Zeitlimit");
         }
 
@@ -144,6 +172,8 @@ public final class Games {
 
         public boolean myTurn() {
             if (xo()) return active() && xoTurn.equals(mySymbol());
+            if (c4()) return active() && c4Turn.equals(meWhite() ? "a" : "b");
+            if (shipsGame()) return active() && ships != null && "battle".equals(ships.phase) && "w".equals(ships.turn) == meWhite();
             return active() && ("w".equals(turn) == meWhite());
         }
 
@@ -173,13 +203,89 @@ public final class Games {
         }
     }
 
+    /** Schiffe versenken aus meiner Sicht */
+    public static final class Ships {
+        public final String phase, turn;
+        public final boolean myReady, opReady;
+        public final long setupLeft;
+        public final List<int[]> myFleet, mySunk, theirSunk, opFleet;
+        /** Schüsse: Feld → 'h' Treffer, 'm' Wasser, 'a' automatisch (neben versenktem Schiff) */
+        public final Map<Integer, Character> myShots, opShots;
+        /** letzter Schuss: von mir? Feld, Ergebnis ('h', 'm', 's') */
+        public final boolean lastByMe;
+        public final int lastCell;
+        public final char lastResult;
+
+        Ships(JsonObject o) {
+            phase = str(o, "phase");
+            turn = str(o, "turn");
+            myReady = o.has("myReady") && o.get("myReady").getAsBoolean();
+            opReady = o.has("opReady") && o.get("opReady").getAsBoolean();
+            setupLeft = longOr(o, "setupLeft", -1);
+            myFleet = fleet(o, "myFleet");
+            mySunk = fleet(o, "mySunk");
+            theirSunk = fleet(o, "theirSunk");
+            opFleet = o.has("opFleet") && o.get("opFleet").isJsonArray() ? fleet(o, "opFleet") : null;
+            myShots = shots(o, "myShots");
+            opShots = shots(o, "opShots");
+            JsonObject last = obj(o, "lastShot");
+            lastByMe = last != null && "me".equals(str(last, "by"));
+            lastCell = last != null && last.has("cell") ? last.get("cell").getAsInt() : -1;
+            String r = last == null ? null : str(last, "result");
+            lastResult = r == null || r.isEmpty() ? 0 : r.charAt(0);
+        }
+
+        private static List<int[]> fleet(JsonObject o, String key) {
+            List<int[]> out = new ArrayList<>();
+            if (o.has(key) && o.get(key).isJsonArray()) {
+                for (JsonElement e : o.getAsJsonArray(key)) {
+                    JsonArray a = e.getAsJsonArray();
+                    int[] cells = new int[a.size()];
+                    for (int i = 0; i < cells.length; i++) cells[i] = a.get(i).getAsInt();
+                    out.add(cells);
+                }
+            }
+            return Collections.unmodifiableList(out);
+        }
+
+        private static Map<Integer, Character> shots(JsonObject o, String key) {
+            Map<Integer, Character> out = new HashMap<>();
+            JsonObject m = obj(o, key);
+            if (m != null) for (Map.Entry<String, JsonElement> e : m.entrySet()) {
+                try {
+                    String v = e.getValue().getAsString();
+                    if (!v.isEmpty()) out.put(Integer.parseInt(e.getKey()), v.charAt(0));
+                } catch (NumberFormatException ignored) {
+                    // unbekanntes Feld
+                }
+            }
+            return Collections.unmodifiableMap(out);
+        }
+
+        /** Anzahl meiner echten Schüsse (ohne automatische) – für ply */
+        public int myShotCount() {
+            int n = 0;
+            for (char c : myShots.values()) if (c != 'a') n++;
+            return n;
+        }
+    }
+
     /** Ergebnis einer X-und-O-Runde: Gewinner ("x"/"o"/null), Grund, Gewinnreihe, Endbrett */
     public record XoResult(String winner, String reason, int[] line, String board) {
     }
 
     /** Fenster für eine Partie (Schach oder X und O) */
     public static Screen screenFor(Game g) {
-        return g.xo() ? new XoScreen(g.id) : new ChessScreen(g.id);
+        if (g.xo()) return new XoScreen(g.id);
+        if (g.c4()) return new Connect4Screen(g.id);
+        if (g.shipsGame()) return new ShipsScreen(g.id);
+        return new ChessScreen(g.id);
+    }
+
+    /** Ist gerade das Fenster dieser Partie offen? */
+    static boolean viewing(Screen screen, String id) {
+        return (screen instanceof ChessScreen cs && cs.gameId().equals(id)) || (screen instanceof XoScreen xs && xs.gameId().equals(id))
+                || (screen instanceof Connect4Screen c4 && c4.gameId().equals(id)) || (screen instanceof ShipsScreen sh && sh.gameId().equals(id));
     }
 
     private static volatile List<Game> games = Collections.emptyList();
@@ -251,7 +357,8 @@ public final class Games {
         }
         if (!available() || polling) return;
         Screen open = Compat.screen(mc);
-        boolean busy = active() != null || open instanceof ChessScreen || open instanceof XoScreen || open instanceof ChallengeScreen || hasOutgoing();
+        boolean busy = active() != null || open instanceof ChessScreen || open instanceof XoScreen || open instanceof Connect4Screen
+                || open instanceof ShipsScreen || open instanceof ChallengeScreen || hasOutgoing();
         long interval = busy ? 1500 : 5000;
         long now = System.currentTimeMillis();
         if (!pollSoon && now - lastPoll < interval) return;
@@ -293,7 +400,7 @@ public final class Games {
                 if (g.incoming()) announcedInvites.add(g.id);
                 continue;
             }
-            boolean viewing = (screen instanceof ChessScreen cs && cs.gameId().equals(g.id)) || (screen instanceof XoScreen xs && xs.gameId().equals(g.id));
+            boolean viewing = viewing(screen, g.id);
             if (g.incoming() && announcedInvites.add(g.id)) {
                 chat(mc, "§d" + g.inviterName + "§7 fordert dich zu §f" + g.gameName() + "§7 heraus §8(" + g.settings() + ", "
                         + colorText(g, true) + ")§7 – §f/myticgame annehmen§7 oder §f/myticgame ablehnen §8(1 Minute Zeit)");
@@ -344,6 +451,8 @@ public final class Games {
             case "left" -> "Spiel verlassen";
             case "abandoned" -> "Verbindung verloren";
             case "rounds" -> "Runden";
+            case "sunk" -> "alle Schiffe versenkt";
+            case "setup" -> "Flotte nicht rechtzeitig aufgestellt";
             default -> reason;
         };
     }
@@ -377,6 +486,40 @@ public final class Games {
         body.addProperty("moveTime", moveTime);
         body.addProperty("color", color);
         send("api/games", body, ok, error);
+    }
+
+    /** Vier gewinnt herausfordern: rounds 1/3/5, moveTime 0/5/10/30, color "random"/"white"(beginnt)/"black" */
+    public static void inviteC4(String name, int rounds, int moveTime, String color, Consumer<Game> ok, Consumer<String> error) {
+        JsonObject body = new JsonObject();
+        body.addProperty("to", name);
+        body.addProperty("game", "c4");
+        body.addProperty("rounds", rounds);
+        body.addProperty("moveTime", moveTime);
+        body.addProperty("color", color);
+        send("api/games", body, ok, error);
+    }
+
+    /** Schiffe versenken herausfordern: moveTime 0/10/20/30 s pro Schuss, color "random"/"white"(schießt zuerst)/"black" */
+    public static void inviteShips(String name, int moveTime, String color, Consumer<Game> ok, Consumer<String> error) {
+        JsonObject body = new JsonObject();
+        body.addProperty("to", name);
+        body.addProperty("game", "ships");
+        body.addProperty("moveTime", moveTime);
+        body.addProperty("color", color);
+        send("api/games", body, ok, error);
+    }
+
+    /** Schiffe versenken: eigene Flotte abgeben (je Schiff die Felder) */
+    public static void fleet(String id, List<int[]> ships, Consumer<String> error) {
+        JsonObject body = new JsonObject();
+        JsonArray all = new JsonArray();
+        for (int[] ship : ships) {
+            JsonArray cells = new JsonArray();
+            for (int c : ship) cells.add(c);
+            all.add(cells);
+        }
+        body.add("ships", all);
+        send("api/games/" + id + "/fleet", body, null, error);
     }
 
     /** X und O: Feld 0–8 setzen; ply = Zeichen auf dem Brett in dieser Runde */
@@ -475,6 +618,28 @@ public final class Games {
 
     private static String str(JsonObject o, String key) {
         return o != null && o.has(key) && !o.get(key).isJsonNull() ? o.get(key).getAsString() : null;
+    }
+
+    private static long longOr(JsonObject o, String key, long def) {
+        return o != null && o.has(key) && o.get(key).isJsonPrimitive() ? o.get(key).getAsLong() : def;
+    }
+
+    /** Rundenergebnisse (Vier gewinnt) */
+    private static List<XoResult> results(JsonObject o) {
+        List<XoResult> res = new ArrayList<>();
+        if (o != null && o.has("results") && o.get("results").isJsonArray()) {
+            for (JsonElement e : o.getAsJsonArray("results")) {
+                JsonObject r = e.getAsJsonObject();
+                int[] line = new int[0];
+                if (r.has("line") && r.get("line").isJsonArray()) {
+                    JsonArray a = r.getAsJsonArray("line");
+                    line = new int[a.size()];
+                    for (int i = 0; i < line.length; i++) line[i] = a.get(i).getAsInt();
+                }
+                res.add(new XoResult(str(r, "winner"), str(r, "reason"), line, str(r, "board")));
+            }
+        }
+        return Collections.unmodifiableList(res);
     }
 
     private static JsonObject obj(JsonObject o, String key) {

@@ -1,0 +1,343 @@
+package de.myticlegacy.client.games;
+
+import com.mojang.blaze3d.platform.InputConstants;
+import de.myticlegacy.client.gui.Input;
+import de.myticlegacy.client.gui.Ui;
+import net.minecraft.client.gui.GuiGraphics;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
+
+/**
+ * Schiffe versenken (Mytic Games): 10×10, Flotte 5-4-3-3-2, Schiffe dürfen sich nicht berühren. Erst aufstellen
+ * (klicken, R dreht, „Zufällig“), dann abwechselnd schießen – Treffer heißt nochmal. Der Server kennt beide Flotten,
+ * schickt die gegnerische aber erst nach dem Ende; rund um versenkte Schiffe markiert er die Felder als Wasser.
+ */
+public class ShipsScreen extends GameScreen {
+    private static final int N = 10;
+    private static final int[] SIZES = {5, 4, 3, 3, 2};
+    private static final String[] NAMES = {"Schlachtschiff", "Kreuzer", "Zerstörer", "Zerstörer", "U-Boot"};
+    private int s = 16, leftX, rightX, gy;
+    /** Aufstellung (vor „Bereit“) */
+    private final List<int[]> placed = new ArrayList<>();
+    private boolean horizontal = true, sentFleet;
+    /** Schuss unterwegs (bis der Server antwortet) */
+    private int pendingShot = -1, pendingCount = -1;
+
+    public ShipsScreen(String id) {
+        super("Schiffe versenken", id);
+    }
+
+    @Override
+    protected String title() {
+        return "SCHIFFE VERSENKEN";
+    }
+
+    @Override
+    protected int pixelScale() {
+        return fit(520, 330, 0.92, 0.92);
+    }
+
+    @Override
+    protected void layout() {
+        super.layout();
+        pw = Math.min(vw - 8, 520);
+        ph = Math.min(vh - 8, 330);
+        px = (vw - pw) / 2;
+        py = (vh - ph) / 2;
+        int byWidth = (pw - 24 - 24 - 20) / (2 * N), byHeight = (ph - HEADER - FOOTER - 20 - 16 - 48) / N;
+        s = Math.max(9, Math.min(20, Math.min(byWidth, byHeight)));
+        gy = py + HEADER + 22;
+        leftX = px + 12 + 10;
+        rightX = px + pw - 12 - N * s;
+    }
+
+    @Override
+    protected int[] overlay() {
+        return new int[]{px + 8, gy - 14, pw - 16, N * s + 26};
+    }
+
+    @Override
+    protected String hint() {
+        Games.Game g = game();
+        return g != null && g.ships != null && "setup".equals(g.ships.phase) ? "Klicken setzt · R dreht · Verlassen = aufgeben" : "Gegner-Feld anklicken · Treffer = nochmal";
+    }
+
+    @Override
+    protected ChallengeScreen rematch(Games.Game game) {
+        return new ChallengeScreen(game.opponentName(), ChallengeScreen.SHIPS);
+    }
+
+    // ------------------------------------------------------------------------------------------ Regeln (wie Server)
+
+    private static int[] cellsOf(int at, int len, boolean h) {
+        int r = at / N, c = at % N;
+        int[] out = new int[len];
+        for (int k = 0; k < len; k++) {
+            int rr = h ? r : r + k, cc = h ? c + k : c;
+            if (rr >= N || cc >= N) return null;
+            out[k] = rr * N + cc;
+        }
+        return out;
+    }
+
+    /** passt das Schiff? (in den Grenzen, keine Überlappung, kein Berühren – auch nicht schräg) */
+    private static boolean fits(List<int[]> ships, int[] cells) {
+        if (cells == null) return false;
+        for (int[] ship : ships) {
+            for (int x : ship) {
+                for (int c : cells) if (Math.abs(x / N - c / N) <= 1 && Math.abs(x % N - c % N) <= 1) return false;
+            }
+        }
+        return true;
+    }
+
+    private static List<int[]> randomFleet() {
+        Random rnd = new Random();
+        for (int tries = 0; tries < 500; tries++) {
+            List<int[]> ships = new ArrayList<>();
+            boolean ok = true;
+            for (int len : SIZES) {
+                boolean done = false;
+                for (int k = 0; k < 200 && !done; k++) {
+                    int[] cells = cellsOf(rnd.nextInt(N * N), len, rnd.nextBoolean());
+                    if (fits(ships, cells)) {
+                        ships.add(cells);
+                        done = true;
+                    }
+                }
+                if (!done) {
+                    ok = false;
+                    break;
+                }
+            }
+            if (ok) return ships;
+        }
+        return new ArrayList<>();
+    }
+
+    private static boolean has(List<int[]> ships, int cell) {
+        for (int[] ship : ships) for (int c : ship) if (c == cell) return true;
+        return false;
+    }
+
+    // ------------------------------------------------------------------------------------------ Zeichnen
+
+    private int cellAt(int gx, double mx, double my) {
+        if (mx < gx || my < gy || mx >= gx + N * s || my >= gy + N * s) return -1;
+        return (int) ((my - gy) / s) * N + (int) ((mx - gx) / s);
+    }
+
+    private boolean setup(Games.Game g) {
+        return g.ships == null || "setup".equals(g.ships.phase);
+    }
+
+    @Override
+    protected void drawGame(GuiGraphics g, Games.Game game, int mx, int my) {
+        Games.Ships sh = game.ships;
+        boolean setup = setup(game);
+        if (sh != null && pendingShot >= 0 && sh.myShotCount() >= pendingCount) pendingShot = -1;
+        List<int[]> myFleet = setup && (sh == null || !sh.myReady) ? placed : sh.myFleet;
+        int mySunk = sh == null ? 0 : sh.mySunk.size(), theirSunk = sh == null ? 0 : sh.theirSunk.size();
+        // Überschriften
+        Ui.scaled(g, "DEINE FLOTTE", leftX, gy - 13, 0.75f, muted(), false);
+        String leftInfo = setup ? placed.size() + " / 5 gesetzt" : (5 - mySunk) + " von 5 übrig";
+        if (setup && sh != null && sh.myReady) leftInfo = "bereit";
+        Ui.scaled(g, leftInfo, leftX + N * s - font.width(leftInfo) * 0.75f, gy - 13, 0.75f, muted(), false);
+        Ui.scaled(g, "GEGNER", rightX, gy - 13, 0.75f, muted(), false);
+        String rightInfo = setup ? (sh != null && sh.opReady ? "bereit" : "stellt auf …") : (5 - theirSunk) + " von 5 übrig";
+        Ui.scaled(g, rightInfo, rightX + N * s - font.width(rightInfo) * 0.75f, gy - 13, 0.75f, muted(), false);
+        // eigenes Meer
+        int[] ghost = null;
+        boolean ghostOk = false;
+        if (setup && !sentFleet && placed.size() < 5) {
+            int at = cellAt(leftX, mx, my);
+            if (at >= 0) {
+                ghost = cellsOf(at, SIZES[placed.size()], horizontal);
+                ghostOk = fits(placed, ghost);
+                if (ghost == null) ghost = new int[]{at};
+            }
+        }
+        sea(g, leftX, true, myFleet, sh, ghost, ghostOk, mx, my, game);
+        // gegnerisches Meer
+        sea(g, rightX, false, null, sh, null, false, mx, my, game);
+        // Schiffslisten
+        shipList(g, leftX, gy + N * s + 4, setup ? placed.size() : 5, sh == null ? List.of() : sh.mySunk, setup);
+        shipList(g, rightX, gy + N * s + 4, 5, sh == null ? List.of() : sh.theirSunk, false);
+        drawBottom(g, game, mx, my);
+    }
+
+    private void sea(GuiGraphics g, int x0, boolean own, List<int[]> fleet, Games.Ships sh, int[] ghost, boolean ghostOk, int mx, int my, Games.Game game) {
+        int water = Ui.mix(ChessScreen.card(false) | 0xFF000000, Ui.accent(), 0.12f);
+        boolean canShoot = !own && game.myTurn() && pendingShot < 0;
+        int hover = canShoot ? cellAt(x0, mx, my) : -1;
+        for (int i = 0; i < N; i++) {
+            Ui.scaled(g, String.valueOf((char) ('A' + i)), x0 + i * s + s / 2f - 2, gy - 6, 0.6f, muted(), false);
+            if (own) Ui.scaled(g, String.valueOf(i + 1), x0 - 9, gy + i * s + s / 2f - 3, 0.6f, muted(), false);
+        }
+        java.util.Map<Integer, Character> shots = sh == null ? java.util.Map.of() : own ? sh.opShots : sh.myShots;
+        List<int[]> sunk = sh == null ? List.of() : own ? sh.mySunk : sh.theirSunk;
+        for (int c = 0; c < N * N; c++) {
+            int x = x0 + (c % N) * s, y = gy + (c / N) * s;
+            int fill = water;
+            if (own && has(fleet, c)) fill = 0xFF8C93A6;
+            if (!own && sh != null && sh.opFleet != null && has(sh.opFleet, c)) fill = 0xFF8C93A6; // nach dem Ende: gegnerische Flotte
+            Character shot = shots.get(c);
+            if (shot != null && shot == 'h') fill = Ui.mix(water, Ui.RED, 0.75f);
+            if (has(sunk, c)) fill = Ui.mix(0xFF000000, Ui.RED, 0.45f);
+            if (ghost != null && contains(ghost, c)) fill = ghostOk ? Ui.mix(water, ChessScreen.highlight(), 0.55f) : Ui.mix(water, Ui.RED, 0.55f);
+            if (c == hover && shot == null && !has(sunk, c)) fill = Ui.mix(water, ChessScreen.highlight(), 0.45f);
+            if (!own && c == pendingShot) fill = Ui.mix(water, 0xFFFFFFFF, 0.35f);
+            g.fill(x + 1, y + 1, x + s, y + s, fill);
+            if (shot != null) {
+                int cx = x + s / 2 + 1, cy = y + s / 2 + 1;
+                if (shot == 'h') XoScreen.symbol(g, 'X', cx, cy, s * 0.55f, 0xFFFFFFFF);
+                else disc(g, cx, cy, Math.max(1, s / 7), shot == 'a' ? 0x55FFFFFF : 0xB0FFFFFF);
+            }
+            if (sh != null && sh.lastCell == c && sh.lastByMe != own) Ui.outline(g, x + 1, y + 1, s - 1, s - 1, 0, 0xFFFFFFFF, 0x00000000);
+        }
+    }
+
+    private static boolean contains(int[] a, int v) {
+        for (int x : a) if (x == v) return true;
+        return false;
+    }
+
+    /** kleine Übersicht der Schiffe: versenkte rot, beim Aufstellen das nächste markiert */
+    private void shipList(GuiGraphics g, int x, int y, int shown, List<int[]> sunk, boolean setup) {
+        int[] sunkSizes = new int[6];
+        for (int[] ship : sunk) sunkSizes[Math.min(5, ship.length)]++;
+        int[] seen = new int[6];
+        for (int k = 0; k < SIZES.length; k++) {
+            int len = SIZES[k];
+            boolean down = seen[len]++ < sunkSizes[len];
+            boolean next = setup && k == shown;
+            boolean done = setup && k < shown;
+            int w = len * 5 + 4;
+            if (next) Ui.outline(g, x - 1, y - 1, w + 2, 8, 0, ChessScreen.highlight(), 0x00000000);
+            for (int i = 0; i < len; i++)
+                g.fill(x + 2 + i * 5, y + 1, x + 6 + i * 5, y + 5, down ? Ui.withAlpha(Ui.RED, 170) : setup && !done ? 0x55FFFFFF : 0xFF8C93A6);
+            x += w + 4;
+        }
+    }
+
+    private int[] rotateButton() {
+        return new int[]{px + pw / 2 + 4, gy + N * s + 16, 62, 16};
+    }
+
+    private int[] randomButton() {
+        return new int[]{px + pw / 2 + 70, gy + N * s + 16, 62, 16};
+    }
+
+    private int[] readyButton() {
+        return new int[]{px + pw / 2 + 136, gy + N * s + 16, Math.max(60, px + pw - 12 - (px + pw / 2 + 136)), 16};
+    }
+
+    private void drawBottom(GuiGraphics g, Games.Game game, int mx, int my) {
+        Games.Ships sh = game.ships;
+        int y = gy + N * s + 14, x = px + 12, w = pw / 2 - 16;
+        Ui.rect(g, x, y, w, 28, radius(4), ChessScreen.card(false));
+        String state;
+        int color = text();
+        boolean setup = setup(game);
+        if (error() != null) {
+            state = error();
+            color = Ui.RED;
+        } else if (game.invited()) state = "Warte auf Annahme …";
+        else if (game.over()) state = Games.reasonText(game.reason);
+        else if (setup) {
+            if (sh != null && sh.myReady) state = sh.opReady ? "Gleich geht's los …" : "Warte auf " + game.opponentName() + " …";
+            else state = placed.size() < 5 ? "Setze: " + NAMES[placed.size()] + " (" + SIZES[placed.size()] + ")" : "Flotte steht – „Bereit“";
+        } else {
+            String last = "";
+            if (sh != null && sh.lastCell >= 0) {
+                String who = sh.lastByMe ? "Du: " : game.opponentName() + ": ";
+                last = who + (sh.lastResult == 's' ? "versenkt! " : sh.lastResult == 'h' ? "Treffer! " : "Wasser ");
+            }
+            state = last + (game.myTurn() ? "· du schießt" : "· " + game.opponentName() + " zielt");
+            if (game.myTurn()) color = ChessScreen.highlight();
+        }
+        Ui.text(g, state, x + 6, y + 5, color, false);
+        long left = setup && sh != null ? (sh.setupLeft < 0 ? -1 : Math.max(0, sh.setupLeft - (System.currentTimeMillis() - game.fetchedAt))) : game.moveLeft();
+        long total = setup ? 120_000 : game.moveTime * 1000L;
+        if (left >= 0 && total > 0 && game.active()) {
+            int bw = w - 12, fill = (int) (bw * Math.min(1.0, left / (double) total));
+            g.fill(x + 6, y + 18, x + 6 + bw, y + 22, 0x55000000);
+            g.fill(x + 6, y + 18, x + 6 + fill, y + 22, left < 5000 ? Ui.RED : ChessScreen.highlight());
+        }
+        if (setup && game.active() && (sh == null || !sh.myReady) && !sentFleet) {
+            ChessScreen.button(g, rotateButton(), horizontal ? "↻ Drehen" : "↺ Drehen", false, mx, my);
+            ChessScreen.button(g, randomButton(), "Zufällig", false, mx, my);
+            int[] r = readyButton();
+            if (placed.size() == 5) ChessScreen.button(g, r, "Bereit", true, mx, my);
+            else {
+                Ui.rect(g, r[0], r[1], r[2], r[3], radius(4), ChessScreen.card(false));
+                Ui.centered(g, "Bereit", r[0] + r[2] / 2, r[1] + 4, muted(), false);
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------------------------------ Eingabe
+
+    @Override
+    protected boolean clickGame(Games.Game game, double mx, double my) {
+        Games.Ships sh = game.ships;
+        if (setup(game) && game.active() && (sh == null || !sh.myReady) && !sentFleet) {
+            if (inside(rotateButton(), mx, my)) {
+                horizontal = !horizontal;
+                return true;
+            }
+            if (inside(randomButton(), mx, my)) {
+                placed.clear();
+                placed.addAll(randomFleet());
+                return true;
+            }
+            if (inside(readyButton(), mx, my) && placed.size() == 5) {
+                sentFleet = true;
+                Games.fleet(id, new ArrayList<>(placed), error -> {
+                    sentFleet = false;
+                    showError(error);
+                });
+                return true;
+            }
+            int at = cellAt(leftX, mx, my);
+            if (at >= 0) {
+                // auf ein gesetztes Schiff klicken nimmt es wieder weg
+                for (int k = placed.size() - 1; k >= 0; k--) {
+                    if (contains(placed.get(k), at)) {
+                        placed.remove(k);
+                        return true;
+                    }
+                }
+                if (placed.size() < 5) {
+                    int[] cells = cellsOf(at, SIZES[placed.size()], horizontal);
+                    if (fits(placed, cells)) placed.add(cells);
+                    else showError(cells == null ? "Passt nicht aufs Feld" : "Schiffe dürfen sich nicht berühren");
+                }
+                return true;
+            }
+            return false;
+        }
+        if (!game.myTurn() || pendingShot >= 0 || sh == null) return false;
+        int at = cellAt(rightX, mx, my);
+        if (at < 0) return false;
+        if (sh.myShots.containsKey(at)) return true;
+        pendingShot = at;
+        pendingCount = sh.myShotCount() + 1;
+        Games.place(id, at, sh.myShotCount(), error -> {
+            pendingShot = -1;
+            showError(error);
+        });
+        return true;
+    }
+
+    @Override
+    protected boolean onKey(Input.Key event) {
+        if (event.key() == InputConstants.KEY_R) {
+            horizontal = !horizontal;
+            return true;
+        }
+        return super.onKey(event);
+    }
+}

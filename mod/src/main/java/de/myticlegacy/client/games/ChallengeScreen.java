@@ -17,17 +17,26 @@ public class ChallengeScreen extends PanelScreen {
     private record Row(String title, int[] values, String[] labels, String[] subs) {
     }
 
-    private static final Row GAME = new Row("SPIEL", new int[]{0, 1}, new String[]{"Schach", "X und O"}, new String[]{"", ""});
+    /** Spiele (Index = Wert in picked[0]) */
+    public static final int CHESS = 0, XO = 1, C4 = 2, SHIPS = 3;
+    private static final Row GAME = new Row("SPIEL", new int[]{CHESS, XO, C4, SHIPS}, new String[]{"Schach", "X und O", "Vier", "Schiffe"},
+            new String[]{"", "", "gewinnt", "versenken"});
     private static final Row CHESS_TIME = new Row("BEDENKZEIT", new int[]{60, 180, 300, 600},
             new String[]{"1 Min", "3 Min", "5 Min", "10 Min"}, new String[]{"Bullet", "Blitz", "", "Schnell"});
     private static final Row CHESS_COLOR = new Row("DEINE FARBE", new int[]{0, 1, 2}, new String[]{"Zufall", "Weiß", "Schwarz"}, new String[]{"50/50", "", ""});
     private static final Row XO_ROUNDS = new Row("RUNDEN", new int[]{1, 3, 5}, new String[]{"1 Runde", "Best of 3", "Best of 5"}, new String[]{"", "", ""});
     private static final Row XO_TIME = new Row("ZEIT PRO ZUG", new int[]{0, 5, 10, 30}, new String[]{"aus", "5 s", "10 s", "30 s"}, new String[]{"", "", "", ""});
     private static final Row XO_SYMBOL = new Row("DEIN SYMBOL", new int[]{0, 1, 2}, new String[]{"Zufall", "X", "O"}, new String[]{"50/50", "beginnt", ""});
+    private static final Row C4_ROUNDS = new Row("RUNDEN", new int[]{1, 3, 5}, new String[]{"1 Runde", "Best of 3", "Best of 5"}, new String[]{"", "", ""});
+    private static final Row C4_TIME = new Row("ZEIT PRO ZUG", new int[]{0, 5, 10, 30}, new String[]{"aus", "5 s", "10 s", "30 s"}, new String[]{"", "", "", ""});
+    private static final Row C4_START = new Row("WER BEGINNT", new int[]{0, 1, 2}, new String[]{"Zufall", "Ich", "Gegner"}, new String[]{"50/50", "", ""});
+    private static final Row SHIP_TIME = new Row("ZEIT PRO SCHUSS", new int[]{0, 10, 20, 30}, new String[]{"aus", "10 s", "20 s", "30 s"}, new String[]{"", "", "", ""});
+    private static final Row SHIP_START = new Row("WER SCHIESST ZUERST", new int[]{0, 1, 2}, new String[]{"Zufall", "Ich", "Gegner"}, new String[]{"50/50", "", ""});
     private static final String[] COLORS = {"random", "white", "black"};
+    private static final Row[] ALL = {GAME, CHESS_TIME, CHESS_COLOR, XO_ROUNDS, XO_TIME, XO_SYMBOL, C4_ROUNDS, C4_TIME, C4_START, SHIP_TIME, SHIP_START};
 
-    /** letzte Wahl merken (bis zum Neustart): Spiel, Bedenkzeit, Farbe, Runden, Zeit pro Zug, Symbol */
-    private static final int[] picked = {0, 2, 0, 1, 2, 0};
+    /** letzte Wahl je Zeile merken (bis zum Neustart), Reihenfolge wie ALL */
+    private static final int[] picked = {0, 2, 0, 1, 2, 0, 1, 2, 0, 2, 0};
 
     private final String opponent;
     private String status = "";
@@ -39,29 +48,42 @@ public class ChallengeScreen extends PanelScreen {
         this.opponent = opponent;
     }
 
-    /** Revanche: gleiches Spiel vorauswählen */
-    public ChallengeScreen(String opponent, boolean xo) {
+    /** Revanche: dasselbe Spiel vorauswählen (CHESS, XO, C4, SHIPS) */
+    public ChallengeScreen(String opponent, int game) {
         this(opponent);
-        picked[0] = xo ? 1 : 0;
+        picked[0] = game;
     }
 
-    private boolean xo() {
-        return picked[0] == 1;
+    private int gameKind() {
+        return picked[0];
     }
 
     /** Zeilen für das gewählte Spiel */
     private Row[] rows() {
-        return xo() ? new Row[]{GAME, XO_ROUNDS, XO_TIME, XO_SYMBOL} : new Row[]{GAME, CHESS_TIME, CHESS_COLOR};
+        return switch (gameKind()) {
+            case XO -> new Row[]{GAME, XO_ROUNDS, XO_TIME, XO_SYMBOL};
+            case C4 -> new Row[]{GAME, C4_ROUNDS, C4_TIME, C4_START};
+            case SHIPS -> new Row[]{GAME, SHIP_TIME, SHIP_START};
+            default -> new Row[]{GAME, CHESS_TIME, CHESS_COLOR};
+        };
     }
 
     /** Stelle in picked[] für eine Zeile */
     private static int pickIndex(Row row) {
-        if (row == GAME) return 0;
-        if (row == CHESS_TIME) return 1;
-        if (row == CHESS_COLOR) return 2;
-        if (row == XO_ROUNDS) return 3;
-        if (row == XO_TIME) return 4;
-        return 5;
+        for (int i = 0; i < ALL.length; i++) if (ALL[i] == row) return i;
+        return 0;
+    }
+
+    private static int value(Row row) {
+        return row.values()[picked[pickIndex(row)]];
+    }
+
+    private static String label(Row row) {
+        return row.labels()[picked[pickIndex(row)]];
+    }
+
+    private static String color(Row row) {
+        return COLORS[picked[pickIndex(row)]];
     }
 
     @Override
@@ -164,17 +186,21 @@ public class ChallengeScreen extends PanelScreen {
         sending = true;
         statusError = false;
         status = "Herausforderung wird gesendet …";
-        boolean xo = xo();
-        String settings = xo
-                ? XO_ROUNDS.labels()[picked[3]] + ", " + (picked[4] == 0 ? "ohne Zeitlimit" : XO_TIME.labels()[picked[4]] + " pro Zug") + ", " + XO_SYMBOL.labels()[picked[5]]
-                : CHESS_TIME.labels()[picked[1]] + ", " + CHESS_COLOR.labels()[picked[2]];
+        int kind = gameKind();
+        String name = GAME.labels()[kind] + (GAME.subs()[kind].isEmpty() ? "" : " " + GAME.subs()[kind]);
+        String settings = switch (kind) {
+            case XO -> label(XO_ROUNDS) + ", " + (value(XO_TIME) == 0 ? "ohne Zeitlimit" : label(XO_TIME) + " pro Zug") + ", " + label(XO_SYMBOL);
+            case C4 -> label(C4_ROUNDS) + ", " + (value(C4_TIME) == 0 ? "ohne Zeitlimit" : label(C4_TIME) + " pro Zug") + ", beginnt: " + label(C4_START);
+            case SHIPS -> (value(SHIP_TIME) == 0 ? "ohne Zeitlimit" : label(SHIP_TIME) + " pro Schuss") + ", zuerst: " + label(SHIP_START);
+            default -> label(CHESS_TIME) + ", " + label(CHESS_COLOR);
+        };
         java.util.function.Consumer<Games.Game> ok = game -> {
             if (game.active()) { // hatte uns schon herausgefordert (z. B. beide „Revanche“) → Spiel läuft sofort
                 Games.notice("§d" + opponent + "§7 hatte dich schon herausgefordert – das Spiel beginnt.");
                 Compat.setScreen(Games.screenFor(game));
                 return;
             }
-            Games.notice("§7" + (xo ? "X und O" : "Schach") + "-Herausforderung an §d" + opponent + "§7 gesendet §8(" + settings + ")§7 – wartet bis zu 1 Minute auf Antwort …");
+            Games.notice("§7" + name + "-Herausforderung an §d" + opponent + "§7 gesendet §8(" + settings + ")§7 – wartet bis zu 1 Minute auf Antwort …");
             if (Compat.screen(minecraft) == this) back();
         };
         java.util.function.Consumer<String> error = msg -> {
@@ -182,8 +208,12 @@ public class ChallengeScreen extends PanelScreen {
             statusError = true;
             status = msg;
         };
-        if (xo) Games.inviteXo(opponent, XO_ROUNDS.values()[picked[3]], XO_TIME.values()[picked[4]], COLORS[picked[5]], ok, error);
-        else Games.invite(opponent, CHESS_TIME.values()[picked[1]], COLORS[picked[2]], ok, error);
+        switch (kind) {
+            case XO -> Games.inviteXo(opponent, value(XO_ROUNDS), value(XO_TIME), color(XO_SYMBOL), ok, error);
+            case C4 -> Games.inviteC4(opponent, value(C4_ROUNDS), value(C4_TIME), color(C4_START), ok, error);
+            case SHIPS -> Games.inviteShips(opponent, value(SHIP_TIME), color(SHIP_START), ok, error);
+            default -> Games.invite(opponent, value(CHESS_TIME), color(CHESS_COLOR), ok, error);
+        }
     }
 
     @Override
