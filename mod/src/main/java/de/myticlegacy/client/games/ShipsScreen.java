@@ -17,7 +17,6 @@ import java.util.Random;
 public class ShipsScreen extends GameScreen {
     private static final int N = 10;
     private static final int[] SIZES = {5, 4, 3, 3, 2};
-    private static final String[] NAMES = {"Schlachtschiff", "Kreuzer", "Zerstörer", "Zerstörer", "U-Boot"};
     private int s = 16, leftX, rightX, gy;
     /** Aufstellung (vor „Bereit“) */
     private final List<int[]> placed = new ArrayList<>();
@@ -117,6 +116,24 @@ public class ShipsScreen extends GameScreen {
         return new ArrayList<>();
     }
 
+    /** Größe des nächsten zu setzenden Schiffs: das größte, das in der Aufstellung noch fehlt (0 = alle gesetzt) */
+    private int nextSize() {
+        int[] missing = new int[6];
+        for (int len : SIZES) missing[len]++;
+        for (int[] ship : placed) if (ship.length < 6) missing[ship.length]--;
+        for (int len : SIZES) if (missing[len] > 0) return len;
+        return 0;
+    }
+
+    private static String shipName(int len) {
+        return switch (len) {
+            case 5 -> "Schlachtschiff";
+            case 4 -> "Kreuzer";
+            case 3 -> "Zerstörer";
+            default -> "U-Boot";
+        };
+    }
+
     private static boolean has(List<int[]> ships, int cell) {
         for (int[] ship : ships) for (int c : ship) if (c == cell) return true;
         return false;
@@ -151,10 +168,10 @@ public class ShipsScreen extends GameScreen {
         // eigenes Meer
         int[] ghost = null;
         boolean ghostOk = false;
-        if (setup && !sentFleet && placed.size() < 5) {
+        if (setup && !sentFleet && nextSize() > 0) {
             int at = cellAt(leftX, mx, my);
             if (at >= 0) {
-                ghost = cellsOf(at, SIZES[placed.size()], horizontal);
+                ghost = cellsOf(at, nextSize(), horizontal);
                 ghostOk = fits(placed, ghost);
                 if (ghost == null) ghost = new int[]{at};
             }
@@ -163,8 +180,8 @@ public class ShipsScreen extends GameScreen {
         // gegnerisches Meer
         sea(g, rightX, false, null, sh, null, false, mx, my, game);
         // Schiffslisten
-        shipList(g, leftX, gy + N * s + 4, setup ? placed.size() : 5, sh == null ? List.of() : sh.mySunk, setup);
-        shipList(g, rightX, gy + N * s + 4, 5, sh == null ? List.of() : sh.theirSunk, false);
+        shipList(g, leftX, gy + N * s + 4, setup ? placed : null, sh == null ? List.of() : sh.mySunk);
+        shipList(g, rightX, gy + N * s + 4, null, sh == null ? List.of() : sh.theirSunk);
         drawBottom(g, game, mx, my);
     }
 
@@ -205,17 +222,24 @@ public class ShipsScreen extends GameScreen {
     }
 
     /** kleine Übersicht der Schiffe: versenkte rot, beim Aufstellen das nächste markiert */
-    private void shipList(GuiGraphics g, int x, int y, int shown, List<int[]> sunk, boolean setup) {
-        int[] sunkSizes = new int[6];
+    /** placing = Aufstellung (nur beim Aufstellen, sonst null): gesetzte Schiffe grau, das nächste markiert */
+    private void shipList(GuiGraphics g, int x, int y, List<int[]> placing, List<int[]> sunk) {
+        boolean setup = placing != null;
+        int[] sunkSizes = new int[6], placedSizes = new int[6];
         for (int[] ship : sunk) sunkSizes[Math.min(5, ship.length)]++;
+        if (setup) for (int[] ship : placing) placedSizes[Math.min(5, ship.length)]++;
+        int next = setup ? nextSize() : 0;
+        boolean nextMarked = false;
         int[] seen = new int[6];
-        for (int k = 0; k < SIZES.length; k++) {
-            int len = SIZES[k];
-            boolean down = seen[len]++ < sunkSizes[len];
-            boolean next = setup && k == shown;
-            boolean done = setup && k < shown;
+        for (int len : SIZES) {
+            int nth = seen[len]++;
+            boolean down = nth < sunkSizes[len];
+            boolean done = setup && nth < placedSizes[len];
+            boolean isNext = setup && !done && len == next && !nextMarked;
+            if (isNext) nextMarked = true;
+            boolean nextShip = isNext;
             int w = len * 5 + 4;
-            if (next) Ui.outline(g, x - 1, y - 1, w + 2, 8, 0, ChessScreen.highlight(), 0x00000000);
+            if (nextShip) Ui.outline(g, x - 1, y - 1, w + 2, 8, 0, ChessScreen.highlight(), 0x00000000);
             for (int i = 0; i < len; i++)
                 g.fill(x + 2 + i * 5, y + 1, x + 6 + i * 5, y + 5, down ? Ui.withAlpha(Ui.RED, 170) : setup && !done ? 0x55FFFFFF : 0xFF8C93A6);
             x += w + 4;
@@ -248,7 +272,7 @@ public class ShipsScreen extends GameScreen {
         else if (game.over()) state = Games.reasonText(game.reason);
         else if (setup) {
             if (sh != null && sh.myReady) state = sh.opReady ? "Gleich geht's los …" : "Warte auf " + game.opponentName() + " …";
-            else state = placed.size() < 5 ? "Setze: " + NAMES[placed.size()] + " (" + SIZES[placed.size()] + ")" : "Flotte steht – „Bereit“";
+            else state = nextSize() > 0 ? "Setze: " + shipName(nextSize()) + " (" + nextSize() + ")" : "Flotte steht – „Bereit“";
         } else {
             String last = "";
             if (sh != null && sh.lastCell >= 0) {
@@ -310,8 +334,8 @@ public class ShipsScreen extends GameScreen {
                         return true;
                     }
                 }
-                if (placed.size() < 5) {
-                    int[] cells = cellsOf(at, SIZES[placed.size()], horizontal);
+                if (nextSize() > 0) {
+                    int[] cells = cellsOf(at, nextSize(), horizontal);
                     if (fits(placed, cells)) placed.add(cells);
                     else showError(cells == null ? "Passt nicht aufs Feld" : "Schiffe dürfen sich nicht berühren");
                 }
