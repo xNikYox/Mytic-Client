@@ -167,12 +167,17 @@ public class ShipsScreen extends GameScreen {
         }
         List<int[]> myFleet = setup && (sh == null || !sh.myReady) ? placed : sh.myFleet;
         int mySunk = sh == null ? 0 : sh.mySunk.size(), theirSunk = sh == null ? 0 : sh.theirSunk.size();
+        // Wer ist dran: Farbe und Puls für das Brett, auf dem gerade geschossen wird
+        boolean playing = !setup && game.active() && !game.over() && sh != null;
+        boolean mine = playing && game.myTurn();
+        float pulse = 0.5f + 0.5f * (float) Math.sin(System.currentTimeMillis() / 220.0);
+        int turnColor = mine ? ChessScreen.highlight() : OP_TURN;
         // Überschriften
-        Ui.scaled(g, "DEINE FLOTTE", leftX, gy - 13, 0.75f, muted(), false);
+        Ui.scaled(g, "DEINE FLOTTE", leftX, gy - 13, 0.75f, playing && !mine ? turnColor : muted(), false);
         String leftInfo = setup ? placed.size() + " / 5 gesetzt" : (5 - mySunk) + " von 5 übrig";
         if (setup && sh != null && sh.myReady) leftInfo = "bereit";
         Ui.scaled(g, leftInfo, leftX + N * s - font.width(leftInfo) * 0.75f, gy - 13, 0.75f, muted(), false);
-        Ui.scaled(g, "GEGNER", rightX, gy - 13, 0.75f, muted(), false);
+        Ui.scaled(g, mine ? "GEGNER · DU SCHIESST" : "GEGNER", rightX, gy - 13, 0.75f, mine ? turnColor : muted(), false);
         String rightInfo = setup ? (sh != null && sh.opReady ? "bereit" : "stellt auf …") : (5 - theirSunk) + " von 5 übrig";
         Ui.scaled(g, rightInfo, rightX + N * s - font.width(rightInfo) * 0.75f, gy - 13, 0.75f, muted(), false);
         // eigenes Meer
@@ -189,6 +194,7 @@ public class ShipsScreen extends GameScreen {
         sea(g, leftX, true, myFleet, sh, ghost, ghostOk, mx, my, game);
         // gegnerisches Meer
         sea(g, rightX, false, null, sh, null, false, mx, my, game);
+        if (playing) turnMarker(g, game, mine, turnColor, pulse);
         // Schiffslisten
         shipList(g, leftX, gy + N * s + 4, setup ? placed : null, sh == null ? List.of() : sh.mySunk);
         shipList(g, rightX, gy + N * s + 4, null, sh == null ? List.of() : sh.theirSunk);
@@ -233,6 +239,34 @@ public class ShipsScreen extends GameScreen {
                 Ui.outline(g, x + 1, y + 1, s - 1, s - 1, 0, LAST, 0x00000000);
             }
         }
+    }
+
+    /** Gegner am Zug: Orange, damit es sich klar von der eigenen Farbe abhebt */
+    private static final int OP_TURN = 0xFFFF9F43;
+
+    /**
+     * Zeigt deutlich, wer dran ist: pulsierender Rahmen um das Brett, auf das geschossen wird, das andere Brett abgedunkelt,
+     * dazwischen ein Pfeil mit „AM ZUG“ und Name.
+     */
+    private void turnMarker(GuiGraphics g, Games.Game game, boolean mine, int color, float pulse) {
+        int active = mine ? rightX : leftX, idle = mine ? leftX : rightX, size = N * s;
+        g.fill(idle + 1, gy + 1, idle + size, gy + size, 0x50000000);
+        int edge = Ui.withAlpha(color, Math.round(130 + 125 * pulse));
+        Ui.outline(g, active - 3, gy - 2, size + 6, size + 5, 0, edge, 0x00000000);
+        Ui.outline(g, active - 2, gy - 1, size + 4, size + 3, 0, edge, 0x00000000);
+        // Pfeil in der Lücke zwischen den Brettern, zeigt auf das Ziel-Brett
+        int gapL = leftX + size + 4, gapR = rightX - 4, cx = (gapL + gapR) / 2, cy = gy + size / 2;
+        int half = Math.max(5, Math.min(10, (gapR - gapL) / 6));
+        int off = Math.round((pulse - 0.5f) * 4) * (mine ? 1 : -1);
+        for (int i = 0; i <= half; i++) {
+            int len = half - i;
+            if (mine) g.fill(cx - half / 2 + i + off, cy - len, cx - half / 2 + i + 1 + off, cy + len + 1, color);
+            else g.fill(cx + half / 2 - i + off, cy - len, cx + half / 2 - i + 1 + off, cy + len + 1, color);
+        }
+        String head = "AM ZUG";
+        Ui.scaled(g, head, cx - font.width(head) * 0.3f, cy - half - 10, 0.6f, muted(), false);
+        String who = mine ? "DU" : font.plainSubstrByWidth(game.opponentName(), Math.round((gapR - gapL) / 0.75f));
+        Ui.scaled(g, who, cx - font.width(who) * 0.375f, cy + half + 5, 0.75f, color, false);
     }
 
     /** Feld als Koordinate, z. B. „C5“ */
@@ -304,7 +338,7 @@ public class ShipsScreen extends GameScreen {
                 last = who + coord(sh.lastCell) + " – " + (sh.lastResult == 's' ? "versenkt! " : sh.lastResult == 'h' ? "Treffer! " : "Wasser ");
             }
             state = last + (game.myTurn() ? "· du schießt" : "· " + game.opponentName() + " zielt");
-            if (game.myTurn()) color = ChessScreen.highlight();
+            color = game.myTurn() ? ChessScreen.highlight() : OP_TURN;
         }
         Ui.text(g, state, x + 6, y + 5, color, false);
         long left = setup && sh != null ? (sh.setupLeft < 0 ? -1 : Math.max(0, sh.setupLeft - (System.currentTimeMillis() - game.fetchedAt))) : game.moveLeft();
