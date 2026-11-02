@@ -100,7 +100,9 @@ const GAME_MODULES = [
 ];
 
 let win;
-let game = null;
+/** Laufende Minecraft-Instanzen (mehrere gleichzeitig möglich, auch mit verschiedenen Konten): id → { child, profileId, mcVersion, account } */
+const games = new Map();
+let nextGameId = 1;
 
 // ---------------------------------------------------------------------------------------------- IPC-Absender
 const APP_PAGE = path.join(__dirname, "renderer", "index.html");
@@ -464,12 +466,12 @@ ipc.handle("profiles:select", async (e, id) => {
   return profileList();
 });
 ipc.handle("profiles:create", async (e, name, copyFrom, mcVersion) => {
-  if (game) throw new Error("Bitte zuerst Minecraft beenden.");
+  if (games.size) throw new Error("Bitte zuerst Minecraft beenden.");
   await saveSettings(await profiles.create(await ensureProfiles(), DIRS.base, name, copyFrom || null, mcVersion || null));
   return profileList();
 });
 ipc.handle("profiles:version", async (e, id, mcVersion) => {
-  if (game) throw new Error("Bitte zuerst Minecraft beenden.");
+  if (games.size) throw new Error("Bitte zuerst Minecraft beenden.");
   await saveSettings(profiles.setVersion(await ensureProfiles(), id, String(mcVersion)));
   return profileList();
 });
@@ -513,7 +515,7 @@ ipc.handle("import:pick", async (e, kind) => {
 });
 ipc.handle("import:paths", (e, paths) => importFromPaths((paths || []).filter((p) => typeof p === "string")));
 ipc.handle("import:run", async (e, id, version) => {
-  if (game) throw new Error("Bitte zuerst Minecraft beenden.");
+  if (games.size) throw new Error("Bitte zuerst Minecraft beenden.");
   const cached = importCache.get(id);
   if (!cached) throw new Error("Profil nicht mehr gefunden – bitte neu suchen.");
   const evaluation = version
@@ -534,7 +536,7 @@ ipc.handle("profiles:rename", async (e, id, name) => {
   return profileList();
 });
 ipc.handle("profiles:delete", async (e, id) => {
-  if (game) throw new Error("Bitte zuerst Minecraft beenden.");
+  if (games.size) throw new Error("Bitte zuerst Minecraft beenden.");
   await saveSettings(await profiles.remove(await ensureProfiles(), DIRS.base, id));
   return profileList();
 });
@@ -654,7 +656,7 @@ setInterval(checkUpdate, 30 * 60 * 1000);
 
 /** "Jetzt neu starten": bereitliegendes Update sofort einspielen (ZIP-Version: Release-Seite öffnen). */
 ipc.handle("update:install", async () => {
-  if (game) throw new Error("Bitte zuerst Minecraft beenden.");
+  if (games.size) throw new Error("Bitte zuerst Minecraft beenden.");
   if (!readyUpdate) {
     if (pendingUpdate) shell.openExternal(pendingUpdate.page);
     return { opened: true };
@@ -683,7 +685,8 @@ ipc.handle("state", () => ({
   managedMods: MANAGED_MODS.map(({ slug, name, description, required, default: on, requires, loaders }) => ({ slug, name, description, required: Boolean(required), default: Boolean(on), requires: requires || [], loaders: loaders || ["fabric"] })),
   forgeVersions: Object.keys(FORGE_VERSIONS),
   totalMemoryMb: Math.floor(os.totalmem() / 1024 / 1024),
-  running: Boolean(game),
+  running: games.size > 0,
+  runningCount: games.size,
   offlineAllowed: OFFLINE_ALLOWED,
   devBuild: DEV_BUILD,
   friends: Boolean(FRIENDS_SERVER),
@@ -768,15 +771,13 @@ async function detectCrash({ code, log, crashReport, profile, modsDir, gameDir, 
 
 ipc.handle("autofix:apply", async () => {
   // hängt das Spiel noch am Fehlerfenster von Fabric: beenden
-  if (game) {
-    const running = game;
-    await new Promise((resolve) => {
-      running.once("exit", resolve);
-      running.kill();
-      setTimeout(resolve, 5000);
-    });
-  }
   if (!lastCrash || !lastCrash.steps.length) throw new Error("Nichts zu reparieren.");
+  // Instanzen mit diesem Profil (hängen evtl. am Fehlerfenster von Fabric) beenden – andere laufen weiter
+  await Promise.all([...games.values()].filter((g) => g.profileId === lastCrash.profile.id).map((g) => new Promise((resolve) => {
+    g.child.once("exit", resolve);
+    g.child.kill();
+    setTimeout(resolve, 5000);
+  })));
   const { steps, modsDir, profile } = lastCrash;
   const results = await autofix.apply(steps, { modsDir, browser: browserFor(profile), log: (line) => emit("log", line) });
   lastCrash = null;
@@ -789,7 +790,7 @@ ipc.handle("autofix:apply", async () => {
 ipc.handle("friends:get", async () => {
   if (!friends.configured) return { configured: false };
   const account = await activeAccount();
-  const data = game ? await friends.call(account, "GET", "api/friends") : await friends.call(account, "POST", "api/presence", { place: "launcher" });
+  const data = games.size ? await friends.call(account, "GET", "api/friends") : await friends.call(account, "POST", "api/presence", { place: "launcher" });
   return { configured: true, ...data };
 });
 
@@ -890,24 +891,34 @@ async function friendsLaunch(account) {
 }
 
 ipc.handle("game:launch", async () => {
-  if (busy || game) throw new Error("Das Spiel läuft bereits.");
+  if (busy) throw new Error("Ein Start wird gerade vorbereitet – kurz warten.");
   busy = true;
   try {
     const current = await ensureProfiles();
     const profile = profiles.active(current);
     const profileMods = profiles.modsDir(DIRS.base, profile.id);
     const account = await activeAccount();
+    // Läuft dieses Profil bzw. diese Version schon, Mods und native Dateien nicht anfassen – die Dateien sind in Benutzung
+    // (Windows sperrt sie) und schon aktuell. Dieselben Dateien werden einfach mitbenutzt.
+    const running = [...games.values()];
+    const profileBusy = running.some((g) => g.profileId === profile.id);
+    const versionBusy = running.some((g) => g.mcVersion === profile.mcVersion);
     const installer = new Installer(DIRS, {
       version: profile.mcVersion,
       log: (line) => emit("log", line),
       progress: (p) => emit("progress", p),
     });
     emit("status", "Mytic-Mod prüfen …");
-    const myticMods = await modUpdater.prepare(profile.mcVersion);
-    emit("status", "Eigene Mods prüfen …");
-    await browserFor(profile).updateAll((line) => emit("log", line));
-    const install = await installer.install({ enabledMods: profile.perf || {}, bundledModsDir: myticMods, modsDir: profileMods, verify: current.verifyNext });
-    if (current.verifyNext) {
+    const myticMods = profileBusy ? null : await modUpdater.prepare(profile.mcVersion);
+    if (!profileBusy) {
+      emit("status", "Eigene Mods prüfen …");
+      await browserFor(profile).updateAll((line) => emit("log", line));
+    } else {
+      emit("log", `[Launcher] Profil „${profile.name}“ läuft schon – Mods werden mitbenutzt`);
+    }
+    const install = await installer.install({ enabledMods: profile.perf || {}, bundledModsDir: myticMods, modsDir: profileMods,
+      verify: current.verifyNext && !versionBusy, reuseMods: profileBusy, reuseNatives: versionBusy });
+    if (current.verifyNext && !versionBusy) {
       const { clientId, ...stored } = current;
       await writeJson(SETTINGS_FILE, { ...stored, verifyNext: false });
     }
@@ -931,9 +942,10 @@ ipc.handle("game:launch", async () => {
       reported = true;
       detectCrash({ code, log: recent.join("\n"), crashReport, profile, modsDir: profileMods, gameDir: install.gameDir || DIRS.game, startedAt });
     };
-    discordGame = { version: profile.mcVersion, start: Date.now(), server: null };
+    if (!discordGame) discordGame = { version: profile.mcVersion, start: Date.now(), server: null };
     updateDiscord();
-    game = launch(command, DIRS, {
+    const gameId = nextGameId++;
+    const child = launch(command, DIRS, {
       env: friendsInGame.env,
       onLog: (line) => {
         emit("log", line);
@@ -945,18 +957,20 @@ ipc.handle("game:launch", async () => {
         if (/FormattedException|Incompatible mods found|Some of your mods are incompatible/.test(line)) setTimeout(() => report(null), 1500);
       },
       onExit: (code) => {
-        game = null;
-        discordGame = null;
+        games.delete(gameId);
+        if (!games.size) discordGame = null;
         updateDiscord();
-        emit("game", { running: false, code });
+        emit("game", { running: games.size > 0, count: games.size, code, ended: true, name: account.name });
         report(code);
-        if (win && !win.isDestroyed()) {
+        // Fenster erst zeigen, wenn das letzte Spiel zu ist (oder bei einem Absturz)
+        if ((!games.size || code !== 0) && win && !win.isDestroyed()) {
           if (win.isMinimized()) win.restore();
           win.show();
         }
       },
     });
-    emit("game", { running: true });
+    games.set(gameId, { child, profileId: profile.id, mcVersion: profile.mcVersion, account: account.name });
+    emit("game", { running: true, count: games.size, name: account.name });
     // Start für die Statistik melden – nebenbei, darf den Start nie aufhalten oder scheitern lassen
     if (friendsInGame.env.MYTIC_FRIENDS_TOKEN) {
       friends.call(account, "POST", "api/stats/launch", { version: profile.mcVersion, profile: statsProfile, tz: tzOffset() })
@@ -971,7 +985,7 @@ ipc.handle("game:launch", async () => {
 });
 
 ipc.handle("game:stop", () => {
-  if (game) game.kill();
+  for (const g of games.values()) g.child.kill();
   return true;
 });
 
@@ -1000,7 +1014,7 @@ app.whenReady().then(async () => {
 });
 app.on("before-quit", () => discord.close());
 app.on("window-all-closed", () => {
-  if (!game) app.quit();
+  if (!games.size) app.quit();
 });
 app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();

@@ -468,13 +468,22 @@ $("verify").addEventListener("click", async () => {
 
 // ---------------------------------------------------------------------------------------------- Start & Konsole
 
-function setRunning(value) {
+/** Mehrere Instanzen: Spielen bleibt klickbar und startet ein weiteres Minecraft (mit dem gerade gewählten Konto) */
+let runningCount = 0;
+function setRunning(value, count = value ? 1 : 0) {
   running = value;
+  runningCount = value ? Math.max(1, count) : 0;
   $("launch").classList.toggle("running", value);
-  $("launch").disabled = value;
-  $("launch-label").textContent = value ? "LÄUFT" : "SPIELEN";
+  $("launch").disabled = false;
+  $("launch-label").textContent = value ? "NOCH EINS" : "SPIELEN";
+  $("launch").title = value ? "Startet ein weiteres Minecraft – vorher oben ein anderes Konto wählen, wenn du willst" : "";
   $("launch-fill").style.width = "0";
   $("stop-game").disabled = !value;
+  $("stop-game").textContent = runningCount > 1 ? `Alle beenden (${runningCount})` : "Spiel beenden";
+}
+
+function runningText() {
+  return runningCount > 1 ? `${runningCount}× Minecraft läuft` : "Minecraft läuft – viel Spaß!";
 }
 
 function levelOf(line) {
@@ -524,7 +533,7 @@ $("launch").addEventListener("click", async () => {
     renderRecentServers();
     await api.launch();
   } catch (error) {
-    $("status").textContent = "Start fehlgeschlagen";
+    $("status").textContent = running ? runningText() : "Start fehlgeschlagen";
     $("launch-fill").style.width = "0";
     toast(errorText(error), true);
     $("launch").disabled = false;
@@ -547,10 +556,11 @@ api.onProgress(({ label, done, total }) => {
 });
 api.onStatus((text) => ($("status").textContent = text));
 api.onLog(appendLog);
-api.onGame(({ running: isRunning, code }) => {
-  setRunning(isRunning);
-  if (isRunning) $("status").textContent = "Minecraft läuft – viel Spaß!";
+api.onGame(({ running: isRunning, count, code, ended, name }) => {
+  setRunning(isRunning, count);
+  if (isRunning) $("status").textContent = runningText();
   else $("status").textContent = code === 0 ? "Bereit" : `Beendet (Code ${code}) – Details in der Konsole`;
+  if (isRunning && ended && code !== 0 && name) toast(`Minecraft von ${name} wurde beendet (Code ${code}).`, true);
   // Absturz: normalerweise erscheint das Auto-Fix-Fenster – nur falls nicht, kurzer Hinweis
   if (!isRunning && code !== 0) setTimeout(() => {
     if ($("crash").hidden) toast("Minecraft wurde unerwartet beendet. Sieh dir die Konsole an.", true);
@@ -1159,7 +1169,7 @@ $("update-install").addEventListener("click", async () => {
   installedMods = await api.listMods();
   updateInstalledCount();
   applyProfiles(profileState, false);
-  setRunning(state.running);
+  setRunning(state.running, state.runningCount);
   loadFriends();
 })();
 

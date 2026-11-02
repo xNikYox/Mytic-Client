@@ -294,6 +294,15 @@ class Installer {
     return { url: file.url, filename: file.filename, sha1: file.hashes.sha1, size: file.size, version: version.version_number };
   }
 
+  /** Dateinamen der verwalteten Mods aus dem letzten Abgleich (ohne etwas zu ändern) */
+  async managedFiles(modsDir = path.join(this.dirs.game, "mods")) {
+    try {
+      return JSON.parse(await fsp.readFile(path.join(modsDir, ".mytic-managed.json"), "utf8")).map((f) => f.file).filter(Boolean);
+    } catch {
+      return [];
+    }
+  }
+
   /** Verwaltete Mods aktualisieren; selbst hinzugefügte Mods im mods-Ordner bleiben unangetastet. */
   async mods(enabled, bundledModsDir, modsDir = path.join(this.dirs.game, "mods")) {
     await fsp.mkdir(modsDir, { recursive: true });
@@ -380,7 +389,11 @@ class Installer {
   }
 
   /** Alles herunterladen, was zum Start nötig ist. Gibt die Startdaten zurück. */
-  async install({ enabledMods = {}, bundledModsDir, modsDir, verify = false, skipAssets = false } = {}) {
+  /**
+   * reuseMods/reuseNatives: läuft dasselbe Profil bzw. dieselbe Version schon, bleiben Mods und native Dateien unangetastet
+   * (sie sind in Benutzung und unter Windows gesperrt) – die zweite Instanz nutzt sie einfach mit.
+   */
+  async install({ enabledMods = {}, bundledModsDir, modsDir, verify = false, skipAssets = false, reuseMods = false, reuseNatives = false } = {}) {
     this.step("Minecraft-Version laden");
     const version = await this.versionJson();
     this.step(this.loader === "forge" ? "Forge laden" : "Fabric laden");
@@ -410,14 +423,16 @@ class Installer {
 
     if (!skipAssets) await this.assets(version, { verify });
     const nativesDir = path.join(this.dirs.versions, this.mcVersion, "natives");
-    this.step("Native Dateien entpacken");
-    await this.extractNatives(natives, nativesDir);
+    if (!reuseNatives) {
+      this.step("Native Dateien entpacken");
+      await this.extractNatives(natives, nativesDir);
+    }
 
     const gameDir = gameDirFor(this.dirs, this.mcVersion);
     await fsp.mkdir(gameDir, { recursive: true });
     if (this.loader === "forge") await disableForgeSplash(gameDir);
     if (!modsDir && this.loader === "forge") modsDir = path.join(gameDir, "mods");
-    const mods = bundledModsDir ? await this.mods(enabledMods, bundledModsDir, modsDir) : [];
+    const mods = reuseMods ? await this.managedFiles(modsDir) : bundledModsDir ? await this.mods(enabledMods, bundledModsDir, modsDir) : [];
     this.step("Fertig", 1, 1);
     return { mcVersion: this.mcVersion, loader: this.loader, gameDir, version, fabric, java, clientJar, libraries, nativesDir, logConfig, mods, modsDir };
   }
