@@ -45,10 +45,13 @@ public final class Shots {
     private static final int MAX_THUMBS = 80;
     private static final ConcurrentLinkedQueue<Object[]> ready = new ConcurrentLinkedQueue<>();
     private static int counter;
-    private static long lastCheck, newestSeen = -1;
-    public static Path latest;
-    public static long latestAt;
-    public static String latestNote = "";
+    private static long lastCheck;
+    private static volatile long newestSeen = -1;
+    /** Ordner wird gerade im Hintergrund durchsucht */
+    private static volatile boolean scanning;
+    public static volatile Path latest;
+    public static volatile long latestAt;
+    public static volatile String latestNote = "";
 
     private Shots() {
     }
@@ -211,17 +214,35 @@ public final class Shots {
         }
     }
 
-    /** Jeden Tick: neuen Screenshot erkennen (höchstens 2× pro Sekunde nachsehen) */
+    /**
+     * Jeden Tick: neuen Screenshot erkennen (höchstens 2× pro Sekunde nachsehen). Das Durchsuchen des Ordners läuft im
+     * Hintergrund – bei vielen Screenshots (oder OneDrive/Virenscanner) dauert es sonst spürbar und lässt das Spiel ruckeln.
+     */
     public static void tick(boolean autoCopy) {
         long now = System.currentTimeMillis();
-        if (now - lastCheck < 500) return;
+        if (now - lastCheck < 500 || scanning) return;
         lastCheck = now;
+        scanning = true;
+        worker.submit(() -> {
+            try {
+                scan(autoCopy);
+            } finally {
+                scanning = false;
+            }
+        });
+    }
+
+    private static void scan(boolean autoCopy) {
+        long now = System.currentTimeMillis();
         File[] files = dir().toFile().listFiles((d, n) -> n.toLowerCase(Locale.ROOT).endsWith(".png"));
         long newest = 0;
         File newestFile = null;
-        if (files != null) for (File f : files) if (f.lastModified() > newest) {
-            newest = f.lastModified();
-            newestFile = f;
+        if (files != null) for (File f : files) {
+            long modified = f.lastModified();
+            if (modified > newest) {
+                newest = modified;
+                newestFile = f;
+            }
         }
         if (newestSeen < 0) { // erster Durchlauf: Bestand merken, nicht melden
             newestSeen = newest;
@@ -234,13 +255,11 @@ public final class Shots {
             latestNote = "Gespeichert ✓";
             if (autoCopy) {
                 Path shot = latest;
-                worker.submit(() -> {
-                    try {
-                        Thread.sleep(400); // Minecraft schreibt die Datei im Hintergrund fertig
-                    } catch (InterruptedException ignored) {
-                    }
-                    latestNote = copy(shot) ? "Kopiert ✓" : "Kopieren nicht möglich";
-                });
+                try {
+                    Thread.sleep(400); // Minecraft schreibt die Datei im Hintergrund fertig (wir sind schon im Hintergrund-Thread)
+                } catch (InterruptedException ignored) {
+                }
+                latestNote = copy(shot) ? "Kopiert ✓" : "Kopieren nicht möglich";
             }
         }
     }

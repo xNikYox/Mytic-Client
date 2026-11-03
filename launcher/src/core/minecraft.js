@@ -79,7 +79,7 @@ const MANAGED_MODS = [
   { slug: "entityculling", name: "EntityCulling", description: "Unsichtbare Entities werden nicht gezeichnet", default: true, loaders: ["fabric", "forge"] },
   { slug: "moreculling", name: "More Culling", description: "Verdeckte Blockseiten, Blätter und Rahmen werden nicht gezeichnet", default: true, requires: ["cloth-config"] },
   { slug: "modernfix", name: "ModernFix", description: "Schnellerer Spielstart, weniger Arbeitsspeicher (nicht für jede Version)", default: true },
-  { slug: "krypton", name: "Krypton", description: "Schnellerer Netzwerk-Code, weniger Lag auf Servern", default: true },
+  { slug: "krypton", name: "Krypton", description: "Server-Optimierung für den Netzwerk-Code – auf dem Client ohne Vorteil, kann den Ping erhöhen (standardmäßig aus)", default: false },
   { slug: "noisium", name: "Noisium", description: "Schnellere Weltgenerierung im Einzelspieler (bis 1.21.6)", default: true },
   { slug: "patcher", name: "PolyPatcher", description: "Mehr FPS in 1.8.9 – bringt OneConfig mit (eigenes Menü ebenfalls auf Rechts-Shift)", default: false, loaders: ["forge"] },
   { slug: "iris", name: "Iris Shaders", description: "Shader-Unterstützung (braucht Sodium)", default: false, requires: ["sodium"] },
