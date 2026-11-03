@@ -29,12 +29,13 @@ public final class MergedPack {
     public static Map<String, byte[]> content() {
         Map<String, byte[]> c = content;
         if (c == null) {
-            if (!StylesModule.active() || Selection.isEmpty()) c = Map.of();
-            else {
+            // zuerst das Mytic-Design der Minecraft-Menüs, darüber die gewählten Styles (eine gewählte GUI gewinnt)
+            Map<String, byte[]> out = new HashMap<>(GuiSkin.build());
+            if (StylesModule.active() && !Selection.isEmpty()) {
                 StylePacks.ensureScanned();
-                c = build(Selection.snapshot());
+                out.putAll(build(Selection.snapshot()));
             }
-            content = c;
+            content = c = Map.copyOf(out);
         }
         return c;
     }

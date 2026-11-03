@@ -17,6 +17,9 @@ public class StylesModule extends Module {
     private static StylesModule instance;
     private KeyMapping key;
     private Boolean lastEnabled;
+    /** Aussehen der Minecraft-Menüs (Stil, Farben) beim letzten Laden */
+    private String skinKey;
+    private int skinCheck;
 
     public StylesModule() {
         super("styles", "Mytic Styles", "Texturpakete mischen: Schwert, Totem, GUI … aus verschiedenen Paketen", Category.VISUELL, () -> Items.PAINTING, true);
@@ -36,7 +39,19 @@ public class StylesModule extends Module {
     public void tick(Minecraft mc) {
         if (key != null) while (key.consumeClick()) if (Compat.screen(mc) == null) Compat.setScreen(new StylesScreen(null));
         boolean on = enabled();
-        if (lastEnabled != null && lastEnabled != on && !Selection.isEmpty()) MergedPack.reload(); // an/aus: Texturen neu laden
+        boolean reload = lastEnabled != null && lastEnabled != on && !Selection.isEmpty(); // an/aus: Texturen neu laden
         lastEnabled = on;
+        // Menü-Stil oder Farben geändert: Grafiken der Minecraft-Menüs neu erzeugen – erst wenn das Mod-Menü zu ist
+        if (++skinCheck >= 20) {
+            skinCheck = 0;
+            String key = GuiSkin.key();
+            boolean editing = Compat.screen(mc) instanceof de.myticlegacy.client.gui.ModMenuScreen;
+            if (skinKey == null) skinKey = key;
+            else if (!key.equals(skinKey) && !editing) {
+                skinKey = key;
+                reload = true;
+            }
+        }
+        if (reload) MergedPack.reload();
     }
 }

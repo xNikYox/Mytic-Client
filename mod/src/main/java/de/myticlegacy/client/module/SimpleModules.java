@@ -54,6 +54,8 @@ public final class SimpleModules {
         public final ColorSetting menuHighlight;
         /** Hintergrund des Mytic-Hauptmenüs: Szene des Launcher-Designs oder das Minecraft-Panorama. */
         public final ModeSetting titleBackground;
+        /** Einzelspieler, Mehrspieler, Optionen … im Mytic-Design (Grafiken über das Paket „Mytic Styles“) */
+        public final BoolSetting vanillaMenus;
 
         public Theme() {
             super("theme", "Design", "Akzentfarbe, Mytic-Hauptmenü und Menü-Hintergrund", Category.CLIENT, () -> Items.AMETHYST_SHARD, true);
@@ -67,6 +69,7 @@ public final class SimpleModules {
             menuColor = new ColorSetting(this, "menuColor", "Menü-Farbe", MENU_COLOR_DEFAULT);
             menuHighlight = new ColorSetting(this, "menuHighlight", "Schalter-Farbe", HIGHLIGHT_DEFAULT);
             titleBackground = new ModeSetting(this, "titleBackground", "Hauptmenü-Hintergrund", "Launcher-Design", "Launcher-Design", "Panorama");
+            vanillaMenus = new BoolSetting(this, "vanillaMenus", "Minecraft-Menüs im Mytic-Design", true);
         }
     }
 
