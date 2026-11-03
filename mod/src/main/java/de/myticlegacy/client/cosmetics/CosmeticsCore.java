@@ -134,9 +134,13 @@ public final class CosmeticsCore {
                 owned = set;
                 forgetSelection();
                 admin = answer.has("admin") && answer.get("admin").getAsBoolean();
-                MyticClient.config().ownedCache = new ArrayList<String>(set);
-                MyticClient.config().adminCache = admin;
-                MyticClient.config().save();
+                // Config nur auf dem Spiel-Thread ändern und speichern – das Spiel ändert sie dort gleichzeitig
+                boolean isAdmin = admin;
+                net.minecraft.client.Minecraft.getInstance().execute(() -> {
+                    MyticClient.config().ownedCache = new ArrayList<String>(set);
+                    MyticClient.config().adminCache = isAdmin;
+                    MyticClient.config().save();
+                });
                 // neu freigeschaltet: die eigene Auswahl wieder an den Server melden
                 if (changed) push();
             } catch (Exception e) {

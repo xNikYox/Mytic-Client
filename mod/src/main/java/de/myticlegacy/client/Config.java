@@ -126,6 +126,9 @@ public final class Config {
                     }
                     config.serverProfiles.values().removeIf(p -> p == null);
                     for (ServerProfile p : config.serverProfiles.values()) if (p.modules == null) p.modules = new LinkedHashMap<>();
+                    synchronized (LOCK) {
+                        base = GSON.toJson(config);
+                    }
                     return config;
                 }
             }
@@ -140,6 +143,11 @@ public final class Config {
     private static final Object LOCK = new Object();
     private static final Object WRITE_LOCK = new Object();
     private static String pending, written;
+    /**
+     * Eigener Stand beim Laden bzw. letzten Speichern. Beim Schreiben wird mit der Datei zusammengeführt: nur was diese
+     * Instanz seitdem geändert hat, gewinnt – Änderungen anderer Instanzen (oder des Launchers) in der Datei bleiben.
+     */
+    private static String base;
     private static Path pendingFile;
     private static final java.util.concurrent.ExecutorService WRITER = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "Mytic-Config");
@@ -174,6 +182,19 @@ public final class Config {
             if (json == null) return;
             try {
                 Files.createDirectories(f.getParent());
+                String onDisk = Files.exists(f) ? Files.readString(f) : null;
+                String from;
+                synchronized (LOCK) {
+                    from = base;
+                }
+                String mine = json;
+                if (onDisk != null && !onDisk.equals(json)) {
+                    try {
+                        json = merge(from, mine, onDisk);
+                    } catch (RuntimeException e) {
+                        json = mine; // Datei kaputt: eigener Stand
+                    }
+                }
                 Path tmp = f.resolveSibling(f.getFileName() + ".tmp");
                 Files.writeString(tmp, json);
                 try {
@@ -182,11 +203,36 @@ public final class Config {
                     Files.move(tmp, f, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                 }
                 synchronized (LOCK) {
-                    written = json;
+                    written = mine;
+                    base = mine;
                 }
-            } catch (IOException e) {
+            } catch (IOException | RuntimeException e) {
                 MyticClient.LOG.warn("Konfiguration konnte nicht gespeichert werden", e);
             }
         }
+    }
+
+    /** Dreiwege-Zusammenführung (JSON): base = Ausgangsstand, mine = dieser Stand, theirs = jetzt in der Datei */
+    static String merge(String base, String mine, String theirs) {
+        JsonElement b = base == null ? new JsonObject() : JsonParser.parseString(base);
+        JsonElement merged = merge(b, JsonParser.parseString(mine), JsonParser.parseString(theirs));
+        return GSON.toJson(merged);
+    }
+
+    private static JsonElement merge(JsonElement base, JsonElement mine, JsonElement theirs) {
+        if (mine != null && mine.isJsonObject() && theirs != null && theirs.isJsonObject()) {
+            JsonObject b = base != null && base.isJsonObject() ? base.getAsJsonObject() : new JsonObject();
+            JsonObject m = mine.getAsJsonObject(), t = theirs.getAsJsonObject(), out = new JsonObject();
+            java.util.Set<String> keys = new java.util.LinkedHashSet<>(m.keySet());
+            keys.addAll(t.keySet());
+            keys.addAll(b.keySet());
+            for (String k : keys) {
+                JsonElement v = merge(b.get(k), m.get(k), t.get(k));
+                if (v != null) out.add(k, v);
+            }
+            return out;
+        }
+        boolean changedHere = !java.util.Objects.equals(base, mine);
+        return changedHere ? mine : theirs; // fehlt der Schlüssel (null), wurde er gelöscht
     }
 }

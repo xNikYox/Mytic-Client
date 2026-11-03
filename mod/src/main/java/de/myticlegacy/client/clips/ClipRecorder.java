@@ -39,7 +39,10 @@ import java.util.zip.ZipInputStream;
  */
 public final class ClipRecorder {
     public static final int SEGMENT = 2;
-    private static final String WIN_URL = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip";
+    /** Feste ffmpeg-Version (gyan.dev „essentials“) – nie die wechselnde „release“-Adresse, damit die Prüfsumme passt */
+    private static final String WIN_URL = "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-9.0.2-essentials_build.zip";
+    /** SHA-256 der ZIP (von gyan.dev veröffentlicht und selbst nachgerechnet); passt sie nicht, wird nichts ausgeführt */
+    private static final String WIN_SHA256 = "60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba";
     private static final String[][] ENCODERS = {
             {"h264_nvenc", "-preset", "p2", "-rc", "vbr", "-cq", "23", "-b:v", "0"},
             {"h264_qsv", "-preset", "veryfast", "-global_quality", "23"},
@@ -102,15 +105,37 @@ public final class ClipRecorder {
         };
     }
 
+    /** Fehlgeschlagene Einrichtungen und frühester nächster Versuch – sonst würde jeder Tick ffmpeg neu laden (≈100 MB) */
+    private static volatile int failures;
+    private static volatile long retryAt;
+    private static final long[] RETRY_MS = {30_000, 120_000, 600_000};
+
+    /** Nach Aus- und Wieder-Einschalten der Clips: sofort neu versuchen */
+    public static void resetRetries() {
+        failures = 0;
+        retryAt = 0;
+    }
+
+    private static void failed(String why) {
+        int n = ++failures;
+        if (n >= 3) {
+            retryAt = Long.MAX_VALUE;
+            status = why + " – Clips aus- und wieder einschalten für einen neuen Versuch";
+        } else {
+            retryAt = System.currentTimeMillis() + RETRY_MS[n - 1];
+            status = why + " – neuer Versuch in " + RETRY_MS[n - 1] / 1000 + " s";
+        }
+    }
+
     /** ffmpeg suchen, sonst (Windows) einmalig laden, dann den schnellsten Kodierer bestimmen. Läuft im Hintergrund. */
     public static void prepare() {
-        if (ready() || !preparing.compareAndSet(false, true)) return;
+        if (ready() || System.currentTimeMillis() < retryAt || !preparing.compareAndSet(false, true)) return;
         Thread t = new Thread(() -> {
             try {
                 Path found = find();
                 if (found == null && windows()) found = download();
                 if (found == null) {
-                    status = windows() ? "ffmpeg konnte nicht geladen werden" : "ffmpeg fehlt – bitte installieren (z. B. Paketmanager)";
+                    failed(windows() ? "ffmpeg konnte nicht geladen werden" : "ffmpeg fehlt – bitte installieren (z. B. Paketmanager)");
                     return;
                 }
                 status = "Grafikkarten-Kodierung wird geprüft …";
@@ -120,13 +145,14 @@ public final class ClipRecorder {
                         encoder = enc[0];
                         rgbaDirect = (enc[0].equals("h264_nvenc") || enc[0].equals("h264_amf")) && test(found, enc[0], "rgba");
                         status = "";
+                        failures = 0;
                         MyticClient.LOG.info("Clips: ffmpeg {} mit {}", found, enc[0]);
                         return;
                     }
                 }
-                status = "Kein passender Video-Kodierer gefunden";
+                failed("Kein passender Video-Kodierer gefunden");
             } catch (Exception e) {
-                status = "Fehler: " + e.getMessage();
+                failed("Fehler: " + e.getMessage());
                 MyticClient.LOG.warn("Clips: ffmpeg nicht bereit", e);
             } finally {
                 preparing.set(false);
@@ -171,10 +197,10 @@ public final class ClipRecorder {
         }
     }
 
-    /** Windows: ffmpeg.exe aus dem „essentials“-Paket von gyan.dev holen (nur diese eine Datei wird entpackt) */
-    // TODO Sicherheit: Download wird nicht auf Integrität geprüft. Feste Version (versionierte URL statt „release“)
-    //  verwenden und SHA-256 der ZIP bzw. der ffmpeg.exe gegen einen im Code hinterlegten, geprüften Wert vergleichen;
-    //  bei Abweichung Datei löschen und nicht ausführen. (Hash muss aus vertrauenswürdiger Quelle ermittelt werden.)
+    /**
+     * Windows: ffmpeg.exe aus dem „essentials“-Paket von gyan.dev holen (nur diese eine Datei wird entpackt). Die ganze
+     * ZIP wird beim Laden per SHA-256 geprüft; erst wenn sie stimmt, wird die entpackte ffmpeg.exe übernommen.
+     */
     private static Path download() throws IOException, InterruptedException {
         Path dir = toolsDir();
         Files.createDirectories(dir);
@@ -184,17 +210,36 @@ public final class ClipRecorder {
         HttpResponse<InputStream> res = http.send(HttpRequest.newBuilder(URI.create(WIN_URL)).header("User-Agent", "MyticClient").build(), HttpResponse.BodyHandlers.ofInputStream());
         if (res.statusCode() != 200) throw new IOException("HTTP " + res.statusCode());
         long total = res.headers().firstValueAsLong("content-length").orElse(-1);
-        try (InputStream raw = res.body(); Counting in = new Counting(raw, total); ZipInputStream zip = new ZipInputStream(in)) {
+        java.security.MessageDigest sha;
+        try {
+            sha = java.security.MessageDigest.getInstance("SHA-256");
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IOException(e);
+        }
+        boolean extracted = false;
+        try (InputStream raw = res.body(); java.security.DigestInputStream hashed = new java.security.DigestInputStream(raw, sha);
+             Counting in = new Counting(hashed, total); ZipInputStream zip = new ZipInputStream(in)) {
             ZipEntry e;
             while ((e = zip.getNextEntry()) != null) {
-                if (!e.getName().endsWith("/bin/ffmpeg.exe")) continue;
+                if (extracted || !e.getName().endsWith("/bin/ffmpeg.exe")) continue;
                 Files.copy(zip, part, StandardCopyOption.REPLACE_EXISTING);
-                Files.move(part, target, StandardCopyOption.REPLACE_EXISTING);
-                status = "ffmpeg geladen";
-                return works(target.toString()) ? target : null;
+                extracted = true;
             }
+            in.transferTo(java.io.OutputStream.nullOutputStream()); // Rest lesen, damit die Prüfsumme die ganze Datei umfasst
+        } catch (IOException | RuntimeException e) {
+            Files.deleteIfExists(part);
+            throw e;
         }
-        return null;
+        String got = java.util.HexFormat.of().formatHex(sha.digest());
+        if (!got.equals(WIN_SHA256)) {
+            Files.deleteIfExists(part);
+            MyticClient.LOG.warn("Clips: ffmpeg-Download hat falsche Prüfsumme ({}) – verworfen", got);
+            throw new IOException("Download beschädigt oder verändert (Prüfsumme falsch)");
+        }
+        if (!extracted) return null;
+        Files.move(part, target, StandardCopyOption.REPLACE_EXISTING);
+        status = "ffmpeg geladen";
+        return works(target.toString()) ? target : null;
     }
 
     /** zählt geladene Bytes für die Fortschrittsanzeige */

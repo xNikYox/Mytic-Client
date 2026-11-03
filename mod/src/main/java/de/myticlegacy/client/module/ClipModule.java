@@ -44,6 +44,7 @@ public class ClipModule extends Module {
     public void tick(Minecraft mc) {
         boolean want = enabled() && mc.level != null;
         if (!want) {
+            if (!enabled()) ClipRecorder.resetRetries(); // ausgeschaltet: beim nächsten Einschalten sofort neu versuchen
             if (ClipRecorder.running()) ClipRecorder.stop();
             config = "";
             announced = false;

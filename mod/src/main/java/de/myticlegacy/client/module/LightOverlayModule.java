@@ -19,7 +19,9 @@ import java.util.List;
 
 /**
  * Light Level Overlay wie bei Lunar: markiert Blöcke, auf denen Monster spawnen können (Blocklicht 0).
- * Rot = jederzeit (auch kein Himmelslicht), Gelb = nur nachts. Der Scan ist auf 4 Ticks verteilt.
+ * Rot = jederzeit (auch kein Himmelslicht), Gelb = nur nachts. Der Scan ist auf 4 Ticks verteilt und läuft nur neu,
+ * wenn sich etwas geändert haben kann: Spieler bewegt sich, baut/abbaut (Maustasten), Radius ändert sich – sonst
+ * höchstens alle 3 Sekunden (Licht von anderen Spielern, Tag/Nacht). Bei großem Radius spart das den Großteil der Arbeit.
  */
 public class LightOverlayModule extends Module {
     private final SliderSetting radius;
@@ -33,6 +35,13 @@ public class LightOverlayModule extends Module {
     private int slice;
     private BlockPos sweepCenter;
     private static final int SLICES = 4;
+    private static final long IDLE_RESCAN_MS = 3000;
+    /** Stand des letzten fertigen Durchgangs */
+    private BlockPos lastCenter;
+    private int lastRadius;
+    private long lastSweep;
+    /** Bauen/Abbauen gesehen: nach kurzer Zeit (Block steht dann) neu scannen */
+    private long interactAt;
 
     public LightOverlayModule() {
         super("lightoverlay", "Light Level Overlay", "Zeigt, wo Monster spawnen können (rot: immer, gelb: nachts)", Category.VISUELL, () -> Items.GLOWSTONE_DUST, false);
@@ -47,9 +56,11 @@ public class LightOverlayModule extends Module {
             if (!markers.isEmpty()) markers = new ArrayList<>();
             slice = 0;
             building = new ArrayList<>();
+            lastCenter = null;
             return;
         }
         Level level = mc.level;
+        if (slice == 0 && !needsSweep(mc)) return;
         if (slice == 0) sweepCenter = mc.player.blockPosition();
         BlockPos center = sweepCenter;
         int r = radius.intValue();
@@ -76,7 +87,20 @@ public class LightOverlayModule extends Module {
             markers = building;
             building = new ArrayList<>();
             slice = 0;
+            lastCenter = center;
+            lastRadius = r;
+            lastSweep = System.currentTimeMillis();
         }
+    }
+
+    /** Neuer Durchgang nötig? */
+    private boolean needsSweep(Minecraft mc) {
+        long now = System.currentTimeMillis();
+        if (mc.options.keyUse.isDown() || mc.options.keyAttack.isDown()) interactAt = now;
+        if (lastCenter == null || lastRadius != radius.intValue()) return true;
+        if (!mc.player.blockPosition().equals(lastCenter)) return true;
+        if (interactAt > lastSweep && now - interactAt > 150) return true;
+        return now - lastSweep > IDLE_RESCAN_MS;
     }
 
     /**
