@@ -69,7 +69,7 @@ public final class Friends {
 
     private static final String BASE = withSlash(safeUrl(System.getProperty("mytic.friends.url", "").trim()));
     /** Sitzung zuerst aus der Umgebung (nicht in der Prozessliste sichtbar), sonst wie früher als System-Property */
-    private static final String TOKEN = token();
+    private static volatile String TOKEN = token();
     /** Größte erlaubte Antwort des Servers */
     private static final int MAX_RESPONSE = 5 * 1024 * 1024;
 
@@ -96,6 +96,24 @@ public final class Friends {
     private static ScheduledExecutorService worker;
 
     private Friends() {
+    }
+
+    /**
+     * Kontowechsel im Hauptmenü: neue Sitzung des Freunde-Servers übernehmen, alte Listen verwerfen und neu laden.
+     * token null/leer = Freundesliste für dieses Konto nicht verfügbar.
+     */
+    public static void switchSession(String token) {
+        TOKEN = token == null ? "" : token.trim();
+        friends = Collections.emptyList();
+        incoming = Collections.emptyList();
+        outgoing = Collections.emptyList();
+        me = null;
+        loaded = false;
+        error = null;
+        if (available()) {
+            start();
+            refresh();
+        }
     }
 
     /** Wurde der Client über den Mytic Launcher mit Freundesliste gestartet? */

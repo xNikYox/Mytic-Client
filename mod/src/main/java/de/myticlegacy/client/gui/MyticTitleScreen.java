@@ -111,20 +111,34 @@ public class MyticTitleScreen extends MyticScreen {
             Ui.centered(g, b.label, b.x + b.w / 2, b.y + 6, Ui.alpha(0xFFFFFFFF, ease), true);
         }
 
-        String user = minecraft.getUser().getName();
-        int uw = font.width(user) + 22;
-        Ui.rect(g, vw - uw - 8, 8, uw, 16, 2, 0x70000000);
-        Ui.border(g, vw - uw - 8, 8, uw, 16, 0x50FFFFFF);
-        Ui.rect(g, vw - uw - 1, 13, 6, 6, 3, Ui.GREEN);
-        Ui.text(g, user, vw - uw + 9, 12, Ui.TEXT, false);
+        // Konto oben rechts – über den Launcher gestartet: anklicken zum Wechseln
+        int[] ub = userBadge();
+        boolean switchable = de.myticlegacy.client.account.Accounts.available();
+        float uh = Ui.animate("title:user", switchable && Ui.inside(mouseX, mouseY, ub[0], ub[1], ub[2], ub[3]), 16f);
+        Ui.rect(g, ub[0], ub[1], ub[2], ub[3], 2, Ui.mix(0x70000000, 0x55FFFFFF, uh * 0.45f));
+        Ui.border(g, ub[0], ub[1], ub[2], ub[3], Ui.mix(0x50FFFFFF, 0xE6FFFFFF, uh));
+        Ui.rect(g, ub[0] + 7, 13, 6, 6, 3, Ui.GREEN);
+        Ui.text(g, minecraft.getUser().getName(), ub[0] + 17, 12, Ui.TEXT, false);
+        if (switchable) Ui.text(g, "⇄", ub[0] + ub[2] - 13, 12, Ui.mix(0xA0FFFFFF, 0xFFFFFFFF, uh), false);
 
         Ui.text(g, MyticClient.NAME + " " + MyticClient.VERSION, 6, vh - 12, Ui.MUTED, false);
         String copyright = "Copyright Mojang AB. Nicht verbreiten!";
         Ui.text(g, copyright, vw - font.width(copyright) - 6, vh - 12, Ui.MUTED, false);
     }
 
+    /** Kontofeld oben rechts: x, y, w, h */
+    private int[] userBadge() {
+        int uw = font.width(minecraft.getUser().getName()) + 22 + (de.myticlegacy.client.account.Accounts.available() ? 14 : 0);
+        return new int[]{vw - uw - 8, 8, uw, 16};
+    }
+
     @Override
     protected boolean click(Input.Click event, boolean doubleClick) {
+        int[] ub = userBadge();
+        if (de.myticlegacy.client.account.Accounts.available() && Ui.inside(event.x(), event.y(), ub[0], ub[1], ub[2], ub[3])) {
+            Compat.setScreen(new de.myticlegacy.client.account.AccountScreen(this));
+            return true;
+        }
         for (Button b : buttons()) {
             if (!Ui.inside(event.x(), event.y(), b.x, b.y, b.w, BH)) continue;
             switch (b.label) {

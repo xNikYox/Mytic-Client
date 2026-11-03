@@ -306,6 +306,17 @@ public final class Games {
     private static boolean inWorld;
     private static boolean hookAdded;
 
+    /** Nach einem Kontowechsel: Partien des alten Kontos vergessen (Spiel-Thread), ohne Meldungen für schon offene Partien */
+    public static void reset() {
+        games = Collections.emptyList();
+        announcedInvites.clear();
+        seenMoves.clear();
+        seenStatus.clear();
+        seenMyTurn.clear();
+        firstPoll = true;
+        pollSoon = true;
+    }
+
     public static List<Game> all() {
         return games;
     }

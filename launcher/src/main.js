@@ -20,6 +20,7 @@ const { ModBrowser } = require("./core/modrinth");
 const profiles = require("./core/profiles");
 const { sanitizePatch } = require("./core/settings");
 const { DiscordPresence } = require("./core/discord");
+const { createBridge } = require("./core/gamebridge");
 const { spawn } = require("node:child_process");
 
 const DIRS = makeDirs();
@@ -297,7 +298,7 @@ function accounts() {
   return readJson(ACCOUNTS_FILE, { selected: null, list: [] });
 }
 
-async function saveAccount(account, refreshToken) {
+async function saveAccount(account, refreshToken, { select = true } = {}) {
   if (!safeStorage.isEncryptionAvailable()) {
     sessionTokens.set(account.uuid, { accessToken: account.accessToken || "", refreshToken: refreshToken || "" });
     if (refreshToken && !plainWarned) {
@@ -308,7 +309,7 @@ async function saveAccount(account, refreshToken) {
   const store = accounts();
   const entry = { ...account, accessToken: protect(account.accessToken), refreshToken: protect(refreshToken) };
   store.list = store.list.filter((a) => a.uuid !== account.uuid).concat(entry);
-  store.selected = account.uuid;
+  if (select) store.selected = account.uuid;
   await writeJson(ACCOUNTS_FILE, store);
 }
 
@@ -321,8 +322,13 @@ function publicAccounts() {
 
 /** Holt das gewählte Konto mit gültigem Token (erneuert Microsoft-Tokens bei Bedarf). */
 async function activeAccount() {
+  return accountWithToken(accounts().selected, { select: true });
+}
+
+/** Konto mit gültigem Token; select=false lässt die Auswahl im Launcher unverändert (Kontowechsel im Spiel). */
+async function accountWithToken(uuid, { select = false } = {}) {
   const store = accounts();
-  const entry = store.list.find((a) => a.uuid === store.selected);
+  const entry = store.list.find((a) => a.uuid === uuid);
   if (!entry) throw new Error("Bitte zuerst ein Konto hinzufügen.");
   if (entry.type !== "microsoft") {
     if (!OFFLINE_ALLOWED) throw new Error("Bitte melde dich mit deinem Microsoft-Konto an.");
@@ -332,7 +338,7 @@ async function activeAccount() {
   const refreshToken = tokenOf(entry, "refreshToken");
   // alte Klartext-Einträge einmal lesen und ohne Klartext neu speichern
   if (/^raw:/.test(entry.accessToken || "") || /^raw:/.test(entry.refreshToken || "")) {
-    await saveAccount({ ...entry, accessToken }, refreshToken);
+    await saveAccount({ ...entry, accessToken }, refreshToken, { select });
   }
   if (accessToken && entry.expiresAt && entry.expiresAt > Date.now() + 5 * 60 * 1000) return { ...entry, accessToken };
   if (!refreshToken) throw new Error("Anmeldung abgelaufen – bitte das Microsoft-Konto neu hinzufügen.");
@@ -341,7 +347,7 @@ async function activeAccount() {
   emit("status", "Anmeldung wird erneuert …");
   const tokens = await auth.refreshMicrosoft(clientId, refreshToken);
   const account = await auth.minecraftLogin(tokens.access_token);
-  await saveAccount(account, tokens.refresh_token || refreshToken);
+  await saveAccount(account, tokens.refresh_token || refreshToken, { select });
   return account;
 }
 
@@ -890,6 +896,27 @@ async function friendsLaunch(account) {
   }
 }
 
+/** Kontowechsel im Hauptmenü des Spiels: Konten aus dem Launcher, frischer Token nur für die anfragende Instanz */
+const bridge = createBridge({
+  listAccounts: () => publicAccounts().list,
+  switchAccount: async (uuid, key) => {
+    const account = await accountWithToken(uuid);
+    let friendsToken = null;
+    if (friends.configured) {
+      try {
+        friendsToken = await friends.login(account);
+      } catch (error) {
+        emit("log", `[Freunde] Nach Kontowechsel nicht verfügbar: ${error.message}`);
+      }
+    }
+    for (const g of games.values()) if (g.bridgeKey === key) g.account = account.name;
+    emit("log", `[Launcher] Konto im Spiel gewechselt: ${account.name}`);
+    return { name: account.name, uuid: account.uuid, accessToken: account.accessToken || "0", xuid: account.xuid || "", clientId: account.clientId || "",
+      type: account.type === "microsoft" ? "msa" : "legacy", friendsToken };
+  },
+  log: (line) => emit("log", line),
+});
+
 ipc.handle("game:launch", async () => {
   if (busy) throw new Error("Ein Start wird gerade vorbereitet – kurz warten.");
   busy = true;
@@ -945,8 +972,17 @@ ipc.handle("game:launch", async () => {
     if (!discordGame) discordGame = { version: profile.mcVersion, start: Date.now(), server: null };
     updateDiscord();
     const gameId = nextGameId++;
+    // Kontowechsel im Spiel: Adresse und eigener Schlüssel dieser Instanz
+    const bridgeKey = bridge.issueKey();
+    const bridgeEnv = {};
+    try {
+      bridgeEnv.MYTIC_LAUNCHER_URL = await bridge.start();
+      bridgeEnv.MYTIC_LAUNCHER_KEY = bridgeKey;
+    } catch (error) {
+      emit("log", `[Launcher] Kontowechsel im Spiel nicht verfügbar: ${error.message}`);
+    }
     const child = launch(command, DIRS, {
-      env: friendsInGame.env,
+      env: { ...friendsInGame.env, ...bridgeEnv },
       onLog: (line) => {
         emit("log", line);
         recent.push(line);
@@ -958,6 +994,7 @@ ipc.handle("game:launch", async () => {
       },
       onExit: (code) => {
         games.delete(gameId);
+        bridge.revoke(bridgeKey);
         if (!games.size) discordGame = null;
         updateDiscord();
         emit("game", { running: games.size > 0, count: games.size, code, ended: true, name: account.name });
@@ -969,7 +1006,7 @@ ipc.handle("game:launch", async () => {
         }
       },
     });
-    games.set(gameId, { child, profileId: profile.id, mcVersion: profile.mcVersion, account: account.name });
+    games.set(gameId, { child, profileId: profile.id, mcVersion: profile.mcVersion, account: account.name, bridgeKey });
     emit("game", { running: true, count: games.size, name: account.name });
     // Start für die Statistik melden – nebenbei, darf den Start nie aufhalten oder scheitern lassen
     if (friendsInGame.env.MYTIC_FRIENDS_TOKEN) {
