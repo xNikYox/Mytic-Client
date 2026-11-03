@@ -18,7 +18,8 @@
     "CapeLayerMixin",
     "ItemModelResolverMixin",
     "ShieldSpecialRendererMixin",
-    "LivingEntityRendererMixin"
+    "LivingEntityRendererMixin",
+    "PackRepositoryMixin"
   ],
   "injectors": {
     "defaultRequire": 1

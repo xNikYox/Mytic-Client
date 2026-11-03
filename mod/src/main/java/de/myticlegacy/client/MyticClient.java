@@ -83,6 +83,7 @@ public final class MyticClient implements ClientModInitializer {
     public static AutoTextModule autoText;
     public static LightOverlayModule lightOverlay;
     public static FpsBoostModule fpsBoost;
+    public static de.myticlegacy.client.styles.StylesModule styles;
     public static de.myticlegacy.client.module.ChatModule chat;
     public static de.myticlegacy.client.module.StreamerModule streamer;
     public static de.myticlegacy.client.module.ClipModule clips;
@@ -221,6 +222,7 @@ public final class MyticClient implements ClientModInitializer {
         lightOverlay = module(new LightOverlayModule());
         fpsBoost = module(new FpsBoostModule());
         module(new de.myticlegacy.client.module.BackgroundFpsModule());
+        styles = module(new de.myticlegacy.client.styles.StylesModule());
         chat = module(new de.myticlegacy.client.module.ChatModule());
         streamer = module(new de.myticlegacy.client.module.StreamerModule());
         clips = module(new de.myticlegacy.client.module.ClipModule());
@@ -247,6 +249,7 @@ public final class MyticClient implements ClientModInitializer {
         galleryKey = Compat.registerKey("key.myticclient.screenshots", InputConstants.UNKNOWN.getValue());
         clipKey = Compat.registerKey("key.myticclient.clip", InputConstants.KEY_F8);
         de.myticlegacy.client.games.GameToast.registerKeys(); // Herausforderung annehmen (J) / ablehnen (K)
+        styles.registerKey(); // Mytic Styles (B)
         for (int i = 0; i < profileKeys.length; i++) profileKeys[i] = Compat.registerKey("key.myticclient.hudprofile" + (i + 1), InputConstants.UNKNOWN.getValue());
         for (int i = 0; i < AutoTextModule.SLOTS; i++) autoTextKeys[i] = Compat.registerKey("key.myticclient.autotext" + (i + 1), -1);
         for (int i = 0; i < packKeys.length; i++) packKeys[i] = Compat.registerKey("key.myticclient.pack" + (i + 1), -1);
@@ -360,6 +363,7 @@ public final class MyticClient implements ClientModInitializer {
         screenshot.tick();
         clips.tick(mc);
         while (clipKey.consumeClick()) clips.saveClip(mc);
+        styles.tick(mc);
         while (galleryKey.consumeClick()) if (Compat.screen(mc) == null) Compat.setScreen(new de.myticlegacy.client.gui.ScreenshotsScreen());
         for (int i = 0; i < profileKeys.length; i++) {
             while (profileKeys[i].consumeClick()) {

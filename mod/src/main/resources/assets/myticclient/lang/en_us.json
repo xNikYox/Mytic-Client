@@ -22,5 +22,6 @@
   "key.myticclient.pack2": "Toggle pack overlay 2",
   "key.myticclient.pack3": "Toggle pack overlay 3",
   "key.myticclient.gameaccept": "Accept game challenge",
-  "key.myticclient.gamedecline": "Decline game challenge"
+  "key.myticclient.gamedecline": "Decline game challenge",
+  "key.myticclient.styles": "Open Mytic Styles"
 }
