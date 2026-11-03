@@ -654,6 +654,9 @@ test("Java-Speicher: ZGC ab Java 21 mit genug Kernen, sonst G1; eigener GC hat V
   assert.ok(memoryArgs({ memory: 2048, javaMajor: 8, cpus: 16 }).includes("-XX:+UseG1GC"), "Java 8 → G1");
   const own = memoryArgs({ memory: 4096, javaMajor: 21, cpus: 8, userArgs: "-XX:+UseShenandoahGC -Dx=1" });
   assert.deepEqual(own, ["-Xms4096M", "-Xmx4096M"], "eigener GC → keine weiteren GC-Schalter");
+  const second = memoryArgs({ memory: 4096, javaMajor: 21, cpus: 8, shared: true });
+  assert.deepEqual(second.slice(0, 2), ["-Xms1024M", "-Xmx4096M"], "weitere Instanz: klein starten, gleiches Maximum");
+  assert.deepEqual(memoryArgs({ memory: 1024, javaMajor: 21, cpus: 8, shared: true }).slice(0, 2), ["-Xms1024M", "-Xmx1024M"]);
 });
 
 test("Statistik: Spielzeit formatieren", () => {

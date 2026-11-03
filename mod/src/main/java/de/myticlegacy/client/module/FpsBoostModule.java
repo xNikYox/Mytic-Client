@@ -22,7 +22,6 @@ public class FpsBoostModule extends Module {
     public final BoolSetting entityDistance;
     public final BoolSetting fastGraphics;
     public final BoolSetting smoothLighting;
-    public final BoolSetting background;
     public final BoolSetting autoDistance;
     public final SliderSetting targetFps;
     public final BoolSetting culling;
@@ -42,7 +41,6 @@ public class FpsBoostModule extends Module {
         entityDistance = new BoolSetting(this, "entityDistance", "Entities nur in der Nähe zeichnen", false);
         fastGraphics = new BoolSetting(this, "fastGraphics", "Schnelle Grafik (deckendes Laub)", true);
         smoothLighting = new BoolSetting(this, "smoothLighting", "Weiche Beleuchtung aus", false);
-        background = new BoolSetting(this, "background", "Im Hintergrund nur 15 FPS", true);
         autoDistance = new BoolSetting(this, "autoDistance", "Sichtweite automatisch anpassen", false);
         targetFps = new SliderSetting(this, "targetFps", "Ziel-FPS", 30, 240, 10, 60, " FPS");
         culling = new BoolSetting(this, "culling", "Verdecktes & Fernes nicht zeichnen", true);
@@ -64,7 +62,8 @@ public class FpsBoostModule extends Module {
         option("ao", o.ambientOcclusion(), on && smoothLighting.get(), false);
         FpsCompat.graphics(o, on && fastGraphics.get());
         // Fenster nicht im Vordergrund: Bildrate drosseln (spart Strom und Wärme, gibt anderen Programmen Leistung)
-        option("background", o.framerateLimit(), on && background.get() && !mc.isWindowActive(), 15);
+        // früher hier: Bildrate im Hintergrund über die Option – jetzt eigenes Modul „Hintergrund-FPS“; alten Wert zurückholen
+        option("background", o.framerateLimit(), false, 15);
         autoDistance(mc, o, on && autoDistance.get());
     }
 

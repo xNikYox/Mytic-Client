@@ -6,6 +6,8 @@
     "EntityRenderDispatcherCullMixin",
     "BlockEntityCullMixin",
     "ParticleLimitMixin",
+    "BackgroundFpsMixin",
+    "BackgroundFpsLegacyMixin",
     "ClientLevelTickMixin",
     "ItemAmountMixin",
     "ChatComponentAccessor",

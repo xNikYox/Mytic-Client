@@ -220,6 +220,7 @@ public final class MyticClient implements ClientModInitializer {
         autoText = module(new AutoTextModule());
         lightOverlay = module(new LightOverlayModule());
         fpsBoost = module(new FpsBoostModule());
+        module(new de.myticlegacy.client.module.BackgroundFpsModule());
         chat = module(new de.myticlegacy.client.module.ChatModule());
         streamer = module(new de.myticlegacy.client.module.StreamerModule());
         clips = module(new de.myticlegacy.client.module.ClipModule());

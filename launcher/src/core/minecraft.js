@@ -500,7 +500,7 @@ function buildCommand(install, dirs, account, settings = {}, { platform = proces
   const ruleOptions = { platform, arch, features };
   const memory = Math.max(1024, Number(settings.memoryMb) || 4096);
   const jvm = [
-    ...memoryArgs({ memory, javaMajor: (version.javaVersion && version.javaVersion.majorVersion) || 21, userArgs: settings.jvmArgs }),
+    ...memoryArgs({ memory, javaMajor: (version.javaVersion && version.javaVersion.majorVersion) || 21, userArgs: settings.jvmArgs, shared: Boolean(settings.sharedMemory) }),
     ...collectArguments(version.arguments.jvm, vars, ruleOptions),
     ...collectArguments(fabric.arguments && fabric.arguments.jvm, vars, ruleOptions),
     // Mods des gewählten Profils (Fabric lädt alle JARs aus diesem Ordner zusätzlich)
@@ -524,8 +524,12 @@ function buildCommand(install, dirs, account, settings = {}, { platform = proces
  * Startspeicher = Maximum, damit der Speicher nicht mitten im Spiel wachsen muss.
  * Stehen in den eigenen Java-Argumenten schon ein GC (-XX:+Use…GC), bleibt es bei dessen Wahl – zwei GCs verhindern den Start.
  */
-function memoryArgs({ memory, javaMajor = 8, cpus = os.cpus().length, userArgs = "" }) {
-  const args = [`-Xms${memory}M`, `-Xmx${memory}M`];
+/**
+ * shared: es laufen schon andere Instanzen – dann nicht den ganzen Speicher sofort belegen (Startspeicher 1 GB, wächst
+ * bei Bedarf bis zum Maximum), sonst wird bei mehreren Spielen schnell der Arbeitsspeicher knapp.
+ */
+function memoryArgs({ memory, javaMajor = 8, cpus = os.cpus().length, userArgs = "", shared = false }) {
+  const args = [`-Xms${shared ? Math.min(memory, 1024) : memory}M`, `-Xmx${memory}M`];
   if (/-XX:[+-]Use\w*GC\b/.test(userArgs)) return args;
   if (javaMajor >= 21 && cpus >= 6) {
     // ab Java 23 ist ZGC immer generational, der Schalter ist dort veraltet
@@ -552,7 +556,7 @@ function buildLegacyCommand(install, dirs, account, settings, platform) {
   };
   const memory = Math.max(1024, Number(settings.memoryMb) || 4096);
   const jvm = [
-    ...memoryArgs({ memory, javaMajor: 8, userArgs: settings.jvmArgs }), // 1.8.9: Java 8, also G1
+    ...memoryArgs({ memory, javaMajor: 8, userArgs: settings.jvmArgs, shared: Boolean(settings.sharedMemory) }), // 1.8.9: Java 8, also G1
     `-Djava.library.path=${nativesDir}`,
     `-Dminecraft.launcher.brand=${LAUNCHER_NAME}`,
     `-Dminecraft.launcher.version=${LAUNCHER_VERSION}`,

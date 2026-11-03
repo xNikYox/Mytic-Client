@@ -956,7 +956,13 @@ ipc.handle("game:launch", async () => {
     // Profilname für die Spielzeit pro Profil (die Mod meldet ihn mit)
     const statsProfile = statsProfileName(profile.name);
     const extraJvm = [...friendsInGame.jvm, ...(cosmeticsPack ? [`-Dmytic.cosmetics=${cosmeticsPack}`] : []), `-Dmytic.launcherTheme=${current.launcherTheme || "sunset"}`, `-Dmytic.profile=${statsProfile}`];
-    const command = buildCommand(install, DIRS, account, { ...current, modsDir: profileMods, extraJvm, addMods: cosmeticsPack ? [cosmeticsPack] : [] });
+    // weitere Instanz: Speicher erst bei Bedarf belegen; reicht der Arbeitsspeicher kaum, Hinweis in der Konsole
+    const sharedMemory = games.size > 0;
+    const memoryMb = Math.max(1024, Number(current.memoryMb) || 4096);
+    if (sharedMemory && (games.size + 1) * memoryMb > (os.totalmem() / 1048576) * 0.85) {
+      emit("log", `[Launcher] Hinweis: ${games.size + 1} Spiele mit je bis zu ${memoryMb} MB – der Arbeitsspeicher wird knapp. Weniger Speicher pro Spiel einstellen hilft.`);
+    }
+    const command = buildCommand(install, DIRS, account, { ...current, modsDir: profileMods, extraJvm, addMods: cosmeticsPack ? [cosmeticsPack] : [], sharedMemory });
     emit("status", "Minecraft startet …");
     emit("log", `[Launcher] Starte Minecraft ${profile.mcVersion} (Fabric) als ${account.name} – Profil „${profile.name}“`);
     // letzte Log-Zeilen für den Auto-Fix merken

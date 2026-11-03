@@ -82,10 +82,18 @@ public final class Culling {
     }
 
     /** true = Block-Entity nicht zeichnen (Leuchtfeuer, End-Portale immer) */
+    /** Strahlen über große Entfernung (Leuchtfeuer, End-Portale) nie ausblenden – einmal je Klasse geprüft statt pro Bild */
+    private static final ClassValue<Boolean> NEVER_CULL = new ClassValue<>() {
+        @Override
+        protected Boolean computeValue(Class<?> type) {
+            String name = type.getSimpleName();
+            return name.contains("Beacon") || name.contains("EndGateway") || name.contains("EndPortal");
+        }
+    };
+
     public static boolean cullBlockEntity(BlockEntity be) {
         if (!active()) return false;
-        String type = be.getClass().getSimpleName();
-        if (type.contains("Beacon") || type.contains("EndGateway") || type.contains("EndPortal")) return false;
+        if (NEVER_CULL.get(be.getClass())) return false;
         long now = System.currentTimeMillis();
         Vec3 c = camera(now);
         BlockPos p = be.getBlockPos();
@@ -119,8 +127,8 @@ public final class Culling {
 
     private static boolean entityHidden(Entity e, Vec3 c, long now) {
         int id = e.getId();
-        boolean has = entities.containsKey(id);
-        long entry = has ? entities.get(id) : 0;
+        long entry = entities.get(id); // fehlt → 0 (gespeicherte Werte sind nie 0)
+        boolean has = entry != 0;
         if (has && fresh(entry, now)) return (entry & 1) == 0;
         if (!takeBudget(now)) return has && (entry & 1) == 0;
         AABB b = e.getBoundingBox();
@@ -133,8 +141,8 @@ public final class Culling {
 
     private static boolean blockHidden(BlockPos pos, Vec3 c, long now) {
         long key = pos.asLong();
-        boolean has = blocks.containsKey(key);
-        long entry = has ? blocks.get(key) : 0;
+        long entry = blocks.get(key);
+        boolean has = entry != 0;
         if (has && fresh(entry, now)) return (entry & 1) == 0;
         if (!takeBudget(now)) return has && (entry & 1) == 0;
         AABB b = new AABB(pos);
