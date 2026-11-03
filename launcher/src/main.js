@@ -21,6 +21,7 @@ const profiles = require("./core/profiles");
 const { sanitizePatch } = require("./core/settings");
 const { DiscordPresence } = require("./core/discord");
 const { createBridge } = require("./core/gamebridge");
+const { createSkins, checkSkinPng } = require("./core/skins");
 const { spawn } = require("node:child_process");
 
 const DIRS = makeDirs();
@@ -895,6 +896,87 @@ async function friendsLaunch(account) {
     return { jvm: [], env: {} };
   }
 }
+
+// ---------------------------------------------------------------------------------------------- Skins
+
+const skins = createSkins({ libraryDir: path.join(DIRS.base, "skins") });
+
+/** Microsoft-Konto mit gültigem Token (Skins gibt es nur für echte Konten) */
+async function skinAccount(uuid) {
+  const account = await accountWithToken(String(uuid || ""));
+  if (account.type !== "microsoft") throw new Error("Skins lassen sich nur bei Microsoft-Konten ändern");
+  return account;
+}
+
+/** Skin-PNG aus einer Quelle: Datei vom PC, Bibliothek oder anderer Spieler */
+async function skinSource(source) {
+  if (!source || typeof source !== "object") throw new Error("Kein Skin gewählt");
+  if (source.kind === "file") {
+    const file = String(source.path || "");
+    if (!/\.png$/i.test(file)) throw new Error("Bitte eine PNG-Datei wählen");
+    const stat = await fsp.stat(file);
+    if (!stat.isFile() || stat.size > 256 * 1024) throw new Error("Skin muss eine PNG-Datei unter 256 KB sein");
+    const png = await fsp.readFile(file);
+    checkSkinPng(png);
+    return { png, name: path.basename(file, path.extname(file)) };
+  }
+  if (source.kind === "library") {
+    const { png, entry } = await skins.libraryPng(source.id);
+    return { png, name: entry.name, variant: entry.variant };
+  }
+  if (source.kind === "player") {
+    const { png, name, variant } = await skins.ofPlayer(source.name);
+    return { png, name, variant };
+  }
+  throw new Error("Unbekannte Quelle");
+}
+
+ipc.handle("skins:profile", async (e, uuid) => skins.profile((await skinAccount(uuid)).accessToken));
+ipc.handle("skins:library", () => skins.library());
+ipc.handle("skins:pick", async () => {
+  const result = await dialog.showOpenDialog(win, { title: "Skin wählen", properties: ["openFile"], filters: [{ name: "Skin (PNG)", extensions: ["png"] }] });
+  return result.canceled || !result.filePaths[0] ? null : result.filePaths[0];
+});
+/** Vorschau einer Quelle, ohne etwas zu ändern */
+ipc.handle("skins:preview", async (e, source) => {
+  const { png, name, variant } = await skinSource(source);
+  return { image: `data:image/png;base64,${png.toString("base64")}`, name, variant: variant || null };
+});
+ipc.handle("skins:apply", async (e, uuid, source, variant) => {
+  const account = await skinAccount(uuid);
+  const { png, name } = await skinSource(source);
+  const model = variant === "slim" ? "slim" : "classic";
+  await skins.upload(account.accessToken, png, model);
+  await skins.save(png, name, model); // landet auch in der Bibliothek
+  emit("log", `[Skins] Neuer Skin für ${account.name} (${model === "slim" ? "Slim" : "Classic"})`);
+  return skins.profile(account.accessToken);
+});
+ipc.handle("skins:reset", async (e, uuid) => {
+  const account = await skinAccount(uuid);
+  await skins.reset(account.accessToken);
+  return skins.profile(account.accessToken);
+});
+ipc.handle("skins:cape", async (e, uuid, capeId) => {
+  const account = await skinAccount(uuid);
+  await skins.cape(account.accessToken, capeId || null);
+  return skins.profile(account.accessToken);
+});
+/** aktuellen Skin eines Kontos in die Bibliothek legen */
+ipc.handle("skins:keep", async (e, uuid) => {
+  const account = await skinAccount(uuid);
+  const current = await skins.profile(account.accessToken);
+  if (!current.skin || !current.skin.image) throw new Error("Das Konto hat den Standard-Skin");
+  await skins.save(Buffer.from(current.skin.image.split(",")[1], "base64"), account.name, current.skin.variant);
+  return skins.library();
+});
+ipc.handle("skins:remove", async (e, id) => {
+  await skins.remove(id);
+  return skins.library();
+});
+ipc.handle("skins:rename", async (e, id, name) => {
+  await skins.rename(id, name);
+  return skins.library();
+});
 
 /** Kontowechsel im Hauptmenü des Spiels: Konten aus dem Launcher, frischer Token nur für die anfragende Instanz */
 const bridge = createBridge({

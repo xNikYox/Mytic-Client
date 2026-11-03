@@ -25,6 +25,7 @@
     <button class="rail-item" data-page="mods" aria-label="Mods"><svg viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg><span class="tip">Mods</span></button>
     <button class="rail-item" data-page="browser" aria-label="Mod-Browser"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M16.5 16.5L21 21M11 8v6M8 11h6"/></svg><span class="tip">Mod-Browser</span></button>
     <button class="rail-item" data-page="friends" aria-label="Freunde"><svg viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3.5"/><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5"/><path d="M15.5 5.2a3.5 3.5 0 0 1 0 6.6M18 14.8c2 .7 3.2 2.4 3.5 5.2"/></svg><span class="rail-badge" id="friends-badge" hidden></span><span class="tip">Freunde</span></button>
+    <button class="rail-item" data-page="skins" aria-label="Skins"><svg viewBox="0 0 24 24"><path d="M8.5 3.5L4 6l1.8 4.2L8 9.4V20.5h8V9.4l2.2.8L20 6l-4.5-2.5c-.6 1.6-1.9 2.5-3.5 2.5s-2.9-.9-3.5-2.5z"/></svg><span class="tip">Skins</span></button>
     <button class="rail-item" data-page="stats" aria-label="Statistiken"><svg viewBox="0 0 24 24"><rect x="4" y="12" width="4" height="8" rx="1.2"/><rect x="10" y="7" width="4" height="13" rx="1.2"/><rect x="16" y="3.5" width="4" height="16.5" rx="1.2"/></svg><span class="tip">Statistiken</span></button>
     <button class="rail-item" data-page="shots" aria-label="Screenshots"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="14" rx="3"/><path d="M8.5 6l1.5-2.5h4L15.5 6"/><circle cx="12" cy="13" r="3.5"/></svg><span class="tip">Screenshots</span></button>
     <button class="rail-item" data-page="settings" aria-label="Einstellungen"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.2"/><circle cx="10" cy="17" r="2.2"/></svg><span class="tip">Einstellungen</span></button>
@@ -129,14 +130,13 @@
 
       <div class="cards">
         <article class="glass card">
-          <header><h3>Neu in 2.32</h3><span class="badge">Update</span></header>
+          <header><h3>Neu in 2.33</h3><span class="badge">Update</span></header>
           <ul class="news">
-            <li><b>Konto im Spiel wechseln:</b> im Mytic-Hauptmenü oben rechts auf deinen Namen klicken – alle Konten aus dem Launcher</li>
-            <li><b>Freunde, Spiele und Cosmetics</b> wechseln mit dem Konto mit</li>
+            <li><b>Skins pro Konto:</b> neue Seite „Skins“ – PNG hochladen oder ziehen, Classic/Slim, Vorschau von vorne und hinten</li>
+            <li><b>Skin von Spieler übernehmen,</b> Standard-Skin und offizielle Umhänge an- und ablegen</li>
+            <li><b>Skin-Bibliothek:</b> hochgeladene Skins werden gemerkt – mit einem Klick zurückwechseln, auch zwischen Konten</li>
+            <li><b>Konto im Spiel wechseln:</b> im Mytic-Hauptmenü oben rechts auf deinen Namen klicken</li>
             <li><b>Mehr Leistung:</b> Spiele im Hintergrund laufen mit weniger FPS, weitere Instanzen belegen Speicher erst bei Bedarf</li>
-            <li><b>Mehrere Spiele gleichzeitig:</b> während Minecraft läuft, startet „Noch eins“ ein weiteres – auch mit einem anderen Konto</li>
-            <li><b>Mytic Games:</b> Schach, X und O, Vier gewinnt und Schiffe versenken mit Freunden – /myticgame &lt;name&gt;</li>
-            <li><b>Neue Menü-Stile:</b> Gold und Seitenleiste, dazu verfeinert Eckig, Lunar, Glas und Neon</li>
           </ul>
         </article>
         <article class="glass card">
@@ -210,6 +210,59 @@
           <h3>Gesendet</h3>
           <div class="friend-requests" id="friends-outgoing"></div>
           <p class="sub friends-hint">Im Spiel: <kbd>Rechts-Shift</kbd> → Freunde</p>
+        </aside>
+      </div>
+    </section>
+
+    <!-- Skins -->
+    <section class="page" id="page-skins">
+      <p class="notice" id="skins-notice" hidden></p>
+      <div class="skins-layout">
+        <section class="glass skins-main">
+          <div class="friends-head">
+            <h3>Skin</h3>
+            <div class="skins-accounts" id="skins-accounts"></div>
+          </div>
+          <div class="skins-body">
+            <div class="skins-stage" id="skins-stage">
+              <div class="skins-views">
+                <figure><canvas id="skin-front" width="160" height="320"></canvas><figcaption>Vorne</figcaption></figure>
+                <figure><canvas id="skin-back" width="160" height="320"></canvas><figcaption>Hinten</figcaption></figure>
+              </div>
+              <p class="skins-caption" id="skins-caption">Wird geladen …</p>
+            </div>
+            <div class="skins-tools">
+              <h4>Neuer Skin</h4>
+              <div class="skins-row">
+                <button class="ghost" id="skin-file">PNG-Datei wählen …</button>
+                <span class="sub">oder Datei hierher ziehen</span>
+              </div>
+              <form class="skins-row" id="skin-player">
+                <input id="skin-player-name" placeholder="Skin von Spieler" maxlength="16" spellcheck="false" autocomplete="off">
+                <button class="ghost" type="submit">Laden</button>
+              </form>
+              <h4>Modell</h4>
+              <div class="skins-model" id="skin-model">
+                <button class="filter active" data-model="classic">Classic <small>4 px Arme</small></button>
+                <button class="filter" data-model="slim">Slim <small>3 px Arme</small></button>
+              </div>
+              <div class="skins-row skins-apply">
+                <button class="mr-btn install skins-apply-btn" id="skin-apply" disabled>Skin übernehmen</button>
+                <button class="ghost small" id="skin-cancel" hidden>Verwerfen</button>
+              </div>
+              <div class="skins-row">
+                <button class="ghost small" id="skin-keep">Aktuellen Skin merken</button>
+                <button class="ghost small danger" id="skin-reset">Standard-Skin</button>
+              </div>
+              <h4>Umhang</h4>
+              <div class="skins-capes" id="skins-capes"></div>
+            </div>
+          </div>
+        </section>
+        <aside class="glass skins-side">
+          <div class="friends-head"><h3>Bibliothek <span id="skins-lib-count"></span></h3></div>
+          <p class="sub" id="skins-lib-empty" hidden>Hochgeladene Skins landen hier – so wechselst du später mit einem Klick zurück.</p>
+          <div class="skins-library" id="skins-library"></div>
         </aside>
       </div>
     </section>
@@ -390,5 +443,6 @@
   <div class="toast" id="toast" hidden></div>
   <script src="stats-format.js"></script>
   <script src="app.js"></script>
+  <script src="skins.js"></script>
 </body>
 </html>

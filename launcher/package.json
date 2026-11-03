@@ -1,14 +1,14 @@
 {
   "name": "mytic-client",
   "productName": "Mytic Client",
-  "version": "2.32.1",
+  "version": "2.33.0",
   "description": "Mytic Client Launcher - Minecraft 1.21.11 mit Fabric und In-Game-Mods",
   "author": "MyticLegacy",
   "license": "UNLICENSED",
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node --test test/core.test.js test/signing.test.js test/gamebridge.test.js",
+    "test": "node --test test/core.test.js test/signing.test.js test/gamebridge.test.js test/skins.test.js",
     "dist:win": "electron-builder --win portable zip --x64",
     "postdist:win": "node scripts/sign.js --release",
     "sign": "node scripts/sign.js",

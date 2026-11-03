@@ -19,7 +19,7 @@ let logLevel = "all";
 const logLines = [];
 
 const avatar = (uuid) => `https://mc-heads.net/avatar/${uuid}/64`;
-const PAGE_TITLES = { home: "Start", friends: "Freunde", stats: "Statistiken", shots: "Screenshots", mods: "Mods", browser: "Mod-Browser", settings: "Einstellungen", console: "Konsole" };
+const PAGE_TITLES = { home: "Start", friends: "Freunde", skins: "Skins", stats: "Statistiken", shots: "Screenshots", mods: "Mods", browser: "Mod-Browser", settings: "Einstellungen", console: "Konsole" };
 
 // Einfache Linien-Icons pro Kategorie
 const ICONS = {
@@ -162,6 +162,7 @@ function showPage(name) {
   if (name === "console") renderLog(true);
   if (name === "browser" && !browserLoaded) loadBrowser(true);
   if (name === "friends") loadFriends();
+  if (name === "skins") loadSkins();
   if (name === "stats") loadStats();
   if (name === "shots") loadShots();
 }
