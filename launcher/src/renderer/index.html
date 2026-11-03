@@ -130,14 +130,13 @@
 
       <div class="cards">
         <article class="glass card">
-          <header><h3>Neu in 2.33</h3><span class="badge">Update</span></header>
+          <header><h3>Neu in 2.34</h3><span class="badge">Update</span></header>
           <ul class="news">
-            <li><b>Skins pro Konto:</b> neue Seite „Skins“ – PNG hochladen oder ziehen, Classic/Slim, Vorschau von vorne und hinten</li>
-            <li><b>Skin von Spieler übernehmen,</b> Standard-Skin und offizielle Umhänge an- und ablegen</li>
-            <li><b>Skin-Bibliothek:</b> hochgeladene Skins werden gemerkt – mit einem Klick zurückwechseln, auch zwischen Konten</li>
-            <li><b>Konto im Spiel wechseln:</b> im Mytic-Hauptmenü oben rechts auf deinen Namen klicken</li>
-            <li><b>Besserer Ping:</b> die Server-Mod Krypton ist standardmäßig aus, Screenshot-Erkennung läuft im Hintergrund (weniger Ruckler)</li>
-            <li><b>Mehr Leistung:</b> Spiele im Hintergrund laufen mit weniger FPS, weitere Instanzen belegen Speicher erst bei Bedarf</li>
+            <li><b>Mytic Styles:</b> Texturpakete aus deinem resourcepacks-Ordner mischen – Schwert aus dem einen, GUI aus dem anderen (Taste <kbd>B</kbd>)</li>
+            <li><b>Probleme suchen:</b> in der Konsole – findet Lag, Ruckler, hohen Ping und Speicherprobleme und behebt sie mit einem Klick</li>
+            <li><b>Live-Messung im Spiel:</b> FPS, Hänger, Speicherbereinigung und Ping werden für die Diagnose mitgeschrieben</li>
+            <li><b>Skins pro Konto:</b> neue Seite „Skins“ mit Vorschau, Bibliothek und Umhängen</li>
+            <li><b>Besserer Ping:</b> die Server-Mod Krypton ist standardmäßig aus</li>
           </ul>
         </article>
         <article class="glass card">
@@ -357,10 +356,19 @@
           <button class="filter" data-level="error">Fehler</button>
         </div>
         <div class="inline">
+          <button class="ghost" id="diag-run">Probleme suchen</button>
           <button class="ghost" id="copy-log">Kopieren</button>
           <button class="ghost danger" id="stop-game" disabled>Spiel beenden</button>
         </div>
       </div>
+      <section class="glass diag" id="diag" hidden>
+        <div class="friends-head">
+          <h3>Diagnose <span id="diag-sub"></span></h3>
+          <button class="ghost small" id="diag-close">Schließen</button>
+        </div>
+        <div class="diag-stats" id="diag-stats"></div>
+        <div class="diag-list" id="diag-list"></div>
+      </section>
       <div class="glass log" id="log"></div>
     </section>
   </main>

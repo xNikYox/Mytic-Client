@@ -12,6 +12,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class ClipCaptureMixin {
     @Inject(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/pipeline/RenderTarget;blitToScreen()V"))
     private void mytic$clipFrame(boolean renderLevel, CallbackInfo ci) {
+        de.myticlegacy.client.Diagnose.frame(); // Lag-Diagnose: Bildzeit messen
         ClipModule.onFrame();
     }
 }

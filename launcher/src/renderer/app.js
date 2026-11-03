@@ -1538,3 +1538,70 @@ function shotCard(shot) {
 }
 
 $("shots-folder").addEventListener("click", () => api.shotFolder());
+
+// ---------------------------------------------------------------------------------------------- Diagnose
+
+function renderDiagnose(result) {
+  $("diag").hidden = false;
+  $("diag-sub").textContent = result.profile ? `Profil „${result.profile}“` : "";
+  const stats = $("diag-stats");
+  stats.replaceChildren();
+  const s = result.summary;
+  if (s) {
+    const stat = (value, label) => {
+      const box = el("div", "diag-stat");
+      box.append(el("b", null, String(value)), label);
+      stats.append(box);
+    };
+    stat(`${s.playMinutes} min`, "gemessen");
+    stat(s.fpsAvg, "FPS im Schnitt");
+    stat(s.fps1Low, "FPS schlechteste 5 %");
+    if (s.pingAvg) stat(`${s.pingAvg} ms`, "Ping im Schnitt");
+    stat(s.hitches, "Hänger > 250 ms");
+    stat(`${s.heapMaxPct} %`, "Speicher max.");
+  } else {
+    stats.append(el("span", "sub", result.hasLog ? "Noch keine Live-Messung – einmal mit Mytic-Mods 2.51 spielen, dann gibt es FPS, Ping und Hänger dazu." : "Noch kein Spiel-Log – erst einmal spielen."));
+  }
+  const list = $("diag-list");
+  list.replaceChildren();
+  if (!result.findings.length) {
+    const row = el("div", "diag-item ok");
+    const text = el("div");
+    text.append(el("b", null, "Keine Probleme gefunden"), el("small", null, "Im letzten Spiel war alles im grünen Bereich."));
+    row.append(el("i"), text, el("span"));
+    list.append(row);
+  }
+  for (const f of result.findings) {
+    const row = el("div", `diag-item ${f.level}`);
+    const text = el("div");
+    text.append(el("b", null, f.title), el("small", null, f.detail));
+    row.append(el("i"), text);
+    if (f.fix) {
+      const button = el("button", "mr-btn install", f.fix.label);
+      button.addEventListener("click", async () => {
+        button.disabled = true;
+        try {
+          renderDiagnose(await api.diagnoseFix(f.fix));
+          toast(`${f.fix.label} – gilt ab dem nächsten Start.`);
+        } catch (error) {
+          toast(errorText(error), true);
+          button.disabled = false;
+        }
+      });
+      row.append(button);
+    } else row.append(el("span"));
+    list.append(row);
+  }
+}
+
+$("diag-run").addEventListener("click", async () => {
+  $("diag-run").disabled = true;
+  try {
+    renderDiagnose(await api.diagnose());
+  } catch (error) {
+    toast(errorText(error), true);
+  } finally {
+    $("diag-run").disabled = false;
+  }
+});
+$("diag-close").addEventListener("click", () => ($("diag").hidden = true));

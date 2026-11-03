@@ -13,7 +13,7 @@ const os = require("node:os");
 const crypto = require("node:crypto");
 const { fileURLToPath } = require("node:url");
 const { dirs: makeDirs } = require("./core/paths");
-const { Installer, buildCommand, launch, MANAGED_MODS, MC_VERSION, defaultMemoryMb, availableVersions, bundledMytic, loaderFor, FORGE_VERSIONS } = require("./core/minecraft");
+const { Installer, buildCommand, launch, MANAGED_MODS, MC_VERSION, defaultMemoryMb, availableVersions, bundledMytic, loaderFor, FORGE_VERSIONS, gameDirFor } = require("./core/minecraft");
 const auth = require("./core/auth");
 const updater = require("./core/updater");
 const { ModBrowser } = require("./core/modrinth");
@@ -22,6 +22,7 @@ const { sanitizePatch } = require("./core/settings");
 const { DiscordPresence } = require("./core/discord");
 const { createBridge } = require("./core/gamebridge");
 const { createSkins, checkSkinPng } = require("./core/skins");
+const diagnose = require("./core/diagnose");
 const { spawn } = require("node:child_process");
 
 const DIRS = makeDirs();
@@ -896,6 +897,93 @@ async function friendsLaunch(account) {
     return { jvm: [], env: {} };
   }
 }
+
+// ---------------------------------------------------------------------------------------------- Diagnose
+
+/** Ende einer Datei lesen (große Logs nur die letzten Bytes) */
+async function readTail(file, bytes) {
+  try {
+    const handle = await fsp.open(file, "r");
+    try {
+      const { size } = await handle.stat();
+      const start = Math.max(0, size - bytes);
+      const buffer = Buffer.alloc(size - start);
+      await handle.read(buffer, 0, buffer.length, start);
+      return buffer.toString("utf8");
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    return "";
+  }
+}
+
+async function runDiagnose() {
+  const current = await ensureProfiles();
+  const profile = profiles.active(current);
+  const gameDir = gameDirFor(DIRS, profile.mcVersion || MC_VERSION);
+  const log = await readTail(path.join(gameDir, "logs", "latest.log"), 3 * 1024 * 1024);
+  let live = null;
+  try {
+    live = JSON.parse(await fsp.readFile(path.join(gameDir, "logs", "mytic-diagnose.json"), "utf8"));
+  } catch {
+    // noch keine Live-Messung (ältere Mod oder noch nicht gespielt)
+  }
+  const perf = profile.perf || {};
+  const isOn = (slug) => (perf[slug] !== undefined ? Boolean(perf[slug]) : Boolean((MANAGED_MODS.find((m) => m.slug === slug) || {}).default));
+  const modules = Object.fromEntries(gameModules().map((m) => [m.id, m.enabled]));
+  const config = readJson(GAME_CONFIG, {});
+  const enabled = config.enabled || {};
+  let userMods = [];
+  try {
+    userMods = (await browserFor(profile).list()).filter((m) => !m.dependency);
+  } catch {
+    // ohne Mod-Liste weiter
+  }
+  const result = diagnose.analyze({
+    log, live, userMods, running: games.size > 0,
+    memoryMb: Math.max(1024, Number(current.memoryMb) || 4096), totalMb: Math.floor(os.totalmem() / 1048576),
+    krypton: isOn("krypton"), iris: isOn("iris"), fpsBoost: Boolean(enabled.fpsboost ?? modules.fpsboost), clips: Boolean(enabled.clips),
+  });
+  return { ...result, running: games.size > 0, hasLog: Boolean(log), profile: profile.name };
+}
+
+ipc.handle("diagnose:run", () => runDiagnose());
+ipc.handle("diagnose:fix", async (e, fix) => {
+  if (!fix || typeof fix !== "object") throw new Error("Unbekannte Lösung");
+  const needsClosed = ["renderDistance", "module", "userMod"].includes(fix.kind);
+  if (needsClosed && games.size) throw new Error("Bitte zuerst Minecraft beenden – die Einstellung würde sonst überschrieben.");
+  if (fix.kind === "memory") {
+    const mb = Math.max(1024, Math.min(Math.floor(os.totalmem() / 1048576 * 0.8), Math.round(Number(fix.memoryMb) || 0)));
+    const { clientId, ...stored } = settings();
+    await writeJson(SETTINGS_FILE, { ...stored, ...sanitizePatch({ memoryMb: mb }) });
+  } else if (fix.kind === "renderDistance") {
+    const file = path.join(gameDirFor(DIRS, profiles.active(await ensureProfiles()).mcVersion || MC_VERSION), "options.txt");
+    let text = "";
+    try {
+      text = await fsp.readFile(file, "utf8");
+    } catch {
+      // neue Datei
+    }
+    await fsp.writeFile(file, diagnose.setRenderDistance(text, fix.value));
+  } else if (fix.kind === "module") {
+    if (!/^[a-z0-9_]+$/.test(String(fix.id))) throw new Error("Unbekanntes Modul");
+    const config = readJson(GAME_CONFIG, {});
+    config.enabled = { ...(config.enabled || {}), [fix.id]: Boolean(fix.on) };
+    await writeJson(GAME_CONFIG, config);
+  } else if (fix.kind === "perfMod") {
+    if (!MANAGED_MODS.some((m) => m.slug === fix.slug)) throw new Error("Unbekannte Mod");
+    const current = await ensureProfiles();
+    const active = profiles.active(current);
+    await saveSettings({ ...current, profiles: current.profiles.map((p) => (p.id === active.id ? { ...p, perf: { ...(p.perf || {}), [fix.slug]: Boolean(fix.on) } } : p)) });
+  } else if (fix.kind === "userMod") {
+    await (await activeBrowser()).setEnabled(String(fix.id), Boolean(fix.on));
+  } else {
+    throw new Error("Unbekannte Lösung");
+  }
+  emit("log", `[Diagnose] Angewendet: ${fix.label || fix.kind}`);
+  return runDiagnose();
+});
 
 // ---------------------------------------------------------------------------------------------- Skins
 

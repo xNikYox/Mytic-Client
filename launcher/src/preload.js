@@ -59,6 +59,8 @@ contextBridge.exposeInMainWorld("mytic", {
   shotCopy: (file) => ipcRenderer.invoke("shots:copy", file),
   shotDelete: (file) => ipcRenderer.invoke("shots:delete", file),
   shotUpload: (file) => ipcRenderer.invoke("shots:upload", file),
+  diagnose: () => ipcRenderer.invoke("diagnose:run"),
+  diagnoseFix: (fix) => ipcRenderer.invoke("diagnose:fix", fix),
   skinProfile: (uuid) => ipcRenderer.invoke("skins:profile", uuid),
   skinLibrary: () => ipcRenderer.invoke("skins:library"),
   skinPick: () => ipcRenderer.invoke("skins:pick"),

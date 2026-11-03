@@ -250,6 +250,7 @@ public final class MyticClient implements ClientModInitializer {
         clipKey = Compat.registerKey("key.myticclient.clip", InputConstants.KEY_F8);
         de.myticlegacy.client.games.GameToast.registerKeys(); // Herausforderung annehmen (J) / ablehnen (K)
         styles.registerKey(); // Mytic Styles (B)
+        Runtime.getRuntime().addShutdownHook(new Thread(Diagnose::flush, "Mytic Diagnose"));
         for (int i = 0; i < profileKeys.length; i++) profileKeys[i] = Compat.registerKey("key.myticclient.hudprofile" + (i + 1), InputConstants.UNKNOWN.getValue());
         for (int i = 0; i < AutoTextModule.SLOTS; i++) autoTextKeys[i] = Compat.registerKey("key.myticclient.autotext" + (i + 1), -1);
         for (int i = 0; i < packKeys.length; i++) packKeys[i] = Compat.registerKey("key.myticclient.pack" + (i + 1), -1);
@@ -315,6 +316,7 @@ public final class MyticClient implements ClientModInitializer {
         Minecraft mc = Minecraft.getInstance();
         ClickCounter.poll();
         Ui.frame();
+        Diagnose.hudFrame();
         if (Compat.hudHidden(mc) || Compat.screen(mc) instanceof HudEditScreen) return;
         for (HudModule module : HUD) {
             if (module.enabled()) module.draw(graphics, false);
@@ -338,6 +340,7 @@ public final class MyticClient implements ClientModInitializer {
     }
 
     private static void tick(Minecraft mc) {
+        Diagnose.tick(mc);
         // Rechts-Shift: Übersicht (Freunde, Mods, Cosmetics); Strg + Rechts-Shift: direkt die Mods
         while (menuKey.consumeClick()) {
             if (Compat.screen(mc) == null) Compat.setScreen(Compat.ctrlDown() ? new ModMenuScreen(null) : new HubScreen());
