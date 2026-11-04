@@ -63,18 +63,40 @@ public class MyticTitleScreen extends MyticScreen {
         }
     }
 
+    /** Eine Stufe feiner als die Minecraft-GUI-Größe – aber nie so groß, dass das Layout nicht mehr passt */
     @Override
     protected int pixelScale() {
-        return fit(470, 270, 0.98, 0.98);
+        return Math.max(1, Math.min(Compat.guiScale() - 1, fit(470, 270, 0.98, 0.98)));
     }
 
     @Override
     protected void layout() {
     }
 
+    /** Echte Server-Bilder (aus der Server-Liste bzw. vom Ping): Bild-Daten → Textur, neu wenn sich das Bild ändert */
+    private final Object[] icons = new Object[3];
+    private final byte[][] iconData = new byte[3][];
+
+    private Object icon(int i, ServerData d) {
+        byte[] png = d.getIconBytes();
+        if (png == null) return null;
+        if (png != iconData[i]) {
+            if (icons[i] != null) de.myticlegacy.client.compat.Tex.release(icons[i]);
+            icons[i] = null;
+            iconData[i] = png;
+            try {
+                icons[i] = de.myticlegacy.client.compat.Tex.upload("server_" + i + "_" + Integer.toHexString(java.util.Arrays.hashCode(png)), png);
+            } catch (RuntimeException e) {
+                icons[i] = null; // kaputtes Bild: Buchstaben zeigen
+            }
+        }
+        return icons[i];
+    }
+
     @Override
     public void removed() {
         ping.close();
+        for (Object t : icons) if (t != null) de.myticlegacy.client.compat.Tex.release(t);
         super.removed();
     }
 
@@ -314,8 +336,14 @@ public class MyticTitleScreen extends MyticScreen {
             if (hover) Ui.rect(g, row[0], row[1], row[2], row[3], Math.min(r, 4), 0x18FFFFFF);
             String initials = d.name.isEmpty() ? "?" : d.name.replaceAll("[^A-Za-z0-9]", "").toUpperCase(java.util.Locale.ROOT);
             initials = initials.substring(0, Math.min(2, Math.max(1, initials.length())));
-            Ui.rect(g, row[0] + 3, row[1] + 3, 18, 18, Math.min(r, 4), accent | 0xFF000000);
-            Ui.centered(g, initials, row[0] + 12, row[1] + 8, Ui.gold() ? 0xFF1A1608 : 0xFFFFFFFF, false);
+            Object icon = icon(i, d);
+            if (icon != null) {
+                Ui.rect(g, row[0] + 2, row[1] + 2, 20, 20, Math.min(r, 3), 0x40000000);
+                de.myticlegacy.client.compat.Tex.draw(g, icon, row[0] + 3, row[1] + 3, 18, 18, 64, 64);
+            } else {
+                Ui.rect(g, row[0] + 3, row[1] + 3, 18, 18, Math.min(r, 4), accent | 0xFF000000);
+                Ui.centered(g, initials, row[0] + 12, row[1] + 8, Ui.gold() ? 0xFF1A1608 : 0xFFFFFFFF, false);
+            }
             Ui.text(g, font.plainSubstrByWidth(d.name, RIGHT_W - 80), row[0] + 26, row[1] + 3, text, false);
             String players = d.players == null ? (d.ping == -2 ? "nicht erreichbar" : "wird abgefragt …") : d.players.online() + " online";
             Ui.scaled(g, players, row[0] + 26, row[1] + 14, 0.65f, muted, false);
@@ -327,11 +355,13 @@ public class MyticTitleScreen extends MyticScreen {
                 Ui.scaled(g, ms, row[0] + row[2] - 4 - font.width(ms) * 0.65f, row[1] + 9, 0.65f, color, false);
             }
         }
-        y = sy + boxH + 8;
-        // Neuigkeiten (wechseln alle 5 Sekunden)
+        // Neuigkeiten unten rechts in der Ecke (wechseln alle 5 Sekunden); nur wenn sie nichts überdecken
         int slide = (int) ((System.currentTimeMillis() / 5000) % NEWS.length);
         int newsH = 66;
-        if (y + newsH < vh - 16) {
+        y = vh - 14 - newsH;
+        int[] lastOrb = orb(orbs.size() - 1);
+        boolean free = y > sy + boxH + 6 && (lastOrb[0] + ORB + 8 < rx || y > lastOrb[1] + ORB + 18);
+        if (free) {
             Ui.outline(g, rx, y, RIGHT_W, newsH, r, line, Ui.alpha(card, 0.9f));
             Ui.rect(g, rx + 1, y + 1, RIGHT_W - 2, 16, Ui.square() ? 0 : Math.max(0, r - 1), Ui.withAlpha(accent, 0x60));
             Ui.scaled(g, "NEU · " + MyticClient.VERSION, rx + 8, y + 6, 0.7f, 0xFFFFFFFF, false);
@@ -349,9 +379,10 @@ public class MyticTitleScreen extends MyticScreen {
         }
 
         // ---------------- Fußzeile
-        Ui.text(g, MyticClient.NAME + " " + MyticClient.VERSION + " · Minecraft " + Compat.versionName(), 6, vh - 12, Ui.withAlpha(0xFFFFFF, 0x80), false);
+        String version = MyticClient.NAME + " " + MyticClient.VERSION + " · Minecraft " + Compat.versionName();
+        Ui.scaled(g, version, 6, vh - 8, 0.55f, Ui.withAlpha(0xFFFFFF, 0x70), false);
         String copyright = "Copyright Mojang AB. Nicht verbreiten!";
-        Ui.text(g, copyright, vw - font.width(copyright) - 6, vh - 12, Ui.withAlpha(0xFFFFFF, 0x80), false);
+        Ui.scaled(g, copyright, vw - 6 - font.width(copyright) * 0.55f, vh - 8, 0.55f, Ui.withAlpha(0xFFFFFF, 0x70), false);
     }
 
     // ------------------------------------------------------------------------------------------ Eingaben
