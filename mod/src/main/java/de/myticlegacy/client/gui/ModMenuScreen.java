@@ -53,6 +53,9 @@ public class ModMenuScreen extends MyticScreen {
     private double scrollPos;
     private double scrollTarget;
     private SliderSetting dragging;
+    /** Scrollbalken wird gezogen; grabOffset = Abstand der Maus zum oberen Rand des Griffs */
+    private boolean draggingBar;
+    private double grabOffset;
     private Object hovered;
     private long hoverSince;
     private final long openedAt = System.currentTimeMillis();
@@ -327,7 +330,7 @@ public class ModMenuScreen extends MyticScreen {
         Gfx.scissor(g, cx(), cy() - 3, cx() + cw(), cy() + ch());
         Object hover = selected == null ? drawGrid(g, mouseX, mouseY) : drawSettings(g, mouseX, mouseY);
         Gfx.noScissor(g);
-        drawScrollbar(g);
+        drawScrollbar(g, mouseX, mouseY);
 
         // Fußzeile
         int fy = py + ph - FOOTER + 6;
@@ -560,16 +563,42 @@ public class ModMenuScreen extends MyticScreen {
         }
     }
 
-    private void drawScrollbar(GuiGraphics g) {
+    /** Scrollbalken rechts: Griff-Höhe und -Position, Klickfläche etwas breiter als der Balken */
+    private int barH() {
+        return Math.max(18, ch() * ch() / Math.max(1, contentHeight()));
+    }
+
+    private int barY() {
         int total = contentHeight();
-        if (total <= ch()) return;
-        int barH = Math.max(18, ch() * ch() / total);
-        int barY = cy() + (int) ((ch() - barH) * (scrollPos / (total - ch())));
+        return cy() + (int) ((ch() - barH()) * (scrollPos / Math.max(1, total - ch())));
+    }
+
+    private boolean scrollable() {
+        return contentHeight() > ch();
+    }
+
+    private boolean onScrollbar(double mx, double my) {
+        return scrollable() && Ui.inside(mx, my, px + pw - 10, cy(), 10, ch());
+    }
+
+    /** Griff an die Mausposition ziehen (grabOffset = wo im Griff angefasst wurde) */
+    private void dragScrollbar(double my) {
+        int range = ch() - barH();
+        if (range <= 0) return;
+        double f = (my - grabOffset - cy()) / range;
+        scrollTarget = scrollPos = Math.max(0, Math.min(1, f)) * (contentHeight() - ch());
+    }
+
+    private void drawScrollbar(GuiGraphics g, int mouseX, int mouseY) {
+        if (!scrollable()) return;
+        int barH = barH(), barY = barY();
+        float h = Ui.animate("menu:scrollbar", draggingBar || onScrollbar(mouseX, mouseY), 16f);
+        int w = 3 + Math.round(h * 2), x = px + pw - 4 - w;
         if (Ui.lunar()) {
-            Ui.rect(g, px + pw - 6, barY, 3, barH, 1, 0x60FFFFFF);
+            Ui.rect(g, x, barY, w, barH, 1, Ui.mix(0x60FFFFFF, 0xC0FFFFFF, h));
         } else {
-            Ui.glow(g, px + pw - 6, barY, 3, barH, 1, Ui.accent(), 2, 0.7f);
-            g.fillGradient(px + pw - 6, barY, px + pw - 3, barY + barH, Ui.accent2(), Ui.PINK);
+            Ui.glow(g, x, barY, w, barH, 1, Ui.accent(), 2, 0.7f + h * 0.3f);
+            g.fillGradient(x, barY, x + w, barY + barH, Ui.accent2(), Ui.PINK);
         }
     }
 
@@ -606,6 +635,14 @@ public class ModMenuScreen extends MyticScreen {
         int fy = py + ph - FOOTER + 6;
         if (Ui.inside(mx, my, cx(), fy, font.width("HUD bearbeiten") + 20, 16)) {
             Compat.setScreen(new HudEditScreen(this));
+            return true;
+        }
+        if (onScrollbar(mx, my)) {
+            int barY = barY(), barH = barH();
+            // auf den Griff: dort festhalten; daneben: Griff mittig unter die Maus springen lassen
+            grabOffset = my >= barY && my < barY + barH ? my - barY : barH / 2.0;
+            draggingBar = true;
+            dragScrollbar(my);
             return true;
         }
         if (!Ui.inside(mx, my, cx(), cy(), cw(), ch())) return false;
@@ -701,6 +738,10 @@ public class ModMenuScreen extends MyticScreen {
 
     @Override
     protected boolean drag(Input.Click event, double dx, double dy) {
+        if (draggingBar) {
+            dragScrollbar(event.y());
+            return true;
+        }
         if (picker.drag(event.x(), event.y())) return true;
         if (dragging == null) return false;
         int tx = cx() + cw() - 8 - 100;
@@ -710,6 +751,10 @@ public class ModMenuScreen extends MyticScreen {
 
     @Override
     protected boolean release(Input.Click event) {
+        if (draggingBar) {
+            draggingBar = false;
+            return true;
+        }
         if (picker.release()) {
             MyticClient.config().save();
             return true;
