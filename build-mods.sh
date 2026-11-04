@@ -7,24 +7,26 @@ J21=${JAVA21_HOME:?JAVA21_HOME setzen}
 J25=${JAVA25_HOME:?JAVA25_HOME setzen}
 VERSION=$(grep '^version' mod/build.gradle.kts | cut -d'"' -f2)
 put() { mkdir -p "launcher/resources/mods/$1" && rm -f "launcher/resources/mods/$1"/*.jar && cp "$2" "launcher/resources/mods/$1/"; echo "  $1 ✓"; }
+# OFFLINE=1: nur aus dem lokalen Gradle-Cache bauen (wenn das Netz wackelt und alles schon geladen ist)
+OFF=${OFFLINE:+--offline}
 retry() { for t in 1 2 3; do "$@" && return 0; echo "  … erneuter Versuch"; sleep 8; done; return 1; }
 
 echo "1.21.11"
-(cd mod && JAVA_HOME=$J21 retry ./gradlew --no-daemon -q build)
+(cd mod && JAVA_HOME=$J21 retry ./gradlew --no-daemon -q $OFF build)
 put 1.21.11 "mod/build/libs/mytic-client-$VERSION.jar"
 
 for v in ${MODS_121:-1.21.10 1.21.9 1.21.8 1.21.7 1.21.6 1.21.5 1.21.4 1.21.3 1.21.2 1.21.1 1.21}; do
   echo "$v"
-  (cd mod-121 && JAVA_HOME=$J21 retry ./gradlew --no-daemon -q build -Pmc=$v)
+  (cd mod-121 && JAVA_HOME=$J21 retry ./gradlew --no-daemon -q $OFF build -Pmc=$v)
   put $v "mod-121/build/libs/mytic-client-$VERSION+$v.jar"
 done
 
 echo "1.8.9 (Forge)"
-(cd mod-189 && JAVA_HOME=$J21 retry ./gradlew --no-daemon -q build)
+(cd mod-189 && JAVA_HOME=$J21 retry ./gradlew --no-daemon -q $OFF build)
 put 1.8.9 "mod-189/build/libs/mytic-client-$VERSION+1.8.9.jar"
 
 for v in ${MODS_26:-26.3 26.2 26.1.2 26.1.1 26.1}; do
   echo "$v"
-  (cd mod-26 && JAVA_HOME=$J25 retry ./gradlew --no-daemon -q build -Pmc=$v)
+  (cd mod-26 && JAVA_HOME=$J25 retry ./gradlew --no-daemon -q $OFF build -Pmc=$v)
   put $v "mod-26/build/libs/mytic-client-$VERSION+$v.jar"
 done
