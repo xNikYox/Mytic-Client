@@ -90,9 +90,10 @@ public final class GuiSkin {
             checkbox(out, "checkbox_highlighted", false, true, field, l);
             checkbox(out, "checkbox_selected", true, false, field, l);
             checkbox(out, "checkbox_selected_highlighted", true, true, field, l);
-            // Scrollbalken 6×32
-            sprite(out, "scroller", 6, 32, g -> rounded(g, 1, 0, 4, 32, 2, 0x99FFFFFF, 0), "1");
-            sprite(out, "scroller_background", 6, 32, g -> rounded(g, 1, 0, 4, 32, 2, 0x30000000, 0), "1");
+            // Scrollbalken 6×32 – der Rand (Neun-Teile) muss so groß wie die Rundung sein: Minecraft wiederholt die Mitte
+            // wie Kacheln, sonst stehen die runden Enden mitten im Balken und es entstehen Lücken
+            sprite(out, "scroller", 6, 32, g -> rounded(g, 1, 0, 4, 32, 2, 0x99FFFFFF, 0), "2");
+            sprite(out, "scroller_background", 6, 32, g -> rounded(g, 1, 0, 4, 32, 2, 0x30000000, 0), "2");
             // Reiter 130×24 (unten offen)
             tab(out, "tab", l.card, l.line, false, l);
             tab(out, "tab_highlighted", l.cardHover, l.lineActive, false, l);
@@ -147,7 +148,12 @@ public final class GuiSkin {
         sprite(out, name, 130, 24, g -> {
             rounded(g, 0, 0, 130, 24 + l.radius + 1, l.radius, fill, line); // unten über den Rand hinaus = offen
             if (selected) fillRect(g, 2, 22, 126, 2, l.select);
-        }, "{\"left\":3,\"top\":3,\"right\":3,\"bottom\":2}");
+        }, "{\"left\":" + edge(l) + ",\"top\":" + edge(l) + ",\"right\":" + edge(l) + ",\"bottom\":2}");
+    }
+
+    /** Rand der Reiter: mindestens 3, sonst so groß wie die Rundung (gegen Lücken beim Kacheln) */
+    private static int edge(Look l) {
+        return Math.max(3, (int) Math.ceil(l.radius) + 1);
     }
 
     private static void checkbox(Map<String, byte[]> out, String name, boolean on, boolean hover, int field, Look l) throws IOException {
