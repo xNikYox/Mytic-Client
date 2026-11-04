@@ -35,10 +35,12 @@ val renames = listOf(
     Regex("""original\.render\(""") to "original.extractRenderState(",
     Regex("""setTooltipForNextFrame\(font, """) to "setTooltipForNextFrame(",
     Regex("""\bClientCommandManager\b""") to "ClientCommands", // Fabric-API für 26.x: Client-Befehle
+    Regex("""\.submitEntityRenderState\(""") to ".entity(", // Spieler-Modell im Hauptmenü
 )
     // ab 26.2 stehen die Entity-Typen in EntityTypes
     .plus(if (mc.startsWith("26.1")) emptyList() else listOf(
         Regex("""\bEntityType\.ZOMBIE\b""") to "net.minecraft.world.entity.EntityTypes.ZOMBIE",
+        Regex("""\bEntityType\.PLAYER\b""") to "net.minecraft.world.entity.EntityTypes.PLAYER",
         Regex("""\.getMainCamera\(\)""") to ".mainCamera()",
     ))
 val copyShared by tasks.registering(Sync::class) {

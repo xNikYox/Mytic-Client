@@ -25,6 +25,19 @@ public final class MiniMe {
     }
 
     /** MiniMe-Skins dieser Figur je Stelle (Reihenfolge wie MiniMeCore.POSITIONS) oder null, wenn sie keinen hat. */
+    /** Eigene Mini-Mes (Hauptmenü, ohne Welt) */
+    public static PlayerSkin[] ownSkins() {
+        PlayerSkin[] skins = null;
+        for (int i = 0; i < MiniMeCore.POSITIONS.length; i++) {
+            String name = MiniMeCore.nameOf("", true, MiniMeCore.POSITIONS[i][0]);
+            PlayerSkin skin = name == null ? null : skin(name);
+            if (skin == null) continue;
+            if (skins == null) skins = new PlayerSkin[MiniMeCore.POSITIONS.length];
+            skins[i] = skin;
+        }
+        return skins;
+    }
+
     public static PlayerSkin[] skinsFor(Object entity) {
         Minecraft mc = Minecraft.getInstance();
         if (!(entity instanceof Entity e) || mc.player == null) return null;

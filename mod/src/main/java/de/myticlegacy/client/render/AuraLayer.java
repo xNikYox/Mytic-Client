@@ -34,10 +34,16 @@ public class AuraLayer extends RenderLayer<AvatarRenderState, PlayerModel> {
     @Override
     public void submit(PoseStack pose, SubmitNodeCollector collector, int light, AvatarRenderState state, float yRot, float xRot) {
         Minecraft mc = Minecraft.getInstance();
-        if (state.isInvisible || mc.level == null || mc.player == null) return;
-        Entity entity = mc.level.getEntity(state.id);
-        if (entity == null) return;
-        CosmeticsCore.Aura aura = CosmeticsCore.auraOf(CosmeticsCore.key(entity.getUUID()), entity == mc.player);
+        if (state.isInvisible) return;
+        CosmeticsCore.Aura aura;
+        if (state.id == de.myticlegacy.client.render.MenuPlayer.ID) { // Spieler-Modell im Hauptmenü
+            aura = CosmeticsCore.auraOf(CosmeticsCore.key(mc.getUser().getProfileId()), true);
+        } else {
+            if (mc.level == null || mc.player == null) return;
+            Entity entity = mc.level.getEntity(state.id);
+            if (entity == null) return;
+            aura = CosmeticsCore.auraOf(CosmeticsCore.key(entity.getUUID()), entity == mc.player);
+        }
         if (aura == null) return;
         List<AuraFx.P> list = AuraFx.update(state.id, aura);
         if (list == null) return;

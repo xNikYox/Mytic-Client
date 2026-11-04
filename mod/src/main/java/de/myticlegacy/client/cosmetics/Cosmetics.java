@@ -33,6 +33,12 @@ public final class Cosmetics {
         return CosmeticsCore.key(player.getUUID());
     }
 
+    /** Eigener Mytic-Umhang (für das Spieler-Modell im Hauptmenü, ohne Welt) oder null */
+    public static ClientAsset.Texture ownCape() {
+        CosmeticsCore.Cape cape = CosmeticsCore.capeOf(CosmeticsCore.key(Minecraft.getInstance().getUser().getProfileId()), true);
+        return cape == null ? null : texture(cape);
+    }
+
     /** Umhang für diesen Spieler oder null (dann bleibt der normale). */
     public static ClientAsset.Texture cape(AbstractClientPlayer player) {
         Minecraft mc = Minecraft.getInstance();
