@@ -238,9 +238,6 @@ public abstract class GameScreen extends PanelScreen {
 
     /** gefüllter Kreis, Pixel für Pixel (bleibt auch im Stil „Eckig“ rund) */
     protected static void disc(GuiGraphics g, int cx, int cy, int r, int color) {
-        for (int y = -r; y <= r; y++) {
-            int w = (int) Math.round(Math.sqrt(r * r - y * y));
-            g.fill(cx - w, cy + y, cx + w, cy + y + 1, color);
-        }
+        Ui.circle(g, cx, cy, r, color); // glatte Kante in echten Pixeln
     }
 }

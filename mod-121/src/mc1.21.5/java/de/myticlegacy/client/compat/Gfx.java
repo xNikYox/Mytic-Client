@@ -32,6 +32,12 @@ public final class Gfx {
         g.disableScissor();
     }
 
+    /** Aktuelle Skalierung der Zeichenfläche (GUI-Einheiten je Zeichen-Einheit), für Kanten in echten Pixeln */
+    public static float scaleX(GuiGraphics g) {
+        org.joml.Matrix4f m = g.pose().last().pose();
+        return (float) Math.sqrt(m.m00() * m.m00() + m.m01() * m.m01());
+    }
+
     /** Nach vorne holen (bis 1.21.5 über Tiefe, damit Inventar-Items nicht durchscheinen). */
     public static void raise(GuiGraphics g, float z) {
         g.pose().translate(0, 0, z);

@@ -88,6 +88,12 @@ public final class Ui {
             g.fill(x, y, x + w, y + h, color);
             return;
         }
+        // Rundung in echten Bildschirm-Pixeln mit geglätteter Kante (statt Treppen aus groben Menü-Pixeln)
+        float k = Gfx.scaleX(g) * (float) de.myticlegacy.client.compat.Compat.guiScale();
+        if (k > 1.2f) {
+            smoothRect(g, x, y, w, h, r, color, k);
+            return;
+        }
         g.fill(x + r, y, x + w - r, y + h, color);
         g.fill(x, y + r, x + r, y + h - r, color);
         g.fill(x + w - r, y + r, x + w, y + h - r, color);
@@ -98,6 +104,56 @@ public final class Ui {
             g.fill(x + w - r, y + i, x + w - dx, y + i + 1, color);
             g.fill(x + dx, y + h - 1 - i, x + r, y + h - i, color);
             g.fill(x + w - r, y + h - 1 - i, x + w - dx, y + h - i, color);
+        }
+    }
+
+    /**
+     * Abgerundetes Rechteck, gezeichnet in echten Pixeln (k = Pixel je Zeichen-Einheit): Ecken Zeile für Zeile aus
+     * dem Viertelkreis, das angeschnittene Pixel am Rand halbdurchsichtig – so sind Rundungen glatt statt treppig.
+     */
+    private static void smoothRect(GuiGraphics g, int x, int y, int w, int h, int r, int color, float k) {
+        Gfx.push(g);
+        Gfx.scale(g, 1f / k, 1f / k);
+        int X = Math.round(x * k), Y = Math.round(y * k);
+        int W = Math.round((x + w) * k) - X, H = Math.round((y + h) * k) - Y;
+        int R = Math.max(1, Math.min(Math.round(r * k), Math.min(W, H) / 2));
+        g.fill(X + R, Y, X + W - R, Y + H, color);
+        g.fill(X, Y + R, X + R, Y + H - R, color);
+        g.fill(X + W - R, Y + R, X + W, Y + H - R, color);
+        for (int i = 0; i < R; i++) {
+            double dy = R - i - 0.5;
+            double edge = R - Math.sqrt(Math.max(0, (double) R * R - dy * dy)); // Einzug dieser Zeile
+            int full = (int) Math.ceil(edge);
+            float cover = (float) (full - edge); // Anteil des angeschnittenen Pixels
+            int top = Y + i, bottom = Y + H - 1 - i;
+            if (full < R) {
+                g.fill(X + full, top, X + R, top + 1, color);
+                g.fill(X + W - R, top, X + W - full, top + 1, color);
+                g.fill(X + full, bottom, X + R, bottom + 1, color);
+                g.fill(X + W - R, bottom, X + W - full, bottom + 1, color);
+            }
+            if (full > 0 && cover > 0.03f) {
+                int soft = alpha(color, cover);
+                g.fill(X + full - 1, top, X + full, top + 1, soft);
+                g.fill(X + W - full, top, X + W - full + 1, top + 1, soft);
+                g.fill(X + full - 1, bottom, X + full, bottom + 1, soft);
+                g.fill(X + W - full, bottom, X + W - full + 1, bottom + 1, soft);
+            }
+        }
+        Gfx.pop(g);
+    }
+
+    /** Kreis mit glatter Kante – auch im Stil „Eckig“ rund (Spielsteine, Marker) */
+    public static void circle(GuiGraphics g, int cx, int cy, int r, int color) {
+        if (r <= 0) return;
+        float k = Gfx.scaleX(g) * (float) de.myticlegacy.client.compat.Compat.guiScale();
+        if (k > 1.2f) {
+            smoothRect(g, cx - r, cy - r, 2 * r + 1, 2 * r + 1, r, color, k);
+            return;
+        }
+        for (int y = -r; y <= r; y++) {
+            int w = (int) Math.round(Math.sqrt(r * r - y * y));
+            g.fill(cx - w, cy + y, cx + w, cy + y + 1, color);
         }
     }
 
