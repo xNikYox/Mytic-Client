@@ -42,6 +42,8 @@ public class MyticTitleScreen extends MyticScreen {
     private final long openedAt = System.currentTimeMillis();
     private final ServerPing ping = new ServerPing();
     private final List<ServerData> servers = new ArrayList<>();
+    /** Anzahl aller Server in der Mehrspieler-Liste (angezeigt werden nur die ersten 3) */
+    private int serverCount;
     private float yaw = DEFAULT_YAW, yawTarget = DEFAULT_YAW;
     private boolean dragging;
 
@@ -53,6 +55,7 @@ public class MyticTitleScreen extends MyticScreen {
         try {
             ServerList list = new ServerList(net.minecraft.client.Minecraft.getInstance());
             list.load();
+            serverCount = list.size();
             for (int i = 0; i < Math.min(3, list.size()); i++) {
                 ServerData d = list.get(i);
                 servers.add(d);
@@ -207,6 +210,8 @@ public class MyticTitleScreen extends MyticScreen {
         effects(g, mouseX, mouseY);
 
         // ---------------- Spieler: Podest, Modell, Namensschild
+        // Maus auf dem anderen Bildschirm losgelassen oder Fenster nicht mehr aktiv: Drehen beenden
+        if (dragging && (!minecraft.mouseHandler.isLeftPressed() || !minecraft.isWindowActive())) dragging = false;
         if (!dragging) yawTarget = DEFAULT_YAW;
         yaw += (yawTarget - yaw) * (dragging ? 0.6f : 0.08f);
         int[] m = modelBox();
@@ -250,7 +255,7 @@ public class MyticTitleScreen extends MyticScreen {
         // ---------------- Große Knöpfe
         String[] labels = {"Einzelspieler", "Mehrspieler"};
         Item[] icons = {Items.GRASS_BLOCK, Items.COMPASS};
-        String[] subs = {"", servers.isEmpty() ? "" : servers.size() + " Server"};
+        String[] subs = {"", serverCount == 0 ? "" : serverCount + (serverCount == 1 ? " Server" : " Server")};
         for (int i = 0; i < 2; i++) {
             int[] b = button(i);
             boolean hover = Ui.inside(mouseX, mouseY, b[0], b[1], b[2], b[3]);
@@ -427,6 +432,7 @@ public class MyticTitleScreen extends MyticScreen {
     @Override
     protected boolean drag(Input.Click event, double dx, double dy) {
         if (!dragging) return false;
+        if (Math.abs(dx) > 40) return true; // Sprung (z. B. Maus kam vom anderen Bildschirm zurück) nicht als Drehung werten
         yawTarget -= (float) dx * 1.6f; // nach rechts ziehen = Modell dreht sich nach rechts
         return true;
     }
