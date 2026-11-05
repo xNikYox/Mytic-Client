@@ -2,7 +2,7 @@ plugins {
     id("fabric-loom") version "1.14.10"
 }
 
-version = "2.53.2"
+version = "2.53.3"
 group = "de.myticlegacy"
 
 base { archivesName.set("mytic-client") }
