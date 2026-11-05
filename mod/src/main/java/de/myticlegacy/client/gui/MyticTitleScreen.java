@@ -47,7 +47,13 @@ public class MyticTitleScreen extends MyticScreen {
     private float yaw = DEFAULT_YAW, yawTarget = DEFAULT_YAW;
     private boolean dragging;
 
-    private record Orb(String label, Item icon, Runnable action) {
+    private record Orb(String label, String icon, Runnable action) {
+    }
+
+    /** Eigenes Mytic-Icon (Linien-Stil, 64×64, weich skaliert); dark = dunkle Fassung für helle Flächen (Gold) */
+    private static void icon(GuiGraphics g, String name, int x, int y, int size, boolean dark) {
+        de.myticlegacy.client.compat.Blit.region(g, net.minecraft.resources.Identifier.fromNamespaceAndPath("myticclient", "textures/gui/icons/" + name + (dark ? "_dark" : "_white") + ".png"),
+                x, y, size, size, 0, 0, 64, 64, 64, 64);
     }
 
     public MyticTitleScreen() {
@@ -139,13 +145,13 @@ public class MyticTitleScreen extends MyticScreen {
 
     private List<Orb> orbs() {
         List<Orb> out = new ArrayList<>();
-        out.add(new Orb("Mods & HUD", Items.COMPARATOR, () -> Compat.setScreen(new ModMenuScreen(this))));
-        out.add(new Orb("Cosmetics", Items.ELYTRA, () -> Compat.setScreen(new CosmeticsScreen())));
-        out.add(new Orb("Freunde", Items.PLAYER_HEAD, () -> Compat.setScreen(new FriendsScreen())));
-        out.add(new Orb("Screenshots", Items.PAINTING, () -> Compat.setScreen(new ScreenshotsScreen())));
-        out.add(new Orb("Statistiken", Items.CLOCK, () -> Compat.setScreen(new de.myticlegacy.client.stats.StatsScreen())));
-        out.add(new Orb("Optionen", Items.REDSTONE, () -> Compat.setScreen(Compat.optionsScreen(this))));
-        out.add(new Orb("Beenden", Items.BARRIER, () -> minecraft.stop()));
+        out.add(new Orb("Mods & HUD", "mods", () -> Compat.setScreen(new ModMenuScreen(this))));
+        out.add(new Orb("Cosmetics", "cosmetics", () -> Compat.setScreen(new CosmeticsScreen())));
+        out.add(new Orb("Freunde", "friends", () -> Compat.setScreen(new FriendsScreen())));
+        out.add(new Orb("Screenshots", "screenshots", () -> Compat.setScreen(new ScreenshotsScreen())));
+        out.add(new Orb("Statistiken", "stats", () -> Compat.setScreen(new de.myticlegacy.client.stats.StatsScreen())));
+        out.add(new Orb("Optionen", "options", () -> Compat.setScreen(Compat.optionsScreen(this))));
+        out.add(new Orb("Beenden", "quit", () -> minecraft.stop()));
         return out;
     }
 
@@ -254,7 +260,7 @@ public class MyticTitleScreen extends MyticScreen {
 
         // ---------------- Große Knöpfe
         String[] labels = {"Einzelspieler", "Mehrspieler"};
-        Item[] icons = {Items.GRASS_BLOCK, Items.COMPASS};
+        String[] icons = {"singleplayer", "multiplayer"};
         String[] subs = {"", serverCount == 0 ? "" : serverCount + (serverCount == 1 ? " Server" : " Server")};
         for (int i = 0; i < 2; i++) {
             int[] b = button(i);
@@ -269,10 +275,7 @@ public class MyticTitleScreen extends MyticScreen {
                 Ui.outline(g, b[0], b[1] - lift, b[2], b[3], r, Ui.mix(line, accent2, h), Ui.mix(card, cardHover, h));
             }
             int fg = i == 0 && Ui.gold() ? 0xFF1A1608 : 0xFFFFFFFF;
-            Gfx.push(g);
-            Gfx.translate(g, b[0] + 7, b[1] - lift + 3);
-            g.renderItem(Module.stack(icons[i]), 0, 0);
-            Gfx.pop(g);
+            icon(g, icons[i], b[0] + 6, b[1] - lift + 3, 16, i == 0 && Ui.gold());
             Ui.text(g, labels[i].toUpperCase(java.util.Locale.ROOT), b[0] + 28, b[1] - lift + 7, fg, i != 0 || !Ui.gold());
             if (!subs[i].isEmpty()) Ui.scaled(g, subs[i], b[0] + b[2] - 8 - font.width(subs[i]) * 0.7f, b[1] - lift + 8, 0.7f, i == 0 ? Ui.withAlpha(fg, 0xC0) : muted, false);
         }
@@ -290,10 +293,7 @@ public class MyticTitleScreen extends MyticScreen {
             if (h > 0.02f) Ui.glow(g, o[0], o[1] - lift, ORB, ORB, ORB / 2, accent, 3, h * 0.7f);
             int rr = Ui.square() ? 0 : ORB / 2;
             Ui.outline(g, o[0], o[1] - lift, ORB, ORB, rr, Ui.mix(line, i == orbs.size() - 1 ? 0xFFFF6B7D : accent2, h), Ui.mix(card, cardHover, h));
-            Gfx.push(g);
-            Gfx.translate(g, o[0] + 3, o[1] - lift + 3);
-            g.renderItem(Module.stack(orbs.get(i).icon()), 0, 0);
-            Gfx.pop(g);
+            icon(g, orbs.get(i).icon(), o[0] + 4, o[1] - lift + 4, ORB - 8, false);
             if (i == 2 && online > 0) { // Freunde online
                 String n = String.valueOf(online);
                 int bw = Math.max(9, font.width(n) + 4);
