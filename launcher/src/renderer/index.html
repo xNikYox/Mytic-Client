@@ -130,13 +130,13 @@
 
       <div class="cards">
         <article class="glass card">
-          <header><h3>Neu in 2.34</h3><span class="badge">Update</span></header>
+          <header><h3>Neu in 2.35</h3><span class="badge">Update</span></header>
           <ul class="news">
-            <li><b>Mytic Styles:</b> Texturpakete aus deinem resourcepacks-Ordner mischen – Schwert aus dem einen, GUI aus dem anderen (Taste <kbd>B</kbd>)</li>
-            <li><b>Probleme suchen:</b> in der Konsole – findet Lag, Ruckler, hohen Ping und Speicherprobleme und behebt sie mit einem Klick</li>
-            <li><b>Live-Messung im Spiel:</b> FPS, Hänger, Speicherbereinigung und Ping werden für die Diagnose mitgeschrieben</li>
-            <li><b>Skins pro Konto:</b> neue Seite „Skins“ mit Vorschau, Bibliothek und Umhängen</li>
-            <li><b>Besserer Ping:</b> die Server-Mod Krypton ist standardmäßig aus</li>
+            <li><b>Mod-Malware-Scanner:</b> vor jedem Start werden deine Mods auf Schadsoftware geprüft – Token-Dieb, Fractureiser, Login-Klau</li>
+            <li><b>Gefährliche Mod?</b> Der Start wird angehalten, du siehst warum und kannst sie mit einem Klick ausschalten</li>
+            <li><b>Mods prüfen</b> auf der Mods-Seite – jederzeit von Hand</li>
+            <li><b>Neues Hauptmenü im Spiel:</b> dein Skin als großes 3D-Modell mit Cosmetics, eigene Icons, glatte Rundungen</li>
+            <li><b>Probleme suchen</b> in der Konsole findet Lag, Ruckler und Speicherprobleme</li>
           </ul>
         </article>
         <article class="glass card">
@@ -160,6 +160,7 @@
       <div class="toolbar">
         <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg><input id="mod-search" placeholder="Mods durchsuchen" spellcheck="false"></div>
         <div class="filters" id="filters"></div>
+        <button class="ghost" id="modscan-run">Mods prüfen</button>
       </div>
       <p class="sub">In-Game-Mods gelten für alle Profile, Performance-Mods für das Profil <b id="mods-profile">Standard</b>. Im Spiel geht alles auch über <kbd>Rechts-Shift</kbd>.</p>
       <p class="notice" id="mytic-notice" hidden></p>
@@ -404,6 +405,21 @@
         <span class="crash-actions">
           <button class="ghost" id="crash-close" type="button">Schließen</button>
           <button class="mr-btn install" id="crash-fix" type="button">Auto-Fix</button>
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mod-Scanner -->
+  <div class="popover modal" id="modscan" hidden>
+    <div class="popover-card glass crash-card" role="dialog" aria-label="Mod-Scanner">
+      <div class="pop-head"><b id="modscan-title">Mods geprüft</b><small id="modscan-sub"></small></div>
+      <div class="crash-body modscan-list" id="modscan-list"></div>
+      <div class="import-foot">
+        <small class="sub" id="modscan-note" style="margin:0">Ausgeschaltete Mods werden nicht gelöscht – im Mod-Browser wieder einschaltbar.</small>
+        <span class="crash-actions">
+          <button class="ghost" id="modscan-close" type="button">Schließen</button>
+          <button class="mr-btn remove" id="modscan-anyway" type="button" hidden>Trotzdem starten</button>
         </span>
       </div>
     </div>

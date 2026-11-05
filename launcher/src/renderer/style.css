@@ -569,3 +569,14 @@ select option { background: #15101f; }
 .diag-item b { display: block; font-size: 13.5px; }
 .diag-item small { color: var(--muted); font-size: 12.5px; }
 .diag-item .mr-btn { height: 30px; }
+
+/* ---------------------------------------------------------------------------------------------- Mod-Scanner */
+.modscan-list { display: grid; gap: 8px; max-height: 52vh; overflow: auto; }
+.ms-item { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 10px 12px; border-radius: 12px; background: rgba(255, 255, 255, .03); border: 1px solid var(--glass-line); }
+.ms-item > i { width: 10px; height: 10px; border-radius: 50%; margin-top: 4px; background: #5be38a; }
+.ms-item.malware > i { background: #ff5c72; box-shadow: 0 0 10px #ff5c72; } .ms-item.verdaechtig > i { background: #ffb347; } .ms-item.hinweis > i { background: #7ab8ff; }
+.ms-item b { display: block; font-size: 13.5px; word-break: break-all; } .ms-item .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.ms-item.malware .tag { color: #ff8f9c; } .ms-item.verdaechtig .tag { color: #ffc77a; }
+.ms-item ul { margin: 6px 0 0; padding-left: 16px; font-size: 12.5px; color: var(--muted); } .ms-item li { margin: 2px 0; } .ms-item li code { font-size: 11px; opacity: .75; }
+.ms-item .acts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.ms-ok { padding: 18px 6px; text-align: center; color: var(--muted); } .ms-ok b { display: block; color: #b8f5cc; font-size: 15px; margin-bottom: 4px; }

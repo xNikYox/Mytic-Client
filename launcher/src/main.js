@@ -23,6 +23,7 @@ const { DiscordPresence } = require("./core/discord");
 const { createBridge } = require("./core/gamebridge");
 const { createSkins, checkSkinPng } = require("./core/skins");
 const diagnose = require("./core/diagnose");
+const modscan = require("./core/modscan");
 const { spawn } = require("node:child_process");
 
 const DIRS = makeDirs();
@@ -898,6 +899,57 @@ async function friendsLaunch(account) {
   }
 }
 
+// ---------------------------------------------------------------------------------------------- Mod-Scanner
+
+const MODSCAN_FILE = path.join(DIRS.base, "modscan.json");
+
+/** Mods des aktiven Profils prüfen; vom Launcher geladene, geprüfte Mods (Modrinth mit Prüfsumme, Mytic) überspringen */
+async function runModScan(profile) {
+  const dir = profiles.modsDir(DIRS.base, profile.id);
+  const store = readJson(MODSCAN_FILE, { cache: {}, allowed: [] });
+  let managed = [];
+  try {
+    managed = JSON.parse(await fsp.readFile(path.join(dir, ".mytic-managed.json"), "utf8")).map((f) => f.file);
+  } catch {
+    // noch nichts geladen
+  }
+  const skip = (name) => /^mytic-client-/.test(name) || managed.includes(name.replace(/\.disabled$/, ""));
+  const { results, cache } = await modscan.scanFolder(dir, { skip, cache: store.cache || {} });
+  // Zwischenspeicher klein halten: nur Dateien, die es noch gibt
+  const keep = {};
+  for (const r of results) keep[r.sha1] = cache[r.sha1];
+  await writeJson(MODSCAN_FILE, { cache: keep, allowed: store.allowed || [] });
+  const allowed = new Set(store.allowed || []);
+  return results.map((r) => ({ ...r, allowed: allowed.has(r.sha1) }));
+}
+
+ipc.handle("modscan:run", async () => {
+  const profile = profiles.active(await ensureProfiles());
+  return { profile: profile.name, results: await runModScan(profile) };
+});
+ipc.handle("modscan:disable", async (e, file) => {
+  const profile = profiles.active(await ensureProfiles());
+  const dir = profiles.modsDir(DIRS.base, profile.id);
+  const target = path.resolve(String(file || ""));
+  if (path.dirname(target) !== path.resolve(dir) || !/\.jar$/i.test(target)) throw new Error("Unbekannte Datei");
+  if (games.size) throw new Error("Bitte zuerst Minecraft beenden.");
+  // über den Mod-Browser installiert: dort ausschalten, sonst Datei umbenennen (nicht löschen)
+  const browser = browserFor(profile);
+  const tracked = Object.values((await browser.state()).mods).find((m) => m.file === path.basename(target));
+  if (tracked) await browser.setEnabled(tracked.id, false);
+  else await fsp.rename(target, `${target}.disabled`);
+  emit("log", `[Mod-Scanner] ausgeschaltet: ${path.basename(target)}`);
+  return { profile: profile.name, results: await runModScan(profile) };
+});
+ipc.handle("modscan:allow", async (e, sha1s) => {
+  const store = readJson(MODSCAN_FILE, { cache: {}, allowed: [] });
+  const list = new Set(store.allowed || []);
+  for (const s of [].concat(sha1s || [])) if (/^[0-9a-f]{40}$/.test(String(s))) list.add(String(s));
+  await writeJson(MODSCAN_FILE, { ...store, allowed: [...list] });
+  const profile = profiles.active(await ensureProfiles());
+  return { profile: profile.name, results: await runModScan(profile) };
+});
+
 // ---------------------------------------------------------------------------------------------- Diagnose
 
 /** Ende einer Datei lesen (große Logs nur die letzten Bytes) */
@@ -1112,6 +1164,15 @@ ipc.handle("game:launch", async () => {
       await browserFor(profile).updateAll((line) => emit("log", line));
     } else {
       emit("log", `[Launcher] Profil „${profile.name}“ läuft schon – Mods werden mitbenutzt`);
+    }
+    // Mod-Scanner: eingeschaltete Mods mit Malware oder verdächtigen Merkmalen halten den Start an (außer erlaubt)
+    emit("status", "Mods auf Schadsoftware prüfen …");
+    const scan = await runModScan(profile);
+    const blocking = scan.filter((r) => !r.disabled && !r.allowed && (r.verdict === "malware" || r.verdict === "verdaechtig"));
+    if (blocking.length) {
+      emit("log", `[Mod-Scanner] Start angehalten: ${blocking.map((r) => `${r.name} (${r.verdict})`).join(", ")}`);
+      emit("modscan", { profile: profile.name, results: scan, fromLaunch: true });
+      throw new Error("Gefährliche Mod gefunden – Start angehalten");
     }
     const install = await installer.install({ enabledMods: profile.perf || {}, bundledModsDir: myticMods, modsDir: profileMods,
       verify: current.verifyNext && !versionBusy, reuseMods: profileBusy, reuseNatives: versionBusy });

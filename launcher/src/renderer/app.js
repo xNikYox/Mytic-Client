@@ -1605,3 +1605,85 @@ $("diag-run").addEventListener("click", async () => {
   }
 });
 $("diag-close").addEventListener("click", () => ($("diag").hidden = true));
+
+// ---------------------------------------------------------------------------------------------- Mod-Scanner
+
+const MS_LABEL = { malware: "Schadsoftware", verdaechtig: "Verdächtig", hinweis: "Hinweis", ok: "Sauber" };
+let modScanFromLaunch = false;
+
+function renderModScan(report, fromLaunch = false) {
+  modScanFromLaunch = fromLaunch;
+  const results = report.results || [];
+  const bad = results.filter((r) => r.verdict !== "ok");
+  const blocking = results.filter((r) => !r.disabled && !r.allowed && (r.verdict === "malware" || r.verdict === "verdaechtig"));
+  $("modscan").hidden = false;
+  $("modscan-title").textContent = blocking.length ? "Gefährliche Mod gefunden" : bad.length ? "Mods geprüft – Hinweise" : "Mods geprüft – alles sauber";
+  $("modscan-sub").textContent = `${results.length} eigene Mod${results.length === 1 ? "" : "s"} im Profil „${report.profile}“${fromLaunch && blocking.length ? " · Start angehalten" : ""}`;
+  $("modscan-anyway").hidden = !(fromLaunch && blocking.length);
+  const list = $("modscan-list");
+  list.replaceChildren();
+  if (!bad.length) {
+    const ok = el("div", "ms-ok");
+    ok.append(el("b", null, "Keine Schadsoftware gefunden"), el("span", null, "Vom Launcher geladene Mods (Modrinth, Mytic) sind schon beim Laden geprüft."));
+    list.append(ok);
+    return;
+  }
+  for (const r of bad) {
+    const row = el("div", `ms-item ${r.verdict}`);
+    const text = el("div");
+    text.append(el("span", "tag", MS_LABEL[r.verdict] + (r.disabled ? " · ausgeschaltet" : r.allowed ? " · erlaubt" : "")), el("b", null, r.name));
+    const ul = el("ul");
+    for (const h of r.hits) {
+      const li = el("li", null, h.label + " ");
+      li.append(el("code", null, h.where));
+      ul.append(li);
+    }
+    text.append(ul);
+    const acts = el("div", "acts");
+    if (!r.disabled) {
+      const off = el("button", "mr-btn remove", "Ausschalten");
+      off.addEventListener("click", async () => {
+        off.disabled = true;
+        try {
+          renderModScan(await api.modScanDisable(r.file), modScanFromLaunch);
+          toast(`${r.name} ausgeschaltet.`);
+        } catch (error) {
+          toast(errorText(error), true);
+          off.disabled = false;
+        }
+      });
+      acts.append(off);
+      if (!r.allowed && r.verdict !== "hinweis") {
+        const allow = el("button", "ghost small", "Vertrauen");
+        allow.title = "Diese Datei nicht mehr melden (z. B. eigene Mod, die du kennst)";
+        allow.addEventListener("click", async () => renderModScan(await api.modScanAllow([r.sha1]), modScanFromLaunch));
+        acts.append(allow);
+      }
+    }
+    row.append(el("i"), text, acts);
+    list.append(row);
+  }
+}
+
+$("modscan-run").addEventListener("click", async () => {
+  $("modscan-run").disabled = true;
+  $("modscan-run").textContent = "Prüfe …";
+  try {
+    renderModScan(await api.modScan());
+  } catch (error) {
+    toast(errorText(error), true);
+  } finally {
+    $("modscan-run").disabled = false;
+    $("modscan-run").textContent = "Mods prüfen";
+  }
+});
+$("modscan-close").addEventListener("click", () => ($("modscan").hidden = true));
+$("modscan-anyway").addEventListener("click", async () => {
+  if (!confirm("Wirklich mit diesen Mods starten? Schadsoftware kann deine Logins und Daten stehlen.")) return;
+  const report = await api.modScan();
+  const sha1s = report.results.filter((r) => !r.disabled && (r.verdict === "malware" || r.verdict === "verdaechtig")).map((r) => r.sha1);
+  await api.modScanAllow(sha1s);
+  $("modscan").hidden = true;
+  $("launch").click();
+});
+api.onModScan((report) => renderModScan(report, true));
