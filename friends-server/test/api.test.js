@@ -189,6 +189,50 @@ test("Anfrage, annehmen, Status mit Server, entfernen", async () => {
   assert.equal(removed.data.friends.length, 0);
 });
 
+test("Lebenszeichen der Mod: Spielzeit, Einladungen, Freischaltungen und versteckter Status in einer Anfrage", async () => {
+  const s = setup();
+  const a = await s.login("Alice");
+  const b = await s.login("Bob");
+  await s.call("POST", "/api/friends/request", { name: "bob" }, a);
+  await s.call("POST", "/api/friends/accept", { uuid: ALICE }, b);
+  // Launcher: nur Freundesliste (mit caps), keine Extras
+  let res = await s.call("POST", "/api/presence", { place: "launcher" }, a);
+  assert.deepEqual(res.data.caps, ["presence2"]);
+  assert.equal(res.data.games, undefined);
+  assert.equal(res.data.owned, undefined);
+  // Mod: Spielzeit mitschicken, Einladungen und Freischaltungen zurück
+  await s.grant(ALICE, ["cape:galaxie"]);
+  res = await s.call("POST", "/api/presence", { place: "game", server: "x.de", version: "1.21.11",
+    play: { seconds: 60, server: "x.de", version: "1.21.11", session: "abc", tz: 0 } }, a);
+  assert.equal(res.status, 200);
+  assert.equal(res.data.played, true);
+  assert.deepEqual(res.data.games, { invites: 0 });
+  assert.deepEqual(res.data.owned, { items: ["cape:galaxie"], admin: false });
+  assert.equal(res.data.me.server, "x.de");
+  const stats = await s.call("GET", "/api/stats?tz=0", null, a);
+  assert.equal(stats.data.totals.seconds, 60);
+  // ungültige Spielzeit: Lebenszeichen gilt trotzdem
+  s.tick(60 * 1000);
+  res = await s.call("POST", "/api/presence", { place: "game", play: { seconds: 9999 } }, a);
+  assert.equal(res.status, 200);
+  assert.equal(res.data.played, false);
+  // Einladung von Bob erscheint im nächsten Lebenszeichen
+  assert.equal((await s.call("POST", "/api/games", { to: "Alice", time: 300 }, b)).status, 200);
+  res = await s.call("POST", "/api/presence", { place: "game" }, a);
+  assert.deepEqual(res.data.games, { invites: 1 });
+  s.tick(61 * 1000);
+  res = await s.call("POST", "/api/presence", { place: "game" }, a);
+  assert.deepEqual(res.data.games, { invites: 0 });
+  // versteckt: gilt nicht als online, Liste und Extras kommen trotzdem
+  s.tick(ONLINE_MS + 1000);
+  res = await s.call("POST", "/api/presence", { place: "game", hidden: true, server: "geheim.de" }, a);
+  assert.equal(res.data.friends[0].name, "Bob");
+  assert.ok(res.data.owned);
+  const list = (await s.call("GET", "/api/friends", null, b)).data.friends;
+  assert.equal(list[0].online, false);
+  assert.equal(list[0].server, null);
+});
+
 test("Gegenseitige Anfrage macht sofort befreundet", async () => {
   const s = setup();
   const a = await s.login("Alice");

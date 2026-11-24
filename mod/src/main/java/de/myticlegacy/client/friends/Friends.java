@@ -95,6 +95,34 @@ public final class Friends {
     private static final ConcurrentLinkedQueue<String> NOTICES = new ConcurrentLinkedQueue<>();
     private static ScheduledExecutorService worker;
 
+    // ------------------------------------------------------------------ Lebenszeichen sparsam (Free-Plan: Anfragen zählen)
+    /** Lebenszeichen höchstens so oft (der Server zeigt "online" bis 150 s nach dem letzten) */
+    private static final long BEAT_MS = 60_000;
+    /** … und öfter, solange ein Freund im Spiel ist, der zu einer Partie einladen kann (Einladungen kommen mit dem Lebenszeichen) */
+    private static final long BEAT_FAST_MS = 30_000;
+    /** Prüftakt im Hintergrund (ohne Netz); Statuswechsel erst senden, wenn er so lange stabil ist … */
+    private static final long CHECK_MS = 5_000;
+    private static final long SETTLE_MS = 3_000;
+    /** … und nicht öfter als so oft */
+    private static final long MIN_GAP_MS = 10_000;
+    /** Zeitpunkt des letzten Lebenszeichens (auch "refresh") und der damit gemeldete Status */
+    private static volatile long beatAt;
+    private static volatile String sentState;
+    private static String seenState;
+    private static long seenSince;
+    /** Kann der Server mehr mit dem Lebenszeichen (Spielzeit, Einladungen, Freischaltungen, versteckter Status)? */
+    private static volatile boolean presence2;
+    /** Ein Freund ist im Spiel und kann einladen → Lebenszeichen öfter */
+    private static volatile boolean fastBeat;
+    /** Offene Einladungen zu Partien laut letztem Lebenszeichen (-1 = Server meldet das nicht); Zähler je Meldung mit Einladung */
+    private static volatile int gameInvites = -1;
+    private static volatile int gameHints;
+    /** Spielzeit für das nächste Lebenszeichen (Stats) */
+    private static JsonObject pendingPlay;
+    /** Freischaltungen aus dem letzten Lebenszeichen (Cosmetics) und Zähler, wie oft sie kamen */
+    private static volatile JsonObject owned;
+    private static volatile int ownedSeq;
+
     private Friends() {
     }
 
@@ -128,13 +156,14 @@ public final class Friends {
             t.setDaemon(true);
             return t;
         });
-        worker.scheduleWithFixedDelay(Friends::heartbeat, 3, 60, TimeUnit.SECONDS);
+        // alle 5 s nur lokal prüfen; Anfrage erst, wenn das Lebenszeichen fällig ist oder sich der Status geändert hat
+        worker.scheduleWithFixedDelay(Friends::check, 3, CHECK_MS / 1000, TimeUnit.SECONDS);
         // beim Beenden sofort als offline zeigen
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             try {
                 call("POST", "api/presence/offline", new JsonObject(), 2000);
             } catch (Exception ignored) {
-                // egal – nach 75 s gilt man ohnehin als offline
+                // egal – nach 150 s gilt man ohnehin als offline
             }
         }, "Mytic Friends offline"));
     }
@@ -183,6 +212,7 @@ public final class Friends {
         return NOTICES.poll();
     }
 
+    /** Sofort ein Lebenszeichen (Freunde-Fenster geöffnet, Status umgeschaltet); zählt als das fällige. */
     public static void refresh() {
         if (worker != null) worker.execute(Friends::heartbeat);
     }
@@ -231,24 +261,116 @@ public final class Friends {
         messageAt = System.currentTimeMillis();
     }
 
+    /** Status, wie ihn das Lebenszeichen meldet (Wechsel = sofort melden; versteckt zählt nur das Umschalten) */
+    private static String state() {
+        return visible ? "on|" + showServer + "|" + currentServer + "|" + mcVersion : "hidden";
+    }
+
+    /** Hintergrund-Takt (ohne Netz): Lebenszeichen nur, wenn fällig oder der Status sich geändert hat (Server betreten/verlassen). */
+    private static void check() {
+        try {
+            long now = System.currentTimeMillis();
+            String state = state();
+            if (!state.equals(seenState)) {
+                seenState = state;
+                seenSince = now;
+            }
+            boolean changed = sentState != null && !state.equals(sentState) && now - seenSince >= SETTLE_MS && now - beatAt >= MIN_GAP_MS;
+            long every = fastBeat ? BEAT_FAST_MS : BEAT_MS;
+            // kleiner Spielraum, damit der 5-s-Takt das Lebenszeichen nicht auf 65 s streckt
+            if (sentState == null || changed || now - beatAt >= every - CHECK_MS / 2) heartbeat();
+        } catch (Throwable ignored) {
+            // nächster Takt
+        }
+    }
+
     private static void heartbeat() {
+        beatAt = System.currentTimeMillis();
+        String state = state();
+        JsonObject play = presence2 ? takePlay() : null;
         try {
             JsonObject result;
-            if (visible) {
+            if (visible || presence2) {
                 JsonObject body = new JsonObject();
                 body.addProperty("place", "game");
                 if (currentServer != null) body.addProperty("server", currentServer);
                 if (mcVersion != null) body.addProperty("version", mcVersion);
                 body.addProperty("hideServer", !showServer);
+                // versteckt: nur Server, die das kennen (presence2), sonst wie früher nur die Liste holen
+                if (!visible) body.addProperty("hidden", true);
+                if (play != null) body.add("play", play);
                 result = call("POST", "api/presence", body, 10000);
             } else {
                 result = call("GET", "api/friends", null, 10000);
             }
+            play = null; // angekommen (oder ungültig) – nicht noch einmal schicken
+            sentState = state;
             apply(result);
+            extras(result);
             error = null;
         } catch (Exception e) {
             error = e.getMessage();
+            if (sentState == null) sentState = state;
+            if (play != null) queuePlay(play); // beim nächsten Mal mit
         }
+    }
+
+    /** Was das Lebenszeichen zusätzlich bringt (Server mit presence2). */
+    private static void extras(JsonObject data) {
+        boolean caps = false;
+        if (data.has("caps") && data.get("caps").isJsonArray()) {
+            for (JsonElement e : data.getAsJsonArray("caps")) if ("presence2".equals(e.getAsString())) caps = true;
+        }
+        presence2 = caps;
+        if (data.has("games") && data.get("games").isJsonObject()) {
+            JsonObject g = data.getAsJsonObject("games");
+            gameInvites = g.has("invites") ? g.get("invites").getAsInt() : 0;
+            if (gameInvites > 0) gameHints++;
+        }
+        if (data.has("owned") && data.get("owned").isJsonObject()) {
+            owned = data.getAsJsonObject("owned");
+            ownedSeq++;
+        }
+    }
+
+    /** Freischaltungen aus dem letzten Lebenszeichen ({items, admin}) oder null. */
+    public static JsonObject owned() {
+        return owned;
+    }
+
+    /** Ändert sich mit jedem Lebenszeichen, das Freischaltungen mitbringt (0 = noch keins). */
+    public static int ownedSeq() {
+        return ownedSeq;
+    }
+
+    /** Meldet der Server offene Einladungen mit dem Lebenszeichen? (sonst muss Games selbst regelmäßig fragen) */
+    public static boolean reportsGames() {
+        return gameInvites >= 0;
+    }
+
+    /** Ändert sich, wenn ein Lebenszeichen offene Einladungen meldet. */
+    public static int gameHints() {
+        return gameHints;
+    }
+
+    /** Kann die Spielzeit mit dem Lebenszeichen mitgehen? (sonst schickt Stats sie selbst) */
+    public static boolean takesPlay() {
+        return presence2 && available();
+    }
+
+    /** Spielzeit für das nächste Lebenszeichen vormerken; mehrere Meldungen werden zusammengefasst (höchstens 120 s). */
+    public static synchronized void queuePlay(JsonObject play) {
+        if (pendingPlay != null) {
+            long seconds = Math.min(120, pendingPlay.get("seconds").getAsLong() + play.get("seconds").getAsLong());
+            play.addProperty("seconds", seconds); // play gehört schon uns (Stats baut es jedes Mal neu)
+        }
+        pendingPlay = play;
+    }
+
+    private static synchronized JsonObject takePlay() {
+        JsonObject play = pendingPlay;
+        pendingPlay = null;
+        return play;
     }
 
     private static synchronized void apply(JsonObject data) {
@@ -267,6 +389,10 @@ public final class Friends {
                 if (!knownRequests.contains(f.uuid)) NOTICES.add("§d✉ §f" + f.name + " §7möchte mit dir befreundet sein §8(Rechts-Shift → Freunde)");
             }
         }
+        // Einladen können nur Spieler im Spiel mit Mytic Games (nicht 1.8.9)
+        boolean fast = false;
+        for (Friend f : newFriends) if (f.inGame() && !"1.8.9".equals(f.version)) fast = true;
+        fastBeat = fast;
         friends = newFriends;
         incoming = newIncoming;
         outgoing = list(data.getAsJsonArray("outgoing"));

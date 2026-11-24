@@ -292,6 +292,8 @@ public final class Games {
     private static volatile boolean polling;
     private static long lastPoll;
     private static volatile boolean pollSoon;
+    /** zuletzt gesehener Einladungs-Hinweis aus dem Lebenszeichen (Friends.gameHints) */
+    private static int seenHints;
     /** schon gemeldet: Einladungen, Zugzahl je Partie, Endstand je Partie */
     private static final Set<String> announcedInvites = new HashSet<>();
     private static final Map<String, Integer> seenMoves = new HashMap<>();
@@ -372,9 +374,16 @@ public final class Games {
         Screen open = Compat.screen(mc);
         boolean busy = active() != null || open instanceof ChessScreen || open instanceof XoScreen || open instanceof Connect4Screen
                 || open instanceof ShipsScreen || open instanceof ChallengeScreen || hasOutgoing();
-        long interval = busy ? 1500 : 5000;
+        // Ohne Partie fragt nur noch das Lebenszeichen der Freundesliste nach neuen Einladungen (Server mit presence2);
+        // meldet es eine, sofort abfragen. Ältere Server: wie früher alle 5 Sekunden.
+        int hints = Friends.gameHints();
+        if (hints != seenHints) {
+            seenHints = hints;
+            pollSoon = true;
+        }
+        long interval = busy ? 1500 : incomingInvite() != null || !Friends.reportsGames() ? 5000 : Long.MAX_VALUE;
         long now = System.currentTimeMillis();
-        if (!pollSoon && now - lastPoll < interval) return;
+        if (!pollSoon && lastPoll != 0 && now - lastPoll < interval) return;
         pollSoon = false;
         lastPoll = now;
         polling = true;

@@ -48,8 +48,12 @@ public final class CosmeticsCore {
 
     }
 
-    /** Wie lange die Umhänge anderer Spieler gemerkt werden, bevor neu gefragt wird. */
-    private static final long REMOTE_MS = 2 * 60 * 1000;
+    /** Cosmetics anderer Spieler erneut fragen: mit Cosmetics nach 3 Minuten, ohne nach 6; fällige in einer Anfrage sammeln */
+    private static final long REMOTE_MS = 3 * 60 * 1000;
+    private static final long REMOTE_NONE_MS = 6 * 60 * 1000;
+    private static final long BATCH_MS = 60 * 1000;
+    /** zuletzt übernommene Freischaltungen aus dem Lebenszeichen (Friends.ownedSeq) */
+    private static int ownedSeq;
 
     private static final String PACK = System.getProperty("mytic.cosmetics", "").trim();
     private static List<Cape> capes;
@@ -118,23 +122,14 @@ public final class CosmeticsCore {
         return admin;
     }
 
-    /** Freischaltungen neu laden (beim Start, alle 3 Minuten, nach Admin-Änderungen). */
+    /** Freischaltungen neu laden (beim Start, nach Admin-Änderungen; ohne Lebenszeichen mit Freischaltungen alle 3 Minuten). */
     public static void refreshOwned() {
         if (!Friends.available() || ownedLoading) return;
         ownedLoading = true;
         Friends.background(() -> {
             try {
                 JsonObject answer = Friends.post("api/cosmetics/owned", new JsonObject());
-                java.util.Set<String> set = new java.util.HashSet<String>();
-                for (JsonElement e : answer.getAsJsonArray("items")) set.add(e.getAsString());
-                boolean changed = !set.equals(owned);
-                owned = set;
-                admin = answer.has("admin") && answer.get("admin").getAsBoolean();
-                MyticClient.config().ownedCache = new ArrayList<String>(set);
-                MyticClient.config().adminCache = admin;
-                MyticClient.config().save();
-                // neu freigeschaltet: die eigene Auswahl wieder an den Server melden
-                if (changed) push();
+                applyOwned(answer);
             } catch (Exception e) {
                 // alter Stand bleibt; nächster Versuch beim nächsten Durchgang
             } finally {
@@ -142,6 +137,22 @@ public final class CosmeticsCore {
                 ownedLoading = false;
             }
         });
+    }
+
+    /** Freischaltungen übernehmen ({items, admin}: Antwort von api/cosmetics/owned oder aus dem Lebenszeichen). */
+    private static void applyOwned(JsonObject answer) {
+        java.util.Set<String> set = new java.util.HashSet<String>();
+        for (JsonElement e : answer.getAsJsonArray("items")) set.add(e.getAsString());
+        boolean changed = !set.equals(owned);
+        boolean isAdminNow = answer.has("admin") && answer.get("admin").getAsBoolean();
+        if (!changed && isAdminNow == admin && owned != null) return; // nichts Neues (kommt jede Minute mit dem Lebenszeichen)
+        owned = set;
+        admin = isAdminNow;
+        MyticClient.config().ownedCache = new ArrayList<String>(set);
+        MyticClient.config().adminCache = admin;
+        MyticClient.config().save();
+        // neu freigeschaltet: die eigene Auswahl wieder an den Server melden
+        if (changed) push();
     }
 
     /** uuid (ohne Striche) → Nametag (Rohtext mit &-Codes) oder "" (keiner). */
@@ -459,18 +470,43 @@ public final class CosmeticsCore {
 
     /**
      * Regelmäßig aus dem Spiel-Thread: Umhänge der Spieler in der Nähe nachfragen (gesammelt, höchstens 100 auf
-     * einmal, je Spieler alle 2 Minuten).
+     * einmal, je Spieler alle 3 Minuten, ohne Cosmetics alle 6).
      */
     public static void tick(List<String> nearby) {
         if (!Friends.available()) return;
-        if (System.currentTimeMillis() - ownedAt > 3 * 60 * 1000) refreshOwned();
+        // Freischaltungen kommen mit dem Lebenszeichen der Freundesliste (neuere Server) – sonst alle 3 Minuten selbst fragen
+        int seq = Friends.ownedSeq();
+        if (seq != ownedSeq) {
+            ownedSeq = seq;
+            JsonObject answer = Friends.owned();
+            ownedAt = System.currentTimeMillis();
+            if (answer != null) {
+                try {
+                    applyOwned(answer);
+                } catch (RuntimeException ignored) {
+                    // unlesbar – alter Stand bleibt
+                }
+            }
+        } else if (seq == 0 && System.currentTimeMillis() - ownedAt > 3 * 60 * 1000) {
+            refreshOwned();
+        }
         if (!pushed && (MyticClient.config().cape != null || MiniMeCore.any() || MyticClient.config().wings != null || MyticClient.config().shield != null || MyticClient.config().aura != null || MyticClient.config().nametag != null)) push();
         if (lookupRunning) return;
         long now = System.currentTimeMillis();
+        // erst fragen, wenn einer fällig ist – dann alle, die in der nächsten Minute fällig würden, gleich mit (weniger Anfragen)
+        boolean due = false;
+        for (String uuid : nearby) {
+            Long at = ASKED.get(uuid);
+            if (at == null || now - at > REMOTE_MS) {
+                due = true;
+                break;
+            }
+        }
+        if (!due) return;
         final List<String> ask = new ArrayList<>();
         for (String uuid : nearby) {
             Long at = ASKED.get(uuid);
-            if (at == null || now - at > REMOTE_MS) ask.add(uuid);
+            if (at == null || now - at > REMOTE_MS - BATCH_MS) ask.add(uuid);
             if (ask.size() >= 100) break;
         }
         if (ask.isEmpty()) return;
@@ -509,7 +545,11 @@ public final class CosmeticsCore {
                 if (answer.has("wings")) {
                     for (Map.Entry<String, JsonElement> e : answer.getAsJsonObject("wings").entrySet()) wingsFound.put(e.getKey(), e.getValue().getAsString());
                 }
+                // Spieler ohne Cosmetics (meist ohne Mytic) seltener erneut fragen
+                long later = System.currentTimeMillis() + REMOTE_NONE_MS - REMOTE_MS;
                 for (String uuid : ask) {
+                    if (!found.containsKey(uuid) && !minis.containsKey(uuid) && !tagsFound.containsKey(uuid) && !aurasFound.containsKey(uuid)
+                            && !shieldsFound.containsKey(uuid) && !wingsFound.containsKey(uuid)) ASKED.put(uuid, later);
                     REMOTE.put(uuid, found.containsKey(uuid) ? found.get(uuid) : "");
                     REMOTE_MINI.put(uuid, minis.containsKey(uuid) ? minis.get(uuid) : new HashMap<String, String>());
                     REMOTE_NAMETAG.put(uuid, tagsFound.containsKey(uuid) ? tagsFound.get(uuid) : "");

@@ -558,7 +558,10 @@ api.onProgress(({ label, done, total }) => {
 api.onStatus((text) => ($("status").textContent = text));
 api.onLog(appendLog);
 api.onGame(({ running: isRunning, count, code, ended, name }) => {
+  const wasRunning = running;
   setRunning(isRunning, count);
+  // Spiel zu: Freundesliste (und "im Launcher") gleich wieder aktualisieren
+  if (wasRunning && !isRunning) loadFriends();
   if (isRunning) $("status").textContent = runningText();
   else $("status").textContent = code === 0 ? "Bereit" : `Beendet (Code ${code}) – Details in der Konsole`;
   if (isRunning && ended && code !== 0 && name) toast(`Minecraft von ${name} wurde beendet (Code ${code}).`, true);
@@ -1315,6 +1318,9 @@ async function loadFriends() {
   clearTimeout(friendsTimer);
   friendsTimer = setTimeout(loadFriends, 60000);
   if (!selectedAccount()) return;
+  // Während Minecraft läuft, meldet die Mod den Status und zeigt neue Anfragen im Spiel – der Launcher fragt dann nur,
+  // wenn die Freunde-Seite offen ist (spart Anfragen beim Friends-Server).
+  if (running && !document.querySelector("#page-friends.active")) return;
   try {
     const before = friendsData && friendsData.incoming ? friendsData.incoming.map((r) => r.uuid) : null;
     const data = await api.friends();

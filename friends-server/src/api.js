@@ -10,8 +10,13 @@ import { CATALOG } from "./catalog.js";
 import { ADMIN_PAGE } from "./admin-page.js";
 import { START_FEN, parseFen, toFen, applyUci, status as chessStatus } from "./chess.js";
 
-/** Ab wann ein Spieler als offline gilt (Mod und Launcher melden sich jede Minute). */
+/** Ab wann ein Spieler als offline gilt (Mod und Launcher melden sich höchstens jede Minute, bei Bedarf öfter). */
 export const ONLINE_MS = 150 * 1000;
+/**
+ * Was POST /api/presence kann (steht in jeder Freundesliste): "presence2" = Spielzeit (play), Einladungen (games),
+ * Freischaltungen (owned) und versteckter Status (hidden) – ältere Server ignorieren diese Felder, die Mod fragt dann einzeln.
+ */
+const CAPS = ["presence2"];
 const CHALLENGE_MS = 2 * 60 * 1000;
 const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
 const HEAD_MS = 24 * 60 * 60 * 1000;
@@ -389,7 +394,7 @@ export function createApi(db, options = {}) {
     const short = (row) => ({ uuid: row.uuid, name: row.name, head: row.head || null, at: row.at });
     const playing = me.place === "game" && me.last_seen > now() - ONLINE_MS;
     return { me: { uuid: me.uuid, name: me.name, head: me.head || null, cape: me.cape || null, place: playing ? "game" : me.place || null,
-      server: playing ? me.server || null : null, version: playing ? me.version || null : null }, friends: list, incoming: incoming.map(short), outgoing: outgoing.map(short), serverTime: now() };
+      server: playing ? me.server || null : null, version: playing ? me.version || null : null }, friends: list, incoming: incoming.map(short), outgoing: outgoing.map(short), serverTime: now(), caps: CAPS };
   }
 
   /** JSON-Inhalt der Anfrage (höchstens max Bytes, sonst 413); kaputtes JSON gilt als leer. */
@@ -1069,6 +1074,43 @@ export function createApi(db, options = {}) {
     return { ...total, opponents: top };
   }
 
+  /** Spielzeit gutschreiben (POST /api/stats/play oder mit dem Lebenszeichen der Mod in POST /api/presence). */
+  async function recordPlay(me, data) {
+    const seconds = data.seconds;
+    if (!Number.isInteger(seconds) || seconds < 1 || seconds > STAT_PLAY_MAX) throw new HttpError(400, `Ungültige Spielzeit (1–${STAT_PLAY_MAX} Sekunden)`);
+    const session = data.session === undefined || data.session === null || data.session === "" ? null : data.session;
+    if (session !== null && (typeof session !== "string" || !/^[A-Za-z0-9]{1,32}$/.test(session))) throw new HttpError(400, "Ungültige Sitzung");
+    const names = statNames(data);
+    const t = now();
+    const day = statDay(t, statTz(data.tz));
+    await statEnsure(me.uuid, t);
+    // alte Sitzungen aufräumen (die längste steht schon in stat_totals) – vor dem Hochzählen, sonst lebt eine alte Sitzung weiter
+    await db.run("DELETE FROM stat_sessions WHERE updated < ?", [t - STAT_SESSION_KEEP_MS]);
+    const totals = await db.get("SELECT play_at, win_start, win_sec FROM stat_totals WHERE uuid = ?", [me.uuid]);
+    // zu schnelle Meldungen kürzen: nicht mehr als seit der letzten Meldung vergangen ist (+ Spielraum) …
+    let credit = seconds;
+    if (totals.play_at) credit = Math.min(credit, Math.floor(Math.max(0, t - totals.play_at) / 1000) + STAT_SLACK_SEC);
+    // … und höchstens STAT_WINDOW_SEC je Zeitfenster
+    const fresh = t - totals.win_start >= STAT_WINDOW_MS;
+    const windowStart = fresh ? t : totals.win_start;
+    const windowUsed = fresh ? 0 : totals.win_sec;
+    credit = Math.max(0, Math.min(credit, STAT_WINDOW_SEC - windowUsed));
+    await db.run("UPDATE stat_totals SET seconds = seconds + ?, last = ?, play_at = ?, win_start = ?, win_sec = ? WHERE uuid = ?",
+      [credit, t, t, windowStart, windowUsed + credit, me.uuid]);
+    if (credit > 0) {
+      await db.run("INSERT INTO stat_days (uuid, day, seconds, launches) VALUES (?, ?, ?, 0) ON CONFLICT(uuid, day) DO UPDATE SET seconds = seconds + excluded.seconds", [me.uuid, day, credit]);
+      await db.run("INSERT INTO stat_servers (uuid, name, seconds, last) VALUES (?, ?, ?, ?) ON CONFLICT(uuid, name) DO UPDATE SET seconds = seconds + excluded.seconds, last = excluded.last",
+        [me.uuid, names.server, credit, t]);
+      await statItems(me.uuid, names, credit, 0, t);
+      if (session) {
+        await db.run("INSERT INTO stat_sessions (uuid, session, seconds, updated) VALUES (?, ?, ?, ?) ON CONFLICT(uuid, session) DO UPDATE SET seconds = seconds + excluded.seconds, updated = excluded.updated",
+          [me.uuid, session, credit, t]);
+        const row = await db.get("SELECT seconds FROM stat_sessions WHERE uuid = ? AND session = ?", [me.uuid, session]);
+        await db.run("UPDATE stat_totals SET longest = MAX(longest, ?) WHERE uuid = ?", [row.seconds, me.uuid]);
+      }
+    }
+  }
+
   const routes = {
     "GET /api/health": async () => ({ ok: true, offline: allowOffline }),
 
@@ -1138,15 +1180,41 @@ export function createApi(db, options = {}) {
 
     "GET /api/friends": async (request) => overview(await auth(request)),
 
-    /** Lebenszeichen von Launcher oder Spiel; Antwort ist gleich die Freundesliste. */
+    /**
+     * Lebenszeichen von Launcher oder Spiel; Antwort ist gleich die Freundesliste. Die Mod schickt damit auch ihre
+     * Spielzeit mit (play: wie POST /api/stats/play) und bekommt offene Einladungen zu Partien (games.invites) und ihre
+     * Freischaltungen (owned) zurück – so braucht sie dafür keine eigenen Anfragen. hidden: Online-Status versteckt
+     * (zählt nicht als online, liefert aber dasselbe wie sonst).
+     */
     "POST /api/presence": async (request) => {
       const me = await auth(request);
       const data = await body(request);
       const place = data.place === "game" ? "game" : "launcher";
-      const server = place === "game" && !data.hideServer ? clean(data.server, 64) : null;
-      const version = clean(data.version, 16);
-      await db.run("UPDATE users SET last_seen = ?, place = ?, server = ?, version = ? WHERE uuid = ?", [now(), place, server, version, me.uuid]);
-      return overview({ ...me, last_seen: now() });
+      let view = me;
+      if (data.hidden !== true) {
+        const server = place === "game" && !data.hideServer ? clean(data.server, 64) : null;
+        const version = clean(data.version, 16);
+        await db.run("UPDATE users SET last_seen = ?, place = ?, server = ?, version = ? WHERE uuid = ?", [now(), place, server, version, me.uuid]);
+        view = { ...me, last_seen: now(), place, server, version };
+      }
+      const result = await overview(view);
+      if (data.play && typeof data.play === "object") {
+        try {
+          await recordPlay(me, data.play);
+          result.played = true;
+        } catch (error) {
+          if (!(error instanceof HttpError)) throw error;
+          result.played = false;
+        }
+      }
+      if (place === "game") {
+        const t = now();
+        const invites = await count("SELECT COUNT(*) AS n FROM games WHERE invitee = ? AND status = 'invited' AND created > ?", [me.uuid, t - GAME_INVITE_MS]);
+        result.games = { invites };
+        const items = await grantsOf(me.uuid);
+        result.owned = { items: [...items].sort(), admin: owns(items, "admin") };
+      }
+      return result;
     },
 
     "POST /api/presence/offline": async (request) => {
@@ -1431,40 +1499,7 @@ export function createApi(db, options = {}) {
      */
     "POST /api/stats/play": async (request) => {
       const me = await auth(request);
-      const data = await body(request);
-      const seconds = data.seconds;
-      if (!Number.isInteger(seconds) || seconds < 1 || seconds > STAT_PLAY_MAX) throw new HttpError(400, `Ungültige Spielzeit (1–${STAT_PLAY_MAX} Sekunden)`);
-      const session = data.session === undefined || data.session === null || data.session === "" ? null : data.session;
-      if (session !== null && (typeof session !== "string" || !/^[A-Za-z0-9]{1,32}$/.test(session))) throw new HttpError(400, "Ungültige Sitzung");
-      const names = statNames(data);
-      const t = now();
-      const day = statDay(t, statTz(data.tz));
-      await statEnsure(me.uuid, t);
-      // alte Sitzungen aufräumen (die längste steht schon in stat_totals) – vor dem Hochzählen, sonst lebt eine alte Sitzung weiter
-      await db.run("DELETE FROM stat_sessions WHERE updated < ?", [t - STAT_SESSION_KEEP_MS]);
-      const totals = await db.get("SELECT play_at, win_start, win_sec FROM stat_totals WHERE uuid = ?", [me.uuid]);
-      // zu schnelle Meldungen kürzen: nicht mehr als seit der letzten Meldung vergangen ist (+ Spielraum) …
-      let credit = seconds;
-      if (totals.play_at) credit = Math.min(credit, Math.floor(Math.max(0, t - totals.play_at) / 1000) + STAT_SLACK_SEC);
-      // … und höchstens STAT_WINDOW_SEC je Zeitfenster
-      const fresh = t - totals.win_start >= STAT_WINDOW_MS;
-      const windowStart = fresh ? t : totals.win_start;
-      const windowUsed = fresh ? 0 : totals.win_sec;
-      credit = Math.max(0, Math.min(credit, STAT_WINDOW_SEC - windowUsed));
-      await db.run("UPDATE stat_totals SET seconds = seconds + ?, last = ?, play_at = ?, win_start = ?, win_sec = ? WHERE uuid = ?",
-        [credit, t, t, windowStart, windowUsed + credit, me.uuid]);
-      if (credit > 0) {
-        await db.run("INSERT INTO stat_days (uuid, day, seconds, launches) VALUES (?, ?, ?, 0) ON CONFLICT(uuid, day) DO UPDATE SET seconds = seconds + excluded.seconds", [me.uuid, day, credit]);
-        await db.run("INSERT INTO stat_servers (uuid, name, seconds, last) VALUES (?, ?, ?, ?) ON CONFLICT(uuid, name) DO UPDATE SET seconds = seconds + excluded.seconds, last = excluded.last",
-          [me.uuid, names.server, credit, t]);
-        await statItems(me.uuid, names, credit, 0, t);
-        if (session) {
-          await db.run("INSERT INTO stat_sessions (uuid, session, seconds, updated) VALUES (?, ?, ?, ?) ON CONFLICT(uuid, session) DO UPDATE SET seconds = seconds + excluded.seconds, updated = excluded.updated",
-            [me.uuid, session, credit, t]);
-          const row = await db.get("SELECT seconds FROM stat_sessions WHERE uuid = ? AND session = ?", [me.uuid, session]);
-          await db.run("UPDATE stat_totals SET longest = MAX(longest, ?) WHERE uuid = ?", [row.seconds, me.uuid]);
-        }
-      }
+      await recordPlay(me, await body(request));
       return { ok: true };
     },
 

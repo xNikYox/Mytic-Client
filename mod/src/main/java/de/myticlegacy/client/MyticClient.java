@@ -4,6 +4,7 @@ import de.myticlegacy.client.compat.Gfx;
 import de.myticlegacy.client.compat.Compat;
 import com.mojang.blaze3d.platform.InputConstants;
 import de.myticlegacy.client.friends.Friends;
+import de.myticlegacy.client.friends.StatusFile;
 import de.myticlegacy.client.gui.HubScreen;
 import de.myticlegacy.client.gui.HudEditScreen;
 import de.myticlegacy.client.gui.ModMenuScreen;
@@ -326,14 +327,18 @@ public final class MyticClient implements ClientModInitializer {
 
     /** Status für die Freundesliste weitergeben und Benachrichtigungen im Chat zeigen. */
     private static void tickFriends(Minecraft mc) {
+        String server;
+        if (mc.level == null) server = null;
+        else if (mc.getCurrentServer() != null) server = mc.getCurrentServer().ip;
+        else server = mc.hasSingleplayerServer() ? "Einzelspieler" : null;
+        // für Discord im Launcher (lokale Datei statt Abfrage beim Friends-Server); Server nur, wenn er gezeigt werden darf
+        StatusFile.update(friends.enabled() && friends.showServer.get() ? server : null, Compat.versionName());
         if (!Friends.available()) return;
         Friends.visible = friends.enabled();
         Friends.showServer = friends.showServer.get();
         Friends.notify = friends.notify.get();
         Friends.mcVersion = Compat.versionName();
-        if (mc.level == null) Friends.currentServer = null;
-        else if (mc.getCurrentServer() != null) Friends.currentServer = mc.getCurrentServer().ip;
-        else Friends.currentServer = mc.hasSingleplayerServer() ? "Einzelspieler" : null;
+        Friends.currentServer = server;
         if (mc.player == null) return;
         String notice;
         while ((notice = Friends.pollNotice()) != null) Compat.chat(mc, "§8[§dMytic§8] " + notice);

@@ -381,14 +381,18 @@ public final class MyticClient {
 
     /** Status für die Freundesliste weitergeben und Benachrichtigungen im Chat zeigen. */
     private static void tickFriends(Minecraft mc) {
+        String server;
+        if (mc.theWorld == null) server = null;
+        else if (mc.getCurrentServerData() != null) server = mc.getCurrentServerData().serverIP;
+        else server = mc.isSingleplayer() ? "Einzelspieler" : null;
+        // für Discord im Launcher (lokale Datei statt Abfrage beim Friends-Server); Server nur, wenn er gezeigt werden darf
+        de.myticlegacy.client.friends.StatusFile.update(friends.enabled() && friends.showServer.get() ? server : null, "1.8.9");
         if (!Friends.available()) return;
         Friends.visible = friends.enabled();
         Friends.showServer = friends.showServer.get();
         Friends.notify = friends.notify.get();
         Friends.mcVersion = "1.8.9";
-        if (mc.theWorld == null) Friends.currentServer = null;
-        else if (mc.getCurrentServerData() != null) Friends.currentServer = mc.getCurrentServerData().serverIP;
-        else Friends.currentServer = mc.isSingleplayer() ? "Einzelspieler" : null;
+        Friends.currentServer = server;
         if (mc.thePlayer == null) return;
         String notice;
         while ((notice = Friends.pollNotice()) != null) {

@@ -21,6 +21,7 @@ const profiles = require("./core/profiles");
 const { sanitizePatch } = require("./core/settings");
 const { DiscordPresence } = require("./core/discord");
 const { createBridge } = require("./core/gamebridge");
+const { GameStatusHub } = require("./core/gamestatus");
 const { createSkins, checkSkinPng } = require("./core/skins");
 const diagnose = require("./core/diagnose");
 const modscan = require("./core/modscan");
@@ -167,20 +168,31 @@ function updateDiscord() {
   }
 }
 
-/** Während das Spiel läuft: Server und Version aus der Freundesliste holen (meldet die Mod). */
-setInterval(async () => {
-  if (!discordGame || !friends.configured || !discord.enabled) return;
-  try {
-    const data = await friends.call(await activeAccount(), "GET", "api/friends");
-    const me = data && data.me;
-    if (me && me.place === "game") {
-      discordGame.server = me.server || null;
-      updateDiscord();
-    }
-  } catch {
-    // ohne Freundesliste bleibt "Im Spiel"
-  }
-}, 30000);
+/** Server aus der Freundesliste übernehmen (Rückfall für Mods ohne Statusdatei; nebenbei auch beim Öffnen der Freunde). */
+function discordFromFriends(data) {
+  const me = data && data.me;
+  if (!discordGame || gameStatus.supported() || !me || me.place !== "game") return;
+  discordGame.server = me.server || null;
+  updateDiscord();
+}
+
+/**
+ * Während das Spiel läuft: Server für Discord aus der Statusdatei der Mod (lokal, ohne Netz). Nur ältere Mods ohne
+ * Statusdatei: alle 2 Minuten beim Friends-Server nachfragen (früher alle 30 s für alle).
+ */
+const gameStatus = new GameStatusHub({
+  dir: path.join(DIRS.base, "status"),
+  onChange: (status) => {
+    if (!discordGame || !status) return;
+    discordGame.server = status.server;
+    updateDiscord();
+  },
+  poll: async () => {
+    if (!discordGame || !friends.configured || !discord.enabled) return;
+    discordFromFriends(await friends.call(await activeAccount(), "GET", "api/friends"));
+  },
+  log: (line) => emit("log", line),
+});
 let busy = false;
 let pendingUpdate = null;
 let profilesReady = null;
@@ -800,6 +812,7 @@ ipc.handle("friends:get", async () => {
   if (!friends.configured) return { configured: false };
   const account = await activeAccount();
   const data = games.size ? await friends.call(account, "GET", "api/friends") : await friends.call(account, "POST", "api/presence", { place: "launcher" });
+  discordFromFriends(data);
   return { configured: true, ...data };
 });
 
@@ -1186,7 +1199,10 @@ ipc.handle("game:launch", async () => {
     const friendsInGame = await friendsLaunch(account);
     // Profilname für die Spielzeit pro Profil (die Mod meldet ihn mit)
     const statsProfile = statsProfileName(profile.name);
-    const extraJvm = [...friendsInGame.jvm, ...(cosmeticsPack ? [`-Dmytic.cosmetics=${cosmeticsPack}`] : []), `-Dmytic.launcherTheme=${current.launcherTheme || "sunset"}`, `-Dmytic.profile=${statsProfile}`];
+    // Status für Discord: die Mod schreibt Server/Version in diese Datei (statt Abfragen beim Friends-Server)
+    const gameId = nextGameId++;
+    const statusFile = gameStatus.fileFor(gameId);
+    const extraJvm = [...friendsInGame.jvm, `-Dmytic.status.file=${statusFile}`, ...(cosmeticsPack ? [`-Dmytic.cosmetics=${cosmeticsPack}`] : []), `-Dmytic.launcherTheme=${current.launcherTheme || "sunset"}`, `-Dmytic.profile=${statsProfile}`];
     // weitere Instanz: Speicher erst bei Bedarf belegen; reicht der Arbeitsspeicher kaum, Hinweis in der Konsole
     const sharedMemory = games.size > 0;
     const memoryMb = Math.max(1024, Number(current.memoryMb) || 4096);
@@ -1208,7 +1224,6 @@ ipc.handle("game:launch", async () => {
     };
     if (!discordGame) discordGame = { version: profile.mcVersion, start: Date.now(), server: null };
     updateDiscord();
-    const gameId = nextGameId++;
     // Kontowechsel im Spiel: Adresse und eigener Schlüssel dieser Instanz
     const bridgeKey = bridge.issueKey();
     const bridgeEnv = {};
@@ -1218,31 +1233,39 @@ ipc.handle("game:launch", async () => {
     } catch (error) {
       emit("log", `[Launcher] Kontowechsel im Spiel nicht verfügbar: ${error.message}`);
     }
-    const child = launch(command, DIRS, {
-      env: { ...friendsInGame.env, ...bridgeEnv },
-      onLog: (line) => {
-        emit("log", line);
-        recent.push(line);
-        if (recent.length > 800) recent.shift();
-        const m = /Crash report saved to:\s*(?:#@!@#\s*)?(.+?\.txt)/.exec(line);
-        if (m) crashReport = m[1].trim();
-        // Fabric zeigt bei Mod-Fehlern ein eigenes Fenster und wartet – Auto-Fix schon jetzt anbieten
-        if (/FormattedException|Incompatible mods found|Some of your mods are incompatible/.test(line)) setTimeout(() => report(null), 1500);
-      },
-      onExit: (code) => {
-        games.delete(gameId);
-        bridge.revoke(bridgeKey);
-        if (!games.size) discordGame = null;
-        updateDiscord();
-        emit("game", { running: games.size > 0, count: games.size, code, ended: true, name: account.name });
-        report(code);
-        // Fenster erst zeigen, wenn das letzte Spiel zu ist (oder bei einem Absturz)
-        if ((!games.size || code !== 0) && win && !win.isDestroyed()) {
-          if (win.isMinimized()) win.restore();
-          win.show();
-        }
-      },
-    });
+    gameStatus.add(gameId);
+    let child;
+    try {
+      child = launch(command, DIRS, {
+        env: { ...friendsInGame.env, ...bridgeEnv },
+        onLog: (line) => {
+          emit("log", line);
+          recent.push(line);
+          if (recent.length > 800) recent.shift();
+          const m = /Crash report saved to:\s*(?:#@!@#\s*)?(.+?\.txt)/.exec(line);
+          if (m) crashReport = m[1].trim();
+          // Fabric zeigt bei Mod-Fehlern ein eigenes Fenster und wartet – Auto-Fix schon jetzt anbieten
+          if (/FormattedException|Incompatible mods found|Some of your mods are incompatible/.test(line)) setTimeout(() => report(null), 1500);
+        },
+        onExit: (code) => {
+          games.delete(gameId);
+          gameStatus.remove(gameId);
+          bridge.revoke(bridgeKey);
+          if (!games.size) discordGame = null;
+          updateDiscord();
+          emit("game", { running: games.size > 0, count: games.size, code, ended: true, name: account.name });
+          report(code);
+          // Fenster erst zeigen, wenn das letzte Spiel zu ist (oder bei einem Absturz)
+          if ((!games.size || code !== 0) && win && !win.isDestroyed()) {
+            if (win.isMinimized()) win.restore();
+            win.show();
+          }
+        },
+      });
+    } catch (error) {
+      gameStatus.remove(gameId);
+      throw error;
+    }
     games.set(gameId, { child, profileId: profile.id, mcVersion: profile.mcVersion, account: account.name, bridgeKey });
     emit("game", { running: true, count: games.size, name: account.name });
     // Start für die Statistik melden – nebenbei, darf den Start nie aufhalten oder scheitern lassen
@@ -1286,7 +1309,10 @@ app.whenReady().then(async () => {
   updateDiscord();
   discord.setEnabled(settings().discordPresence !== false);
 });
-app.on("before-quit", () => discord.close());
+app.on("before-quit", () => {
+  discord.close();
+  gameStatus.close();
+});
 app.on("window-all-closed", () => {
   if (!games.size) app.quit();
 });

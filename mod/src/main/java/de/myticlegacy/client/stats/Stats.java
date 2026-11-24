@@ -62,7 +62,7 @@ public final class Stats {
         return java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 60000;
     }
 
-    /** jeden Client-Tick: Zeit in einer Welt sammeln, einmal pro Minute melden */
+    /** jeden Client-Tick: Zeit in einer Welt sammeln, einmal pro Minute melden (mit dem Lebenszeichen der Freundesliste, wenn der Server das kann) */
     public static void tick(Minecraft mc) {
         long now = System.currentTimeMillis();
         long delta = lastTick == 0 ? 0 : Math.min(1000, now - lastTick); // Hänger und Schlafmodus nicht mitzählen
@@ -83,6 +83,11 @@ public final class Stats {
         body.addProperty("session", SESSION);
         body.addProperty("sessionSeconds", sessionSeconds);
         body.addProperty("tz", tz());
+        // neuere Server: mit dem nächsten Lebenszeichen der Freundesliste (keine eigene Anfrage)
+        if (Friends.takesPlay()) {
+            Friends.queuePlay(body);
+            return;
+        }
         Friends.background(() -> {
             try {
                 Friends.post("api/stats/play", body);
