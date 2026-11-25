@@ -1,42 +1,33 @@
 package de.myticlegacy.client.gui;
 
-import de.myticlegacy.client.compat.InputConstants;
 import de.myticlegacy.client.MyticClient;
 import de.myticlegacy.client.compat.Compat;
-import de.myticlegacy.client.compat.Gfx;
-import de.myticlegacy.client.friends.Friends;
-import de.myticlegacy.client.module.Module;
 import de.myticlegacy.client.compat.GuiGraphics;
-import net.minecraft.item.ItemStack;
-import net.minecraft.init.Items;
+import de.myticlegacy.client.compat.InputConstants;
+import de.myticlegacy.client.friends.Friends;
+import de.myticlegacy.client.gui.ui.Bake;
+import de.myticlegacy.client.gui.ui.Draw;
+import de.myticlegacy.client.gui.ui.Icons;
+import de.myticlegacy.client.gui.ui.Motion;
+import de.myticlegacy.client.gui.ui.Tokens;
+import de.myticlegacy.client.module.Module;
 
-/** Übersicht wie bei NRC (Rechts-Shift): drei große Knöpfe – Freunde, Mods, Cosmetics. */
-public class HubScreen extends MyticScreen {
-    private static final int TILE_W = 96;
-    private static final int TILE_H = 108;
-    private static final int GAP = 12;
-    private static final String[] LABELS = {"Freunde", "Mods", "Cosmetics"};
-    private final long openedAt = System.currentTimeMillis();
-    private int tx, ty;
+/**
+ * Übersicht (Rechts-Shift) im neuen Design (1.8.9): Wortmarke mit Emblem, darunter drei Glas-Kacheln – Freunde,
+ * Mods, Kosmetik – mit Linien-Icon (Freunde: eigener Kopf), Untertitel und Tasten 1–3.
+ */
+public class HubScreen extends DesignScreen {
+    private static final String[] LABELS = {"Freunde", "Mods", "Kosmetik"};
+    private static final String[] ICONS = {"users", "grid", "sparkle"};
+    private static final int N = LABELS.length;
 
     public HubScreen() {
-        super(MyticClient.NAME);
+        super("hub", MyticClient.NAME);
     }
 
     @Override
-    protected int pixelScale() {
-        return fit(3 * TILE_W + 2 * GAP + 40, TILE_H + 90, 0.62, 0.62);
-    }
-
-    @Override
-    protected void layout() {
-        tx = (vw - (3 * TILE_W + 2 * GAP)) / 2;
-        ty = (vh - TILE_H) / 2 + 6;
-    }
-
-    @Override
-    protected void renderBackground(GuiGraphics g) {
-        ModMenuScreen.background(g, width, height);
+    protected float factor() {
+        return Math.max(0.3f, Math.min(vw / 1920f, vh / 1080f) * (large() ? 1.15f : 1f));
     }
 
     private String subtitle(int i) {
@@ -55,76 +46,77 @@ public class HubScreen extends MyticScreen {
     }
 
     @Override
-    protected void draw(GuiGraphics g, int mouseX, int mouseY, float delta) {
-        float open = Math.min(1f, (System.currentTimeMillis() - openedAt) / 200f);
-        float ease = 1f - (1f - open) * (1f - open) * (1f - open);
-        boolean lunar = Ui.lunar();
+    protected void frame(GuiGraphics g) {
+        long now = System.currentTimeMillis();
+        boolean anim = animate();
+        float in = anim ? Motion.ease(Math.min(1f, (now - openedAt) / 450f)) : 1f;
+        float tw = 224 * d, th = 252 * d, gap = 24 * d;
+        float total = N * tw + (N - 1) * gap;
+        float x0 = Math.round((vw - total) / 2f), ty = Math.round(vh / 2f - th / 2f + 40 * d);
 
-        // Logo
-        float logoScale = 2f;
-        int logoW = Math.round(font.width("MYTIC CLIENT") * logoScale);
-        Gfx.push(g);
-        Gfx.translate(g, 0, (1 - ease) * -8);
-        if (lunar) {
-            Ui.scaled(g, "MYTIC", vw / 2f - logoW / 2f, ty - 44, logoScale, 0xFFFFFFFF, true);
-            Ui.scaled(g, "CLIENT", vw / 2f - logoW / 2f + font.width("MYTIC ") * logoScale, ty - 44, logoScale, 0xFFB4B4B4, true);
-        } else {
-            Ui.logo(g, vw / 2f - logoW / 2f, ty - 44, logoScale);
-        }
-        Gfx.pop(g);
+        // Wortmarke mit Emblem
+        int px = Math.max(10, Math.round(76 * d));
+        Bake.Baked word = Bake.text("Mytic", px, -0.045f, 0xFFFFFFFF, new Bake.Shadow(0, 6 * d, 30 * d, 0x739B5CFF), new Bake.Shadow(0, 2 * d, 0, 0x40000000));
+        int es = Math.max(8, Math.round(60 * d));
+        float wordW = word == null ? 0 : word.extra;
+        float lw = es + 18 * d + wordW, lx = vw / 2f - lw / 2f, rowTop = ty - 150 * d + (1 - in) * -8 * d;
+        int tint = Draw.alpha(0xFFFFFFFF, in);
+        float k = Draw.begin(g);
+        Draw.pxBaked(g, Bake.emblem(es), Math.round(lx), Math.round(rowTop + 38 * d - es / 2f), tint);
+        if (word != null) Draw.pxBaked(g, word, Math.round(lx + es + 18 * d), Math.round(rowTop + 38 * d - 0.363f * px), tint);
+        Draw.end(g);
 
-        for (int i = 0; i < 3; i++) {
-            int x = tx + i * (TILE_W + GAP);
-            float appear = Math.max(0f, Math.min(1f, (System.currentTimeMillis() - openedAt - i * 40) / 200f));
-            float e = 1f - (1f - appear) * (1f - appear) * (1f - appear);
-            int y = ty + Math.round((1 - e) * 14);
-            boolean over = Ui.inside(mouseX, mouseY, x, y, TILE_W, TILE_H);
-            float hv = Ui.animate("hub:" + i, over, 16f);
-            y -= Math.round(hv * 2);
-
-            if (lunar) {
-                Ui.rect(g, x - 2, y + 2, TILE_W + 4, TILE_H + 2, 8, 0x45000000);
-                Ui.outline(g, x, y, TILE_W, TILE_H, 6, Ui.mix(0x2EFFFFFF, 0x70FFFFFF, hv), Ui.mix(0xF2181818, 0xF2262626, hv));
-            } else {
-                Ui.glow(g, x, y, TILE_W, TILE_H, 8, i == 1 ? Ui.accent() : Ui.accent2(), 5, 0.35f + hv * 0.65f);
-                Ui.neonPanel(g, x, y, TILE_W, TILE_H, 8, 1f);
-                if (hv > 0.02f) Ui.corners(g, x, y, TILE_W, TILE_H, 8, Ui.alpha(Ui.accent(), hv), Ui.alpha(Ui.accent2(), hv));
-            }
+        for (int i = 0; i < N; i++) {
+            final int idx = i;
+            float appear = anim ? Motion.ease(Math.max(0f, Math.min(1f, (now - openedAt - i * 50) / 350f))) : 1f;
+            float x = x0 + i * (tw + gap);
+            String id = "tile" + i;
+            boolean hv = kit.hit(id, x, ty, tw, th, () -> open(idx));
+            float hvT = Motion.to(kit.key(id) + ":lift", hv, Tokens.MS_HOVER);
+            float y = ty + (1 - appear) * 16 * d - 4 * d * hvT + (kit.pressed(id) ? 2 * d : 0);
+            Draw.shadow(g, x, y + 24 * d, tw, th, 20 * d, 60 * d, -20 * d, Draw.alpha(0x8C000000, appear));
+            Draw.glass(g, x, y, tw, th, 20 * d, Draw.mix(Tokens.GLASS_STRONG, 0xD11E182E, hvT), Draw.mix(Tokens.LINE, Tokens.ACC_LINE, hvT));
 
             // Symbol
-            int cx = x + TILE_W / 2;
-            int iy = y + 18;
-            if (i == 0 && Friends.me() != null && Friends.me().head != null) {
-                FriendsScreen.drawHead(g, Friends.me().head, null, cx - 18, iy, 36);
+            float is = 76 * d, ix = x + (tw - is) / 2f, iy = y + 40 * d;
+            Friends.Friend me = Friends.me();
+            if (i == 0 && me != null && me.head != null) {
+                kit.head(me.head, me.name, ix + 4 * d, iy + 4 * d, is - 8 * d, Friends.onlineCount() > 0 ? Tokens.OK : 0, false);
             } else {
-                Gfx.push(g);
-                Gfx.translate(g, cx - 18, iy);
-                Gfx.scale(g, 2.25f, 2.25f);
-                g.renderItem(icon(i), 0, 0);
-                Gfx.pop(g);
+                Draw.rect(g, ix, iy, is, is, 22 * d, 0x14FFFFFF);
+                Draw.accentRect(g, ix, iy, is, is, 22 * d, 0.30f + 0.25f * hvT);
+                Draw.ring(g, ix, iy, is, is, 22 * d, 1, 0x1AFFFFFF);
+                Icons.draw(g, ICONS[i], ix + (is - 34 * d) / 2f, iy + (is - 34 * d) / 2f, 34 * d, 0xFFFFFFFF);
             }
-
-            Ui.centered(g, LABELS[i], cx, y + 66, Ui.TEXT, true);
+            kit.textCenter(LABELS[i], x + tw / 2f, y + 152 * d, 18, Tokens.SEMIBOLD, Tokens.TEXT);
             String sub = subtitle(i);
-            Ui.scaled(g, sub, cx - font.width(sub) * 0.4f, y + 80, 0.8f, i == 0 && Friends.onlineCount() > 0 ? (lunar ? Ui.L_GREEN : Ui.GREEN) : Ui.MUTED, false);
+            boolean green = i == 0 && Friends.available() && Friends.onlineCount() > 0;
+            kit.textCenter(de.myticlegacy.client.gui.ui.Type.ellipsize(g, sub, tw - 28 * d, 14 * d, Tokens.MEDIUM), x + tw / 2f, y + 180 * d, 14, Tokens.MEDIUM,
+                    green ? Draw.mix(Tokens.OK, Tokens.TEXT, 0.3f) : Tokens.MUTED);
+            // Taste
+            kit.kbd(String.valueOf(i + 1), x + tw / 2f - 14 * d, y + th - 46 * d, 26 * d, false, hv);
+            // Freundschaftsanfragen
             if (i == 0 && !Friends.incoming().isEmpty()) {
                 String n = String.valueOf(Friends.incoming().size());
-                int bw = Math.max(12, font.width(n) + 6);
-                Ui.rect(g, x + TILE_W - bw - 6, y + 6, bw, 12, 6, Ui.RED);
-                Ui.centered(g, n, x + TILE_W - bw / 2 - 6, y + 8, 0xFFFFFFFF, false);
+                float bh = 24 * d, bw = Math.max(bh, kit.width(n, 12.5f, Tokens.SEMIBOLD) + 14 * d);
+                Draw.rect(g, x + tw - bw - 14 * d, y + 14 * d, bw, bh, bh / 2, Tokens.BAD);
+                kit.textCenter(n, x + tw - bw / 2 - 14 * d, y + 14 * d + bh / 2, 12.5f, Tokens.SEMIBOLD, 0xFFFFFFFF);
+                if (hv) kit.tooltip(n + (n.equals("1") ? " Freundschaftsanfrage" : " Freundschaftsanfragen"), x + tw / 2f, y + th + 10 * d);
             }
-            Ui.scaled(g, String.valueOf(i + 1), x + 6, y + 6, 0.75f, Ui.withAlpha(Ui.MUTED, 140), false);
         }
 
-        String hint = "Strg + Rechts-Shift öffnet direkt die Mods";
-        Ui.scaled(g, hint, vw / 2f - font.width(hint) * 0.4f, ty + TILE_H + 18, 0.8f, Ui.withAlpha(Ui.MUTED, 200), false);
-    }
-
-    private static ItemStack[] icons;
-
-    private static ItemStack icon(int i) {
-        if (icons == null || icons[i] == null) icons = new ItemStack[]{new ItemStack(Items.skull, 1, 3), Module.stack(Items.comparator), Module.stack(Items.leather_chestplate)};
-        return icons[i];
+        // Hinweise
+        float hy = ty + th + 44 * d, fs = 13.5f;
+        String a = "Strg + Rechts-Shift öffnet direkt die Mods";
+        float kw = 0;
+        float aw = kit.width(a, fs, Tokens.MEDIUM);
+        String b = "Rechts-Shift schließt";
+        float bw2 = kit.width(b, fs, Tokens.MEDIUM);
+        float tot = aw + 28 * d + bw2;
+        float hx = vw / 2f - tot / 2f + kw;
+        kit.textMid(a, hx, hy, fs, Tokens.MEDIUM, 0x99FFFFFF, 0);
+        Draw.circle(g, hx + aw + 14 * d, hy, 2 * d, 0x66FFFFFF);
+        kit.textMid(b, hx + aw + 28 * d, hy, fs, Tokens.MEDIUM, 0x99FFFFFF, 0);
     }
 
     private void open(int i) {
@@ -134,39 +126,22 @@ public class HubScreen extends MyticScreen {
     }
 
     @Override
-    protected boolean click(Input.Click event, boolean doubleClick) {
-        if (event.button() != 0) return false;
-        for (int i = 0; i < 3; i++) {
-            if (Ui.inside(event.x(), event.y(), tx + i * (TILE_W + GAP), ty, TILE_W, TILE_H)) {
-                open(i);
-                return true;
-            }
+    protected boolean shortcut(int key, boolean ctrl) {
+        if (key == InputConstants.KEY_1 || key == InputConstants.KEY_2 || key == InputConstants.KEY_3) {
+            open(key - InputConstants.KEY_1);
+            return true;
         }
         return false;
     }
 
     @Override
-    protected boolean onKey(Input.Key event) {
-        int key = event.key();
-        if (key == InputConstants.KEY_1 || key == InputConstants.KEY_2 || key == InputConstants.KEY_3) {
-            open(key - InputConstants.KEY_1);
-            return true;
-        }
-        if (key == InputConstants.KEY_RSHIFT) {
-            onClose();
-            return true;
-        }
-        return false;
+    protected void back() {
+        onClose();
     }
 
     @Override
     public void onGuiClosed() {
         ModMenuScreen.blur(false);
         super.onGuiClosed();
-    }
-
-    @Override
-    public boolean doesGuiPauseGame() {
-        return false;
     }
 }
