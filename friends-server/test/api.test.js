@@ -197,7 +197,7 @@ test("Lebenszeichen der Mod: Spielzeit, Einladungen, Freischaltungen und verstec
   await s.call("POST", "/api/friends/accept", { uuid: ALICE }, b);
   // Launcher: nur Freundesliste (mit caps), keine Extras
   let res = await s.call("POST", "/api/presence", { place: "launcher" }, a);
-  assert.deepEqual(res.data.caps, ["presence2"]);
+  assert.deepEqual(res.data.caps, ["presence2", "sync1"]);
   assert.equal(res.data.games, undefined);
   assert.equal(res.data.owned, undefined);
   // Mod: Spielzeit mitschicken, Einladungen und Freischaltungen zurück

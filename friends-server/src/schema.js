@@ -40,6 +40,16 @@ CREATE TABLE IF NOT EXISTS cloud_settings (
   data TEXT NOT NULL,
   updated INTEGER NOT NULL
 );
+-- Einstellungs-Sync (Launcher): je Konto ein Stand (gzip+Base64), Versionsnummer, Prüfsumme des Inhalts und Zeitpunkt
+CREATE TABLE IF NOT EXISTS sync_blobs (
+  uuid TEXT PRIMARY KEY,
+  version INTEGER NOT NULL,
+  hash TEXT NOT NULL,
+  data TEXT NOT NULL,
+  size INTEGER NOT NULL,
+  device TEXT,
+  updated INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS shots (
   id TEXT PRIMARY KEY,
   uuid TEXT NOT NULL,
