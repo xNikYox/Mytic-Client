@@ -41,6 +41,10 @@ Minecraft 1.8.9, 1.21 – 1.21.11 und 26.x · Fabric & Forge · Windows
 
 **Design:** ein einheitliches Mytic-Design „Dunkles Glas“ mit Akzent in Mytic-Lila und der Schrift Inter für alle Mytic-Menüs – Hauptmenü, Mod-Menü, Einstellungen, HUD-Editor, Freunde, Kosmetik, Statistiken, Konten – und für die Minecraft-Menüs (abschaltbar). Unter Design → HUD-Stil lässt sich das HUD auf „Neon“ oder „Klassisch“ umstellen.
 
+**Minimap und Wegpunkte** (ab 1.21, nicht in 1.8.9)**:** Minimap im HUD (quadratisch oder rund, Größe, Zoom, mitdrehend oder genordet) mit Koordinaten und Biom. Sie zeigt nur die Oberfläche der geladenen Chunks – kein Spieler- oder Mob-Radar, keine Höhlen- oder Erzansicht. Wegpunkte mit Name, Farbe und Symbol (Taste **N** setzt einen an deiner Position, **U** öffnet die Liste), in der Welt mit Name, Entfernung und Lichtsäule, automatischer Todespunkt, getrennt je Server/Welt und Dimension. Teilen über einen Code (kopieren, im Chat schicken, beim Freund „Code einfügen“). Weltkarte (**M**) aus den selbst erkundeten, lokal gespeicherten Chunks. Abschaltbar je Server (Sperrliste); der Xaero-Code `§n§o§m§i§n§i§m§a§p` des Servers wird beachtet.
+
+**InvSee-Übersicht:** Beim `/invsee` (auch `/openinv`, `/inv`, `/isee` …) erscheint neben dem Inventar ein Glas-Panel mit den gewählten Items (Totems, Kristalle, verzauberte Goldäpfel …) und der Rüstung samt farbiger Haltbarkeit und Schutzart (Prot/Blast/Fire/Proj). Dazu ein HUD mit dem letzten `/invsee` (im HUD-Editor verschiebbar) und Taste **I**, die das letzte `/invsee` unsichtbar wiederholt. Items wählst du im Mod-Menü mit Suche aus. Auch in 1.8.9 (dort z. B. Goldäpfel und Wurftränke der Heilung statt Totems). Basiert auf [InvSee Summary](https://github.com/xNikYox/invsee-summary) von Noah (MIT-Lizenz).
+
 **Konten im Spiel:** Im Hauptmenü oben rechts auf den Namen klicken: alle Konten aus dem Launcher mit Skin-Kopf und Gültigkeit der Anmeldung. Wechseln, Konto hinzufügen (Microsoft-Anmeldung im Launcher-Fenster), Entfernen und **Neu einloggen**: erneuert die Anmeldung des gewählten Kontos und übernimmt sie sofort im Spiel – ist sie ganz abgelaufen, öffnet der Launcher die Microsoft-Anmeldung.
 
 Das Mod-Menü öffnest du mit **Rechts-Shift**. Es hat Suche, Kategorien, Mod-Karten mit Icons und eigene Einstellungen für jeden Mod. Dort findest du auch den **HUD-Editor**:
@@ -50,7 +54,7 @@ Das Mod-Menü öffnest du mit **Rechts-Shift**. Es hat Suche, Kategorien, Mod-Ka
 
 | Kategorie | Mods |
 |---|---|
-| **HUD** | FPS, CPS, Ping, Keystrokes, Rüstung, Tränke, Koordinaten, Richtung, Uhrzeit, Tempo, Arbeitsspeicher, Server-IP, Biom, Spielzeit, Combo, Reach, Session, Item-Zähler, Target-HUD, Wasserzeichen |
+| **HUD** | FPS, CPS, Ping, Keystrokes, Rüstung, Tränke, Koordinaten, Richtung, Uhrzeit, Tempo, Arbeitsspeicher, Server-IP, Biom, Spielzeit, Combo, Reach, Session, Item-Zähler, Target-HUD, Wasserzeichen, Minimap, InvSee-Übersicht |
 | **Mechanik** | Zoom (C, Mausrad), Freelook (Alt), Toggle Sprint, Toggle Sneak |
 | **Visuell** | Crosshair, Fullbright, Time Changer, Klares Wetter, No Hurt Cam, Scoreboard, Bossbar ausblenden |
 | **Client** | Design (Akzentfarbe, Mytic-Hauptmenü, Menü-Hintergrund) |
@@ -143,6 +147,10 @@ Es gibt keine eigenen Server, kein Tracking und keine Werbung. Anmeldedaten blei
 ## Fair Play
 
 Der Mytic Client enthält ausschließlich Komfort- und Anzeige-Mods, wie sie auch Lunar oder Badlion anbieten, und keine Cheats. Einige Server verbieten bestimmte Mods trotzdem. **Freelook** ist zum Beispiel auf manchen Servern nicht erlaubt. Prüfe im Zweifel die Regeln des Servers.
+
+## Lizenzen
+
+Die InvSee-Übersicht basiert auf „InvSee Summary“ von Noah (MIT-Lizenz); der Lizenztext liegt in der Mod unter `assets/myticclient/licenses/InvSee-Summary-MIT.txt` und steht im Spiel unter Einstellungen → Über. Schrift: Inter (SIL Open Font License). Schachfiguren: „cburnett“ von Colin M.L. Burnett (BSD-Lizenz).
 
 ## Hinweis
 
