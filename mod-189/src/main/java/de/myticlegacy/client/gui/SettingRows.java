@@ -5,6 +5,8 @@ import de.myticlegacy.client.gui.ui.ColorField;
 import de.myticlegacy.client.gui.ui.Draw;
 import de.myticlegacy.client.gui.ui.Kit;
 import de.myticlegacy.client.gui.ui.Tokens;
+import de.myticlegacy.client.gui.ui.Widgets;
+import de.myticlegacy.client.setting.ActionSetting;
 import de.myticlegacy.client.setting.BoolSetting;
 import de.myticlegacy.client.setting.ColorSetting;
 import de.myticlegacy.client.setting.ModeSetting;
@@ -45,15 +47,16 @@ public final class SettingRows {
         if (s instanceof ColorSetting) return 44 + ColorField.HEIGHT + 16;
         if (s instanceof TextSetting) return 44 + 40 + 16;
         if (s instanceof ModeSetting) return 64;
+        if (s instanceof ActionSetting) return 62;
         return 56;
     }
 
     /** Zeile im Detailbereich zeichnen (y = Oberkante, w = Breite in Einheiten) */
     public void stacked(Kit kit, final Setting<?> s, float x, float y, float w) {
         float d = kit.d;
-        String id = "set:" + s.module.id + "." + s.key;
+        String id = "set:" + s.path();
         float h = stackedHeight(s) * d;
-        if (s instanceof BoolSetting || s instanceof ModeSetting) {
+        if (s instanceof BoolSetting || s instanceof ModeSetting || s instanceof ActionSetting) {
             float cy = y + h / 2;
             float ctlW = control(kit, s, id, x, y, w, h, true);
             kit.textMid(s.label, x, cy, 15, Tokens.MEDIUM, Tokens.TEXT, w - ctlW - 16 * d);
@@ -93,7 +96,7 @@ public final class SettingRows {
     /** Optionszeile: Titel/Beschreibung links, Element rechts (breite Elemente 380) */
     public void row(Kit kit, Setting<?> s, String title, String desc, float x, float y, float w) {
         float d = kit.d;
-        String id = "opt:" + s.module.id + "." + s.key;
+        String id = "opt:" + s.path();
         float h = rowHeight(s) * d;
         float pad = 22 * d;
         float ctlW = control(kit, s, id, x + pad, y, w - 2 * pad, h, false);
@@ -140,6 +143,19 @@ public final class SettingRows {
             });
             return dw;
         }
+        if (s instanceof ActionSetting) {
+            final ActionSetting a = (ActionSetting) s;
+            float bh = 38 * d;
+            String label = a.button();
+            float bw = kit.buttonWidth(label, null, bh);
+            kit.button(id, right - bw, y + h / 2 - bh / 2, bw, bh, label, null, Widgets.SECONDARY, new Runnable() {
+                public void run() {
+                    a.run();
+                    save();
+                }
+            });
+            return bw;
+        }
         float cw = Math.min(380 * d, w * 0.5f);
         if (s instanceof SliderSetting) {
             SliderSetting sl = (SliderSetting) s;
@@ -175,7 +191,7 @@ public final class SettingRows {
     private void text(Kit kit, String id, final TextSetting ts, float x, float y, float w) {
         Kit.Field f = texts.get(ts);
         if (f == null) {
-            f = new Kit.Field(TextSetting.MAX);
+            f = new Kit.Field(ts.max);
             f.text = ts.get();
             final Kit.Field ff = f;
             final Kit k = kit;

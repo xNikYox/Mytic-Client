@@ -12,6 +12,7 @@
     "ItemAmountMixin",
     "ChatComponentAccessor",
     "ChatComponentMixin",
+    "ChatScreenAccessor",
     "PlayerNameMixin",
     "TabNameMixin",
     "F3Mixin",

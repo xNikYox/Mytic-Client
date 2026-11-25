@@ -274,7 +274,8 @@ public class ModMenuScreen extends DesignScreen {
         float foot = 76 * d;
         float ly = py + ph + 14 * d, lh = y + h - foot - ly;
         float descH = 0;
-        List<Setting<?>> list = m.settings;
+        List<Setting<?>> list = new ArrayList<Setting<?>>();
+        for (Setting<?> s : m.settings) if (s.visible()) list.add(s);
         float content = 0;
         for (Setting<?> s : list) content += SettingRows.stackedHeight(s) * d;
         int descLines = Math.max(1, Math.min(3, (int) Math.ceil(kit.width(m.description, 14.5f, Tokens.MEDIUM) / pw) + 0));
@@ -344,6 +345,14 @@ public class ModMenuScreen extends DesignScreen {
             }
             Gfx.pop(g);
             kit.unclip();
+            return;
+        }
+        if (m instanceof de.myticlegacy.client.module.CrosshairModule) {
+            // Fadenkreuz in groß, so wie es eingestellt ist
+            de.myticlegacy.client.gui.ui.Crosshair.Spec spec = ((de.myticlegacy.client.module.CrosshairModule) m).spec();
+            int ext = de.myticlegacy.client.gui.ui.Crosshair.extent(spec);
+            int unit = Math.max(2, Math.min(Math.round(8 * d), (int) Math.floor((h - 40 * d) / (2 * ext + 1))));
+            de.myticlegacy.client.gui.ui.Crosshair.draw(g, Math.round(cx) - unit / 2, Math.round(y + h / 2f) - unit / 2, spec, spec.color, unit);
             return;
         }
         String label = m.name + (m.enabled() ? " aktiv" : " aus");

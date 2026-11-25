@@ -124,6 +124,7 @@ public class SettingsScreen extends DesignScreen {
             ui.rows.add(setting(t.menuBackground, "Menü-Hintergrund im Spiel", "Spielwelt hinter Mytic-Menüs unscharf oder abgedunkelt"));
             ui.rows.add(setting(t.menuSize, "Menügröße", "Wie viel vom Bildschirm Mytic-Fenster einnehmen"));
             ui.rows.add(setting(t.menuAnimations, "Animationen", "Weiche Übergänge und Bewegung in Menüs"));
+            ui.rows.add(setting(t.hudAnimations, "HUD-Animationen", "Weiche Übergänge im HUD, z. B. bei Keystrokes"));
             ui.rows.add(setting(t.vanillaMenus, "Minecraft-Menüs im Mytic-Design", "Einzelspieler, Mehrspieler, Optionen … passend gestaltet"));
             groups.get(0).add(ui);
             Group acc = new Group("Akzent & HUD");
@@ -133,16 +134,27 @@ public class SettingsScreen extends DesignScreen {
         }
         // Leistung
         Module boost = module("fpsboost"), bg = module("backgroundfps");
+        Group prof = new Group("Leistungsprofil");
+        prof.rows.add(new Row("Leistungsprofil", "Maximale FPS, Ausgewogen, Schön oder Eigenes – mit einem Klick") {
+            float height() {
+                return 212;
+            }
+
+            void draw(float x, float y, float w) {
+                profiles(x, y, w);
+            }
+        });
+        groups.get(1).add(prof);
         if (boost != null) {
             Group g = new Group("FPS-Boost");
             g.rows.add(toggleModule(boost, null, null));
-            for (Setting<?> s : boost.settings) g.rows.add(setting(s, null, null));
+            for (Setting<?> s : boost.settings) if (s.visible()) g.rows.add(setting(s, null, null));
             groups.get(1).add(g);
         }
         if (bg != null) {
             Group g = new Group("Im Hintergrund");
             g.rows.add(toggleModule(bg, null, null));
-            for (Setting<?> s : bg.settings) g.rows.add(setting(s, null, null));
+            for (Setting<?> s : bg.settings) if (s.visible()) g.rows.add(setting(s, null, null));
             groups.get(1).add(g);
         }
         // Steuerung
@@ -215,7 +227,7 @@ public class SettingsScreen extends DesignScreen {
         if (friends != null) {
             Group p = new Group("Privatsphäre");
             p.rows.add(toggleModule(friends, "Online-Status zeigen", "Freunde sehen, wann du online bist"));
-            for (Setting<?> s : friends.settings) p.rows.add(setting(s, null, null));
+            for (Setting<?> s : friends.settings) if (s.visible()) p.rows.add(setting(s, null, null));
             groups.get(3).add(p);
         }
         Module cloud = module("cloudsync");
@@ -225,6 +237,38 @@ public class SettingsScreen extends DesignScreen {
             groups.get(3).add(c);
         }
         // Über: eigener Inhalt (about())
+    }
+
+    /** Vier Profil-Karten (Leistung): aktives Profil mit Akzent-Rand und Abzeichen */
+    private void profiles(float x, float y, float w) {
+        float pad = 22 * d, gap = 12 * d, top = y + 20 * d;
+        int n = de.myticlegacy.client.module.PerfProfiles.NAMES.length, active = de.myticlegacy.client.module.PerfProfiles.active();
+        float cw = (w - 2 * pad - (n - 1) * gap) / n, ch = 144 * d;
+        for (int i = 0; i < n; i++) {
+            final int idx = i;
+            float cx = x + pad + i * (cw + gap);
+            String id = "perf" + i;
+            boolean hv = kit.hit(id, cx, top, cw, ch, () -> {
+                de.myticlegacy.client.module.PerfProfiles.apply(idx);
+                de.myticlegacy.client.gui.ui.Toasts.ok(idx == de.myticlegacy.client.module.PerfProfiles.OWN
+                        ? "Eigene Einstellungen wiederhergestellt" : "Profil „" + de.myticlegacy.client.module.PerfProfiles.NAMES[idx] + "“ aktiv");
+            });
+            boolean on = i == active;
+            float hvT = de.myticlegacy.client.gui.ui.Motion.to(kit.key(id) + ":hv", hv, Tokens.MS_HOVER);
+            float onT = de.myticlegacy.client.gui.ui.Motion.to(kit.key(id) + ":on", on, 200);
+            int fill = Draw.mix(Draw.mix(Tokens.SURFACE, Tokens.SURFACE_HOVER, hvT), 0x1A9B5CFF, onT);
+            int line = Draw.mix(Draw.mix(Tokens.LINE, Tokens.LINE_STRONG, hvT), Tokens.ACC_LINE, onT);
+            Draw.glass(kit.g, cx, top, cw, ch, 14 * d, fill, line);
+            float is = 38 * d, ip = 16 * d;
+            Draw.rect(kit.g, cx + ip, top + ip, is, is, 10 * d, 0x12FFFFFF);
+            if (onT > 0.01f) Draw.gradient(kit.g, cx + ip, top + ip, is, is, 10 * d, Draw.alpha(0x739B5CFF, onT), Draw.alpha(0x59EC5FBF, onT));
+            Icons.draw(kit.g, de.myticlegacy.client.module.PerfProfiles.ICONS[i], cx + ip + 10 * d, top + ip + 10 * d, 18 * d, on ? 0xFFFFFFFF : Tokens.MUTED);
+            if (on) kit.badge("Aktiv", "check", cx + cw - ip - kit.width("Aktiv", 12.5f, Tokens.SEMIBOLD) - 36 * d, top + ip + 7 * d, Tokens.OK);
+            kit.textMid(de.myticlegacy.client.module.PerfProfiles.NAMES[i], cx + ip, top + ip + is + 22 * d, 16, Tokens.SEMIBOLD, Tokens.TEXT, cw - 2 * ip);
+            kit.paragraph(de.myticlegacy.client.module.PerfProfiles.DESCS[i], cx + ip, top + ip + is + 38 * d, cw - 2 * ip, 13, Tokens.MEDIUM, Tokens.MUTED, 18, 2);
+        }
+        kit.textMid("Vor dem ersten Profil werden deine Werte gemerkt – „Eigenes“ stellt sie wieder her.", x + pad, top + ch + 24 * d, 13,
+                Tokens.MEDIUM, Tokens.SUBTLE, w - 2 * pad);
     }
 
     private float kbdWidth(String text, float h) {

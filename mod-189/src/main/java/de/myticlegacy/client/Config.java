@@ -45,6 +45,9 @@ public final class Config {
     public String wings;
     /** Grafik-Optionen vor dem Einschalten von FPS-Boost (Name → Wert als Text), werden beim Ausschalten zurückgesetzt. */
     public Map<String, String> savedOptions = new LinkedHashMap<String, String>();
+    /** Leistungsprofil (1.8.9, eigene Felder, weil sich die Datei mit den neuen Versionen teilt; null = Eigenes) und die eigenen Werte davor (Name → Wert als Text) */
+    public String perfProfile189;
+    public Map<String, String> perfSaved189 = new LinkedHashMap<String, String>();
 
     static File configDir;
 
@@ -64,6 +67,7 @@ public final class Config {
                     if (config.positions == null) config.positions = new LinkedHashMap<String, int[]>();
                     if (config.settings == null) config.settings = new LinkedHashMap<String, Object>();
                     if (config.savedOptions == null) config.savedOptions = new LinkedHashMap<String, String>();
+                    if (config.perfSaved189 == null) config.perfSaved189 = new LinkedHashMap<String, String>();
                     return config;
                 }
             }

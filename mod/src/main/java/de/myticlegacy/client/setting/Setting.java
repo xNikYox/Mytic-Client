@@ -47,6 +47,11 @@ public abstract class Setting<T> {
         return null;
     }
 
+    /** Im Mod-Menü bzw. in den Einstellungen als Zeile zeigen? (false = nur intern gespeichert, z. B. Pixelbild) */
+    public boolean visible() {
+        return true;
+    }
+
     public void reset() {
         MyticClient.config().settings.remove(path());
     }

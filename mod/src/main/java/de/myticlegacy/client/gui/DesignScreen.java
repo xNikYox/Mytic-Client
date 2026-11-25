@@ -72,6 +72,7 @@ public abstract class DesignScreen extends MyticScreen {
     @Override
     protected final void draw(GuiGraphics g, int mouseX, int mouseY, float delta) {
         d = factor();
+        de.myticlegacy.client.gui.ui.Motion.enabled = animate();
         kit.begin(g, vw, vh, d, mouseX, mouseY);
         frame(g);
         kit.end();

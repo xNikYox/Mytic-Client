@@ -43,6 +43,14 @@ Minecraft 1.8.9, 1.21 – 1.21.11 und 26.x · Fabric & Forge · Windows
 
 **Konten im Spiel:** Im Hauptmenü oben rechts auf den Namen klicken: alle Konten aus dem Launcher mit Skin-Kopf und Gültigkeit der Anmeldung. Wechseln, Konto hinzufügen (Microsoft-Anmeldung im Launcher-Fenster), Entfernen und **Neu einloggen**: erneuert die Anmeldung des gewählten Kontos und übernimmt sie sofort im Spiel – ist sie ganz abgelaufen, öffnet der Launcher die Microsoft-Anmeldung.
 
+**Fadenkreuz-Editor** (Mod „Fadenkreuz“, Visuell → „Editor öffnen“): ersetzt das Minecraft-Fadenkreuz. Formen Kreuz, Plus mit Lücke, Punkt, Kreis, T, Pfeil und **Pixelbild** (eigenes 15 × 15-Raster zum Malen, mit Leeren/Umkehren/Spiegeln/Symmetrisch); Länge, Dicke, Abstand, Umrandung, Farbe, Deckkraft, Mittelpunkt. Andere Farbe auf Spielern (optional Mobs) und kurzes Aufleuchten bei Treffern; in F5 und als Zuschauer ausblendbar. Live-Vorschau (groß und in Originalgröße, normal/auf Ziel/Treffer), 8 Vorlagen. **Teilen:** „Code kopieren“ legt `MYTIC-XH:…` in die Zwischenablage, „Code einfügen“ übernimmt den Code eines Freundes – gleich in allen Versionen.
+
+**Chat+** (Mod „Chat+“, Client): Zeitstempel in vier Formaten, Kompakt-Chat (gleiche Nachrichten als „(×3)“), längerer Verlauf (bis 2000 Zeilen), **Tabs** über dem Eingabefeld – Alle, Privat (/msg und übliche Server-Formate wie `[Name -> mir]`, `From Name:`), Mytic (Freunde, Party, Mytic-Hinweise), Server (Systemnachrichten) und eigene Tabs (`Name: Wort, Wort | Name: re:Regex`) mit Zahl ungelesener Nachrichten. **Suche** über die Lupe oder Strg + F (das Eingabefeld wird zum Suchfeld, Enter beendet). Hervorheben des eigenen Namens und weiterer Wörter mit Ton und optionalem Hinweis oben rechts, Spam- und Wortfilter, **Strg + Klick** kopiert eine Nachricht. Alles nur in der Anzeige: gesendete Nachrichten und Chat-Signaturen (1.19+) bleiben unverändert.
+
+**Leistungsprofile** (Client-Einstellungen → Leistung oder Mod „Leistungsprofil“): ein Klick auf **Maximale FPS**, **Ausgewogen** oder **Schön** stellt Sichtweite, Simulationsdistanz, Partikel, Schatten, Wolken, Grafik, Biom-Übergang, Bildrate und VSync sowie die Mytic-Effekte (Menü-Animationen, Hauptmenü-Hintergrund, Unschärfe, HUD-Animationen, FPS-Boost) ein. Vor dem ersten Profil werden die eigenen Werte gemerkt – **Eigenes** stellt sie wieder her.
+
+*1.8.9:* Fadenkreuz-Editor vollständig. Chat+ mit Zeitstempeln, Kompakt-Chat, Tabs, Suche, Hervorheben, Filter und Strg + Klick; der Verlauf bleibt bei 100 Zeilen. Leistungsprofile ohne Simulationsdistanz und Biom-Übergang (gibt es in 1.8.9 nicht).
+
 Das Mod-Menü öffnest du mit **Rechts-Shift**. Es hat Suche, Kategorien, Mod-Karten mit Icons und eigene Einstellungen für jeden Mod. Dort findest du auch den **HUD-Editor**:
 - Anzeigen mit der Maus verschieben, mit Hilfslinien und Einrasten.
 - Mit dem Mausrad die Größe ändern.
@@ -52,8 +60,8 @@ Das Mod-Menü öffnest du mit **Rechts-Shift**. Es hat Suche, Kategorien, Mod-Ka
 |---|---|
 | **HUD** | FPS, CPS, Ping, Keystrokes, Rüstung, Tränke, Koordinaten, Richtung, Uhrzeit, Tempo, Arbeitsspeicher, Server-IP, Biom, Spielzeit, Combo, Reach, Session, Item-Zähler, Target-HUD, Wasserzeichen |
 | **Mechanik** | Zoom (C, Mausrad), Freelook (Alt), Toggle Sprint, Toggle Sneak |
-| **Visuell** | Crosshair, Fullbright, Time Changer, Klares Wetter, No Hurt Cam, Scoreboard, Bossbar ausblenden |
-| **Client** | Design (Akzentfarbe, Mytic-Hauptmenü, Menü-Hintergrund) |
+| **Visuell** | Fadenkreuz (Editor), Leistungsprofil, Fullbright, Time Changer, Klares Wetter, No Hurt Cam, Scoreboard, Bossbar ausblenden |
+| **Client** | Design (Akzentfarbe, Mytic-Hauptmenü, Menü-Hintergrund), Chat+ |
 
 Jede HUD-Anzeige hat diese Einstellungen: Größe, Hintergrund, Deckkraft, abgerundete Ecken, Textfarbe und Schatten. Viele haben zusätzlich eigene Optionen.
 

@@ -45,6 +45,9 @@ public final class Config {
     public String wings;
     /** Grafik-Optionen vor dem Einschalten von FPS-Boost (Name → Wert als Text), werden beim Ausschalten zurückgesetzt. */
     public Map<String, String> savedOptions = new LinkedHashMap<>();
+    /** Leistungsprofil („Maximale FPS“, „Ausgewogen“, „Schön“; null = Eigenes) und die eigenen Werte davor (Name → Wert als Text) */
+    public String perfProfile;
+    public Map<String, String> perfSaved = new LinkedHashMap<String, String>();
     /** HUD-Profile (Name → Positionen, an/aus und Einstellungen der HUD-Module) und das aktive Profil */
     public Map<String, HudProfile> hudProfiles = new LinkedHashMap<>();
     public String hudProfile;
@@ -116,6 +119,7 @@ public final class Config {
                     if (config.positions == null) config.positions = new LinkedHashMap<>();
                     if (config.settings == null) config.settings = new LinkedHashMap<>();
                     if (config.savedOptions == null) config.savedOptions = new LinkedHashMap<>();
+                    if (config.perfSaved == null) config.perfSaved = new LinkedHashMap<String, String>();
                     if (config.hudProfiles == null) config.hudProfiles = new LinkedHashMap<>();
                     if (config.serverProfiles == null) config.serverProfiles = new LinkedHashMap<>();
                     config.hudProfiles.values().removeIf(p -> p == null);
