@@ -34,9 +34,9 @@ import java.util.List;
 public class MyticTitleScreen extends MyticScreen {
     /** Neuigkeiten der installierten Version (Pille unten, wechselt alle 6 Sekunden) */
     private static final String[][] NEWS = {
-            {"", "Neues Design: Hauptmenü im Mytic-Look"},
+            {"", "Neues Design: alle Mytic-Menüs im Mytic-Look"},
             {"Funktion", "Mytic Styles: Texturpakete mischen – Taste B"},
-            {"Tipp", "Oben rechts auf deinen Namen klicken: Konto wechseln"},
+            {"Tipp", "Oben rechts auf deinen Namen: Konto wechseln oder neu einloggen"},
     };
     private static final String[] SPLASHES = {
             "Jetzt mit Mytic Styles!", "Pixel für Pixel!", "Glatte Rundungen!", "Lila ist das neue Grün!",

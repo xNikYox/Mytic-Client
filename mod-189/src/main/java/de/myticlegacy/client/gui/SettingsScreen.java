@@ -189,7 +189,7 @@ public class SettingsScreen extends DesignScreen {
         groups.get(2).add(hints);
         // Konto
         Group acc = new Group("Konto");
-        acc.rows.add(new Row("Konto", "Konto wechseln") {
+        acc.rows.add(new Row("Konto", "Konten verwalten") {
             float height() {
                 return 80;
             }
@@ -201,7 +201,12 @@ public class SettingsScreen extends DesignScreen {
                 kit.head(me == null ? null : me.head, name, x + pad, y + (h - hs) / 2f, hs, Tokens.OK, false);
                 float tx = x + pad + hs + 14 * d;
                 kit.textMid(name, tx, y + h / 2 - 10 * d, 16, Tokens.SEMIBOLD, Tokens.TEXT, 0);
-                kit.textMid("Konten wechselst du in 1.8.9 im Mytic Launcher", tx, y + h / 2 + 12 * d, 13, Tokens.MEDIUM, Tokens.MUTED, w - (tx - x) - pad);
+                boolean avail = de.myticlegacy.client.account.Accounts.available();
+                kit.textMid(avail ? "Im Spiel angemeldet · Konten aus dem Mytic Launcher" : "Konten wechseln nur über den Mytic Launcher",
+                        tx, y + h / 2 + 12 * d, 13, Tokens.MEDIUM, Tokens.MUTED, w - (tx - x) - 220 * d);
+                float bh = 38 * d, bw = kit.buttonWidth("Konten verwalten", "users", bh);
+                kit.button("accounts", x + w - pad - bw, y + (h - bh) / 2f, bw, bh, "Konten verwalten", "users", de.myticlegacy.client.gui.ui.Widgets.SECONDARY,
+                        avail ? () -> Compat.setScreen(new de.myticlegacy.client.account.AccountScreen(SettingsScreen.this)) : null);
             }
         });
         groups.get(3).add(acc);

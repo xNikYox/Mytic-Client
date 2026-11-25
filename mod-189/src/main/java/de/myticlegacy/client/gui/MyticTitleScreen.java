@@ -32,7 +32,7 @@ import java.util.List;
 public class MyticTitleScreen extends MyticScreen {
     /** Neuigkeiten der installierten Version (Pille unten, wechselt alle 6 Sekunden) */
     private static final String[][] NEWS = {
-            {"", "Neues Design: Hauptmenü im Mytic-Look"},
+            {"", "Neues Design: alle Mytic-Menüs im Mytic-Look"},
             {"Funktion", "Mytic Styles: Texturpakete mischen – Taste B"},
             {"Tipp", "Rechts-Shift öffnet das Mytic-Menü auch im Spiel"},
     };
