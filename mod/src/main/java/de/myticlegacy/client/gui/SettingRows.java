@@ -9,6 +9,7 @@ import de.myticlegacy.client.gui.ui.Widgets;
 import de.myticlegacy.client.setting.ActionSetting;
 import de.myticlegacy.client.setting.BoolSetting;
 import de.myticlegacy.client.setting.ColorSetting;
+import de.myticlegacy.client.setting.CustomSetting;
 import de.myticlegacy.client.setting.ModeSetting;
 import de.myticlegacy.client.setting.Setting;
 import de.myticlegacy.client.setting.SliderSetting;
@@ -43,6 +44,7 @@ public final class SettingRows {
 
     /** Höhe einer Zeile (Design-Pixel) im Detailbereich */
     public static float stackedHeight(Setting<?> s) {
+        if (s instanceof CustomSetting) return ((CustomSetting<?>) s).height();
         if (s instanceof SliderSetting) return 84;
         if (s instanceof ColorSetting) return 44 + ColorField.HEIGHT + 16;
         if (s instanceof TextSetting) return 44 + 40 + 16;
@@ -56,6 +58,10 @@ public final class SettingRows {
         float d = kit.d;
         String id = "set:" + s.path();
         float h = stackedHeight(s) * d;
+        if (s instanceof CustomSetting) {
+            ((CustomSetting<?>) s).draw(kit, x, y, w);
+            return;
+        }
         if (s instanceof BoolSetting || s instanceof ModeSetting || s instanceof ActionSetting) {
             float cy = y + h / 2;
             float ctlW = control(kit, s, id, x, y, w, h, true);
@@ -89,6 +95,7 @@ public final class SettingRows {
 
     /** Höhe einer Optionszeile (Design-Pixel) */
     public static float rowHeight(Setting<?> s) {
+        if (s instanceof CustomSetting) return ((CustomSetting<?>) s).height() + 16;
         if (s instanceof ColorSetting) return Math.max(76, 36 + ColorField.HEIGHT);
         return 76;
     }
@@ -98,6 +105,10 @@ public final class SettingRows {
         float d = kit.d;
         String id = "opt:" + s.path();
         float h = rowHeight(s) * d;
+        if (s instanceof CustomSetting) {
+            ((CustomSetting<?>) s).draw(kit, x + 22 * d, y + 8 * d, w - 44 * d);
+            return;
+        }
         float pad = 22 * d;
         float ctlW = control(kit, s, id, x + pad, y, w - 2 * pad, h, false);
         float tw = w - 2 * pad - ctlW - 24 * d;
