@@ -191,7 +191,7 @@ public final class SettingRows {
     private void text(Kit kit, String id, final TextSetting ts, float x, float y, float w) {
         Kit.Field f = texts.get(ts);
         if (f == null) {
-            f = new Kit.Field(TextSetting.MAX);
+            f = new Kit.Field(ts.max);
             f.text = ts.get();
             final Kit.Field ff = f;
             final Kit k = kit;

@@ -21,7 +21,7 @@ public abstract class Setting<T> {
         module.settings.add(this);
     }
 
-    protected String path() {
+    public String path() {
         return path;
     }
 
@@ -37,6 +37,11 @@ public abstract class Setting<T> {
 
     public void set(T value) {
         store(value);
+    }
+
+    /** Im Mod-Menü bzw. in den Einstellungen als Zeile zeigen? (false = nur intern gespeichert, z. B. Pixelbild) */
+    public boolean visible() {
+        return true;
     }
 
     public void reset() {

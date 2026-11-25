@@ -50,6 +50,11 @@ public final class CombatTracker {
         if (System.currentTimeMillis() - lastHit > COMBO_TIMEOUT) combo = 0;
     }
 
+    /** Zeitpunkt (ms) des letzten eigenen Treffers, 0 = noch keiner */
+    public static long lastHitTime() {
+        return lastHit;
+    }
+
     public static int combo() {
         return combo;
     }

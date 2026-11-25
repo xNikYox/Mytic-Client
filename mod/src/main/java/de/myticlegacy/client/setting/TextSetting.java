@@ -8,10 +8,17 @@ import java.util.function.Supplier;
 public class TextSetting extends Setting<String> {
     public static final int MAX = 100;
     private final Supplier<String> hint;
+    /** Höchstlänge dieses Felds (Standard {@link #MAX}) */
+    public final int max;
 
     public TextSetting(Module module, String key, String label, String defaultValue, Supplier<String> hint) {
+        this(module, key, label, defaultValue, hint, MAX);
+    }
+
+    public TextSetting(Module module, String key, String label, String defaultValue, Supplier<String> hint, int max) {
         super(module, key, label, defaultValue);
         this.hint = hint;
+        this.max = max;
     }
 
     @Override
@@ -30,8 +37,8 @@ public class TextSetting extends Setting<String> {
         return value instanceof String ? clip((String) value) : null;
     }
 
-    private static String clip(String value) {
-        return value.length() > MAX ? value.substring(0, MAX) : value;
+    private String clip(String value) {
+        return value.length() > max ? value.substring(0, max) : value;
     }
 
     public String hint() {
