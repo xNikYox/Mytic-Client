@@ -462,6 +462,60 @@ $("jvm-args").addEventListener("change", () => save({ jvmArgs: $("jvm-args").val
 $("server").addEventListener("change", () => save({ server: $("server").value.trim() }));
 $("client-id").addEventListener("change", () => save({ customClientId: $("client-id").value.trim() }));
 $("open-dir").addEventListener("click", () => api.openGameDir());
+
+// ---------------------------------------------------------------------------------------------- Einstellungs-Sync
+
+const SYNC_REASONS = { lokal: "Stand dieses PCs vor dem Herunterladen", cloud: "Stand der Cloud vor dem Überschreiben", wiederherstellen: "Stand vor dem Wiederherstellen" };
+
+function syncTime(t) {
+  return t ? new Date(t).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "–";
+}
+
+function renderSync(status) {
+  if (!status) return;
+  $("cloud-sync").checked = status.enabled;
+  for (const id of ["cloud-sync", "sync-up", "sync-down"]) $(id).disabled = !status.available;
+  const st = status.state;
+  $("sync-state").textContent = !status.available ? "Nur mit Freundesliste verfügbar"
+    : st ? `Zuletzt abgeglichen ${syncTime(st.at)} · Stand ${st.version || 0}` : "Noch nicht abgeglichen";
+  const list = status.backups || [];
+  $("sync-backups").replaceChildren(...(list.length ? list.map((b) => {
+    const row = el("div", "backup");
+    const text = el("div");
+    text.append(el("b", "", syncTime(b.at)), el("small", "", ` · ${SYNC_REASONS[b.reason] || b.reason}`));
+    const btn = el("button", "ghost", "Wiederherstellen");
+    btn.addEventListener("click", () => syncAction(() => api.syncRestore(b.id), "Sicherung wiederhergestellt – wird beim nächsten Abgleich hochgeladen"));
+    row.append(text, btn);
+    return row;
+  }) : [el("small", "", "Noch keine Sicherungen. Vor jedem Überschreiben wird der alte Stand hier gesichert (die letzten 10).")]));
+}
+
+async function syncAction(run, done) {
+  const buttons = ["sync-up", "sync-down"].map($);
+  buttons.forEach((b) => (b.disabled = true));
+  try {
+    const { status } = await run();
+    renderSync(status);
+    toast(done);
+  } catch (error) {
+    toast(errorText(error), true);
+    renderSync(await api.syncStatus().catch(() => null));
+  } finally {
+    buttons.forEach((b) => (b.disabled = false));
+  }
+}
+
+$("cloud-sync").addEventListener("change", async () => {
+  await save({ cloudSync: $("cloud-sync").checked });
+  renderSync(await api.syncStatus());
+});
+$("sync-up").addEventListener("click", () => syncAction(api.syncUpload, "Einstellungen hochgeladen"));
+$("sync-down").addEventListener("click", () => syncAction(api.syncDownload, "Einstellungen aus der Cloud übernommen (alter Stand gesichert)"));
+$("sync-backups-toggle").addEventListener("click", async () => {
+  $("sync-backups").hidden = !$("sync-backups").hidden;
+  if (!$("sync-backups").hidden) renderSync(await api.syncStatus());
+});
+api.syncStatus().then(renderSync).catch(() => {});
 $("verify").addEventListener("click", async () => {
   await save({ verifyNext: true });
   toast("Alle Dateien werden beim nächsten Start geprüft und repariert.");

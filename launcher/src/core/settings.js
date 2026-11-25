@@ -67,6 +67,7 @@ const SCHEMA = {
   customClientId: clientId,
   verifyNext: bool,
   launcherTheme: oneOf(THEMES),
+  cloudSync: bool,
 };
 
 /** Liefert einen geprüften Patch; unbekannte Schlüssel oder falsche Werte → Fehler. */

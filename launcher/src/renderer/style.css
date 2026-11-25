@@ -252,6 +252,10 @@ select option { background: #15101f; }
 .row b { display: block; font-weight: 600; }
 .row small { color: var(--muted); word-break: break-all; }
 .row .switch, .row > .ghost { justify-self: end; }
+.sync-buttons { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.sync-backups { padding: 0 0 14px; }
+.sync-backups .backup { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--glass-line); }
+.sync-backups .backup small { color: var(--muted); }
 .range { display: flex; align-items: center; gap: 12px; }
 .range input { flex: 1; accent-color: var(--accent); }
 .range output { min-width: 62px; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }

@@ -21,6 +21,7 @@ const profiles = require("./core/profiles");
 const { sanitizePatch } = require("./core/settings");
 const { DiscordPresence } = require("./core/discord");
 const { createBridge } = require("./core/gamebridge");
+const { CloudSync } = require("./core/cloudsync");
 const { GameStatusHub } = require("./core/gamestatus");
 const { createSkins, checkSkinPng } = require("./core/skins");
 const diagnose = require("./core/diagnose");
@@ -275,6 +276,7 @@ function defaultSettings() {
     recentServers: [],
     verifyNext: false,
     discordPresence: true,
+    cloudSync: false,
   };
 }
 
@@ -812,6 +814,8 @@ ipc.handle("friends:get", async () => {
   if (!friends.configured) return { configured: false };
   const account = await activeAccount();
   const data = games.size ? await friends.call(account, "GET", "api/friends") : await friends.call(account, "POST", "api/presence", { place: "launcher" });
+  // Stand des Einstellungs-Syncs kommt mit dem Lebenszeichen – spart beim nächsten Spielstart die Abfrage
+  if (data.sync) syncHint = { uuid: account.uuid, ...data.sync, at: Date.now() };
   discordFromFriends(data);
   return { configured: true, ...data };
 });
@@ -830,6 +834,61 @@ ipc.handle("stats:get", async () => {
   const data = await friends.call(await activeAccount(), "GET", `api/stats?tz=${tzOffset()}`);
   return { configured: true, ...data };
 });
+
+// ------------------------------------------------------------------------------ Einstellungs-Sync
+
+/** Letzter Stand aus einem Lebenszeichen ({ uuid, hash, version, updatedAt, at }) */
+let syncHint = null;
+/** Konto, mit dem das laufende Spiel synchronisiert (sonst das gewählte Konto) */
+let syncAccount = null;
+const SYNC_HINT_MS = 5 * 60 * 1000;
+
+const cloudSync = new CloudSync({
+  configDir: path.join(DIRS.game, "config"),
+  dataDir: path.join(DIRS.base, "sync"),
+  call: async (method, p, data) => friends.call(syncAccount || (await activeAccount()), method, p, data),
+  uuid: () => (syncAccount ? syncAccount.uuid : accounts().selected || "-"),
+  device: os.hostname().slice(0, 40),
+  log: (line) => emit("log", line),
+});
+
+function syncReady() {
+  if (!friends.configured) throw new Error("Sync geht nur mit Freundesliste (Server nicht eingerichtet)");
+}
+
+async function syncStatus() {
+  const state = friends.configured ? cloudSync.state() : null;
+  return { available: friends.configured, enabled: settings().cloudSync === true, last: cloudSync.lastResult, state, backups: await cloudSync.backups(), running: games.size > 0 };
+}
+
+/** Herunterladen/Wiederherstellen aus dem Launcher nur ohne laufendes Spiel (das Spiel hat die Einstellungen geladen) */
+function syncNotWhilePlaying() {
+  if (games.size) throw new Error("Das Spiel läuft – im Spiel unter Rechts-Shift → Cloud-Sync herunterladen oder wiederherstellen");
+}
+
+ipc.handle("sync:status", () => syncStatus());
+ipc.handle("sync:upload", async () => (syncReady(), { result: await cloudSync.upload(), status: await syncStatus() }));
+ipc.handle("sync:download", async () => (syncReady(), syncNotWhilePlaying(), { result: await cloudSync.download(), status: await syncStatus() }));
+ipc.handle("sync:restore", async (e, id) => (syncNotWhilePlaying(), { result: await cloudSync.restore(String(id || "")), status: await syncStatus() }));
+
+/** Vor dem Start: abgleichen (höchstens 15 s; danach startet das Spiel mit dem lokalen Stand) */
+async function syncBeforeLaunch(account) {
+  syncAccount = account;
+  const hint = syncHint && syncHint.uuid === account.uuid && Date.now() - syncHint.at < SYNC_HINT_MS ? syncHint : null;
+  const deadline = Date.now() + 15000;
+  let timer;
+  try {
+    const result = await Promise.race([
+      cloudSync.sync({ hint, deadline }),
+      new Promise((resolve, reject) => (timer = setTimeout(() => reject(new Error("Zeit abgelaufen")), 15000))),
+    ]);
+    if (result.action !== "none") emit("log", `[Sync] ${result.action === "download" ? "Einstellungen aus der Cloud geladen" : "Einstellungen hochgeladen"} (${result.requests} Anfrage${result.requests === 1 ? "" : "n"})`);
+  } catch (error) {
+    emit("log", `[Sync] Abgleich vor dem Start fehlgeschlagen: ${error.message} – es gilt der Stand auf diesem PC`);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 // ------------------------------------------------------------------------------ Screenshots
 
@@ -1236,6 +1295,14 @@ const bridge = createBridge({
     emit("accounts", publicAccounts());
     return { ok: true };
   },
+  // Knöpfe im Spiel (Rechts-Shift → Cloud-Sync); nach Herunterladen/Wiederherstellen liest die Mod die Datei neu ein
+  sync: {
+    status: async () => ({ ...(await syncStatus()), backups: undefined }),
+    backups: async () => cloudSync.backups(),
+    upload: async () => (syncReady(), cloudSync.upload()),
+    download: async () => (syncReady(), cloudSync.download()),
+    restore: async (id) => cloudSync.restore(id),
+  },
   log: (line) => emit("log", line),
 });
 
@@ -1284,12 +1351,18 @@ ipc.handle("game:launch", async () => {
     const cosmeticsPack = await cosmetics.prepare();
     // Design des Launchers auch als Hintergrund des Mytic-Hauptmenüs
     const friendsInGame = await friendsLaunch(account);
+    // Einstellungs-Sync: vor dem ersten Spiel abgleichen (läuft schon eins, sind die Dateien in Benutzung)
+    const syncOn = current.cloudSync === true && Boolean(friendsInGame.env.MYTIC_FRIENDS_TOKEN);
+    if (syncOn && !games.size) {
+      emit("status", "Einstellungen synchronisieren …");
+      await syncBeforeLaunch(account);
+    }
     // Profilname für die Spielzeit pro Profil (die Mod meldet ihn mit)
     const statsProfile = statsProfileName(profile.name);
     // Status für Discord: die Mod schreibt Server/Version in diese Datei (statt Abfragen beim Friends-Server)
     const gameId = nextGameId++;
     const statusFile = gameStatus.fileFor(gameId);
-    const extraJvm = [...friendsInGame.jvm, `-Dmytic.status.file=${statusFile}`, ...(cosmeticsPack ? [`-Dmytic.cosmetics=${cosmeticsPack}`] : []), `-Dmytic.launcherTheme=${current.launcherTheme || "sunset"}`, `-Dmytic.profile=${statsProfile}`];
+    const extraJvm = [...friendsInGame.jvm, `-Dmytic.status.file=${statusFile}`, ...(cosmeticsPack ? [`-Dmytic.cosmetics=${cosmeticsPack}`] : []), `-Dmytic.launcherTheme=${current.launcherTheme || "sunset"}`, `-Dmytic.profile=${statsProfile}`, ...(syncOn ? ["-Dmytic.sync=launcher"] : [])];
     // weitere Instanz: Speicher erst bei Bedarf belegen; reicht der Arbeitsspeicher kaum, Hinweis in der Konsole
     const sharedMemory = games.size > 0;
     const memoryMb = Math.max(1024, Number(current.memoryMb) || 4096);
@@ -1338,6 +1411,12 @@ ipc.handle("game:launch", async () => {
           games.delete(gameId);
           gameStatus.remove(gameId);
           bridge.revoke(bridgeKey);
+          // letztes Spiel zu: Ausstehendes sofort hochladen
+          if (!games.size && cloudSync.watching) {
+            cloudSync.stop()
+              .catch((error) => emit("log", `[Sync] Hochladen beim Beenden fehlgeschlagen: ${error.message}`))
+              .finally(() => { if (!games.size) syncAccount = null; });
+          }
           if (!games.size) discordGame = null;
           updateDiscord();
           emit("game", { running: games.size > 0, count: games.size, code, ended: true, name: account.name });
@@ -1354,6 +1433,7 @@ ipc.handle("game:launch", async () => {
       throw error;
     }
     games.set(gameId, { child, profileId: profile.id, mcVersion: profile.mcVersion, account: account.name, bridgeKey });
+    if (syncOn) cloudSync.watch(); // lokal auf Änderungen schauen, gesammelt hochladen
     emit("game", { running: true, count: games.size, name: account.name });
     // Start für die Statistik melden – nebenbei, darf den Start nie aufhalten oder scheitern lassen
     if (friendsInGame.env.MYTIC_FRIENDS_TOKEN) {

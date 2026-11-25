@@ -338,6 +338,14 @@
           <div class="row"><div><b>Microsoft Client-ID</b><small>Leer lassen = eingebaute ID des Mytic Client</small></div>
             <input id="client-id" placeholder="eingebaute ID" spellcheck="false"></div>
         </section>
+        <section class="glass group" id="sync-group">
+          <h3>Cloud</h3>
+          <div class="row"><div><b>Einstellungen synchronisieren</b><small>Mod-Einstellungen, HUD-Layouts und -Profile, Fadenkreuz, Chat und Cosmetics-Auswahl mit deinem Konto auf allen PCs. Abgleich beim Spielstart, Upload nach Änderungen und beim Beenden.</small></div>
+            <label class="switch"><input type="checkbox" id="cloud-sync"><span></span></label></div>
+          <div class="row"><div><b>Stand</b><small id="sync-state">–</small></div>
+            <div class="sync-buttons"><button class="ghost" id="sync-up">Jetzt hochladen</button><button class="ghost" id="sync-down">Jetzt herunterladen</button><button class="ghost" id="sync-backups-toggle">Sicherungen</button></div></div>
+          <div class="sync-backups" id="sync-backups" hidden></div>
+        </section>
         <section class="glass group">
           <h3>Dateien</h3>
           <div class="row"><div><b>Spielordner</b><small id="game-dir"></small></div>
