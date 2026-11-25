@@ -1,839 +1,386 @@
 package de.myticlegacy.client.gui;
 
-import de.myticlegacy.client.compat.Gfx;
-import de.myticlegacy.client.compat.Compat;
-import com.mojang.blaze3d.platform.InputConstants;
 import de.myticlegacy.client.MyticClient;
+import de.myticlegacy.client.compat.Compat;
+import de.myticlegacy.client.compat.Gfx;
+import de.myticlegacy.client.gui.ui.Brand;
+import de.myticlegacy.client.gui.ui.Draw;
+import de.myticlegacy.client.gui.ui.Icons;
+import de.myticlegacy.client.gui.ui.Kit;
+import de.myticlegacy.client.gui.ui.Motion;
+import de.myticlegacy.client.gui.ui.Tokens;
+import de.myticlegacy.client.gui.ui.Widgets;
 import de.myticlegacy.client.hud.HudModule;
 import de.myticlegacy.client.module.Category;
 import de.myticlegacy.client.module.Module;
-import de.myticlegacy.client.setting.BoolSetting;
-import de.myticlegacy.client.setting.ColorSetting;
-import de.myticlegacy.client.setting.ModeSetting;
 import de.myticlegacy.client.setting.Setting;
-import de.myticlegacy.client.setting.SliderSetting;
-import de.myticlegacy.client.setting.TextSetting;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.ItemStack;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
 /**
- * Mod-Menü im Stil von Lunar/NRC: kompaktes Panel, Kategorien mit Unterstrich, eigenes Suchfeld (einfach lostippen),
- * Mod-Karten mit großem Icon und An/Aus-Leiste, Einstellungen pro Mod.
+ * Mod-Menü im neuen Mytic-Design (wie die UI-Vorschau „Mod-Menü“): links Marke, Kategorien mit Anzahl,
+ * „HUD bearbeiten“ und Client-Einstellungen; rechts Suche (einfach lostippen), Filter Alle/Aktiv/Inaktiv und
+ * Mod-Kacheln mit Schalter. Ein Klick auf eine Kachel öffnet rechts den Detailbereich mit Live-Vorschau und allen
+ * Einstellungen des Mods.
  */
-public class ModMenuScreen extends MyticScreen {
-    /** Textfeld, das gerade bearbeitet wird (Auto Text). */
-    private TextSetting editingText;
-
-    /** Farbwähler, der sich unter einer Farb-Einstellung öffnet. */
-    private final ColorPicker picker = new ColorPicker();
-
-    private int rowH(Setting<?> setting) {
-        return ROW_H + (picker.setting() == setting ? ColorPicker.HEIGHT + 4 : 0);
-    }
-
-    private static final int CARD_H = 60;
-    /** Balken unten in der Karte (AKTIV/INAKTIV): Abstand vom unteren Rand und Höhe. */
-    private static final int BAR_OFF = 14;
-    private static final int BAR_H = 10;
-    private static final int GAP = 5;
-    private static final int ROW_H = 22;
-    private static final int HEADER = 34;
-    private static final int FOOTER = 28;
+public class ModMenuScreen extends DesignScreen {
+    private static final float WIN_W = 1600, WIN_H = 880, SIDE = 264, DETAIL = 460, HEAD = 88, TILE_H = 200, GAP = 14;
+    private static final Category[] CATS = Category.values();
 
     private final Screen parent;
     private Category category;
+    private int filter; // 0 alle, 1 aktiv, 2 inaktiv
     private Module selected;
-    private String query = "";
-    private boolean searchFocused;
-    private double scrollPos;
-    private double scrollTarget;
-    private SliderSetting dragging;
-    /** Scrollbalken wird gezogen; grabOffset = Abstand der Maus zum oberen Rand des Griffs */
-    private boolean draggingBar;
-    private double grabOffset;
-    private Object hovered;
-    private long hoverSince;
-    private final long openedAt = System.currentTimeMillis();
-
-    private int px, py, pw, ph;
+    private final Kit.Field search = new Kit.Field(30);
+    private final Kit.Scroll gridScroll = new Kit.Scroll(), detailScroll = new Kit.Scroll();
+    private final SettingRows rows = new SettingRows();
+    private String lastQuery = "";
 
     public ModMenuScreen(Screen parent) {
         this(parent, null);
     }
 
     public ModMenuScreen(Screen parent, Module open) {
-        super(Component.literal(MyticClient.NAME));
+        super("mods", MyticClient.NAME);
         this.parent = parent;
         this.selected = open;
     }
 
-    /** Anteil des Bildschirms, den das Menü einnimmt (Breite, Höhe). */
-    private double shareW() {
-        return large() ? 0.78 : 0.6;
-    }
+    // ------------------------------------------------------------------------------------------ Daten
 
-    private double shareH() {
-        return large() ? 0.86 : 0.78;
-    }
-
-    @Override
-    protected int pixelScale() {
-        return fit(380, 240, shareW(), shareH());
-    }
-
-    @Override
-    protected void layout() {
-        Compat.textInput(this, true);
-        pw = Math.min(600, Math.max(340, (int) (vw * shareW())));
-        ph = Math.min(340, Math.max(200, (int) (vh * shareH())));
-        pw = Math.min(pw, vw - 8);
-        ph = Math.min(ph, vh - 8);
-        px = (vw - pw) / 2;
-        py = (vh - ph) / 2;
-        clampScroll();
-    }
-
-    // ------------------------------------------------------------------------------------------ Layout
-
-    private List<Module> visibleModules() {
-        String q = query.toLowerCase(Locale.ROOT).trim();
-        List<Module> list = new ArrayList<>();
+    private List<Module> visible() {
+        String q = search.text.toLowerCase(Locale.ROOT).trim();
+        List<Module> list = new ArrayList<Module>();
         for (Module m : MyticClient.MODULES) {
             if (category != null && m.category != category) continue;
+            if (filter == 1 && !m.enabled() || filter == 2 && m.enabled()) continue;
             if (!q.isEmpty() && !m.name.toLowerCase(Locale.ROOT).contains(q) && !m.description.toLowerCase(Locale.ROOT).contains(q)) continue;
             list.add(m);
         }
         return list;
     }
 
-    /** Breite der Icon-Leiste links (nur Menü-Stil „Seitenleiste“) */
-    private static final int SIDE_W = 50;
-
-    private int side() {
-        return Ui.sidebar() ? SIDE_W : 0;
+    private static int count(Category c) {
+        int n = 0;
+        for (Module m : MyticClient.MODULES) if (c == null || m.category == c) n++;
+        return n;
     }
 
-    private int cx() {
-        return px + side() + 10;
+    private static int active() {
+        int n = 0;
+        for (Module m : MyticClient.MODULES) if (m.enabled()) n++;
+        return n;
     }
 
-    private int cy() {
-        return py + HEADER + 8;
-    }
-
-    private int cw() {
-        return pw - side() - 20;
-    }
-
-    private int ch() {
-        return ph - HEADER - 8 - FOOTER;
-    }
-
-    private int columns() {
-        if (Ui.sidebar()) return Math.max(2, Math.min(4, (cw() + GAP) / (92 + GAP)));
-        return Math.max(3, Math.min(5, (cw() + GAP) / (58 + GAP)));
-    }
-
-    /** Kartenhöhe: Seitenleiste mit flacheren, breiteren Karten (Icon links oben, Schalter rechts oben) */
-    private int cardH() {
-        return Ui.sidebar() ? 46 : CARD_H;
-    }
-
-    private int cardW() {
-        return (cw() - (columns() - 1) * GAP) / columns();
-    }
-
-    private int[] card(int index) {
-        int col = index % columns();
-        int row = index / columns();
-        return new int[]{cx() + col * (cardW() + GAP), cy() + row * (cardH() + GAP) - (int) Math.round(scrollPos)};
-    }
-
-    private int contentHeight() {
-        if (selected != null) {
-            int rows = 0;
-            for (Setting<?> setting : selected.settings) rows += rowH(setting) + 3;
-            return 40 + rows + 26;
+    static String icon(Category c) {
+        if (c == null) return "grid";
+        switch (c) {
+            case HUD:
+                return "layout";
+            case MECHANIK:
+                return "swords";
+            case VISUELL:
+                return "eye";
+            default:
+                return "gear";
         }
-        int rows = (visibleModules().size() + columns() - 1) / columns();
-        return Math.max(0, rows * (cardH() + GAP) - GAP);
-    }
-
-    /** Kategorie-Reiter; x/y/w/h ist die Klickfläche */
-    private record Tab(String label, Category category, int x, int y, int w, int h) {
-    }
-
-    private static final String[] TAB_LABELS = {"Alle", Category.HUD.label, Category.MECHANIK.label, Category.VISUELL.label, Category.CLIENT.label};
-    private static final Category[] TAB_CATS = {null, Category.HUD, Category.MECHANIK, Category.VISUELL, Category.CLIENT};
-    private static final net.minecraft.world.item.Item[] TAB_ICONS = {
-            net.minecraft.world.item.Items.NETHER_STAR, net.minecraft.world.item.Items.ITEM_FRAME, net.minecraft.world.item.Items.IRON_SWORD,
-            net.minecraft.world.item.Items.ENDER_EYE, net.minecraft.world.item.Items.AMETHYST_SHARD};
-
-    private int logoW() {
-        return font.width("MYTIC CLIENT") + (Ui.square() ? 12 : 0);
-    }
-
-    private List<Tab> tabs() {
-        List<Tab> tabs = new ArrayList<>();
-        if (Ui.sidebar()) {
-            // senkrecht in der Icon-Leiste: Icon und kleiner Name darunter
-            int y = py + HEADER + 6;
-            for (int i = 0; i < TAB_LABELS.length; i++) {
-                tabs.add(new Tab(TAB_LABELS[i], TAB_CATS[i], px + 5, y, SIDE_W - 10, 34));
-                y += 37;
-            }
-            return tabs;
-        }
-        int x = px + 14 + logoW() + 16;
-        for (int i = 0; i < TAB_LABELS.length; i++) {
-            int w = font.width(TAB_LABELS[i]);
-            tabs.add(new Tab(TAB_LABELS[i], TAB_CATS[i], x - 4, py + 8, w + 8, 18));
-            x += w + 12;
-        }
-        return tabs;
-    }
-
-    private int[] searchBox() {
-        if (Ui.sidebar()) {
-            int w = Math.max(90, Math.min(150, pw - logoW() - 50));
-            return new int[]{px + pw - 12 - w, py + 9, w, 16};
-        }
-        Tab last = tabs().get(tabs().size() - 1);
-        int w = Math.max(70, Math.min(110, px + pw - 12 - (last.x + last.w + 8)));
-        return new int[]{px + pw - 12 - w, py + 9, w, 16};
-    }
-
-    /** Logo; im Stil „Eckig“ mit Sperrschrift, bei Gold zweifarbig creme/gold */
-    private void drawLogo(GuiGraphics g, int x, int y) {
-        if (Ui.square()) {
-            int cx2 = x;
-            for (char ch : "MYTIC".toCharArray()) {
-                Ui.text(g, String.valueOf(ch), cx2, y, 0xFFFFFFFF, true);
-                cx2 += font.width(String.valueOf(ch)) + 1;
-            }
-            cx2 += 4;
-            for (char ch : "CLIENT".toCharArray()) {
-                Ui.text(g, String.valueOf(ch), cx2, y, 0xFF8C8F99, true);
-                cx2 += font.width(String.valueOf(ch)) + 1;
-            }
-            return;
-        }
-        int second = Ui.gold() || Ui.sidebar() ? Ui.selection() : 0xFFB4B4B4;
-        Ui.text(g, "MYTIC", x, y, Ui.lText(), true);
-        Ui.text(g, "CLIENT", x + font.width("MYTIC "), y, second, true);
     }
 
     // ------------------------------------------------------------------------------------------ Zeichnen
 
     @Override
-    public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float delta) {
-        String mode = MyticClient.theme.menuBackground.get();
-        if (mode.equals("Unschärfe")) super.renderBackground(g, mouseX, mouseY, delta);
-        else if (mode.equals("Abdunkeln") || minecraft.level == null) g.fill(0, 0, width, height, 0x99000000);
+    protected void frame(GuiGraphics g) {
+        if (!search.text.equals(lastQuery)) {
+            lastQuery = search.text;
+            gridScroll.reset();
+        }
+        float[] r = center(WIN_W, WIN_H);
+        float x = r[0], y = r[1], w = r[2], h = r[3];
+        kit.window(x, y, w, h, minecraft.level == null);
+        drawSide(x, y, h);
+        boolean detail = selected != null;
+        float mainX = x + SIDE * d, mainW = w - SIDE * d - (detail ? DETAIL * d : 0);
+        drawMain(mainX, y, mainW, h, detail);
+        if (detail) drawDetail(x + w - DETAIL * d, y, DETAIL * d, h);
     }
 
-    @Override
-    protected void draw(GuiGraphics g, int mouseX, int mouseY, float delta) {
-        scrollPos += (scrollTarget - scrollPos) * 0.35;
-        float open = Math.min(1f, (System.currentTimeMillis() - openedAt) / 180f);
-        float ease = 1f - (1f - open) * (1f - open) * (1f - open);
-        Gfx.push(g);
-        Gfx.translate(g, 0, (1 - ease) * 10);
-
-        // Panel: Schatten, Fläche, Kopf mit Akzent-Verlauf
-        Ui.rect(g, px - 3, py + 3, pw + 6, ph + 3, 10, 0x50000000);
-        boolean lunar = Ui.lunar();
-        if (lunar) {
-            Ui.lunarPanel(g, px, py, pw, ph, 6);
-        } else {
-            Ui.neonPanel(g, px, py, pw, ph, 8, 1f);
-            g.fillGradient(px + 4, py + 2, px + pw - 4, py + HEADER, Ui.withAlpha(Ui.accent(), 42), Ui.withAlpha(Ui.accent(), 0));
+    private void drawSide(float x, float y, float h) {
+        float sw = SIDE * d;
+        Draw.rect(kit.g, x + 1, y + 1, sw, h - 2, Tokens.RAD_XL * d, 0x04FFFFFF);
+        kit.vline(x + sw, y, h);
+        Brand.side(kit, x + 28 * d, y + 30 * d, "Mytic", "Mod-Menü");
+        kit.caption("Kategorien", x + 36 * d, y + 104 * d);
+        float ny = y + 126 * d, nx = x + 24 * d, nw = sw - 48 * d;
+        for (int i = -1; i < CATS.length; i++) {
+            final Category c = i < 0 ? null : CATS[i];
+            kit.nav("cat" + i, nx, ny, nw, icon(c), c == null ? "Alle" : c.label, String.valueOf(count(c)), category == c, () -> {
+                category = c;
+                gridScroll.reset();
+            });
+            ny += 46 * d;
         }
-
-        if (lunar) {
-            drawLogo(g, px + 14, py + 13);
-        } else {
-            Ui.glowText(g, "MYTIC", px + 14, py + 13, Ui.accent(), 1f);
-            Ui.glowText(g, "CLIENT", px + 14 + font.width("MYTIC "), py + 13, Ui.accent2(), 0.8f);
-        }
-
-        if (Ui.sidebar()) {
-            // Icon-Leiste: etwas dunkler, mit Trennlinie
-            Ui.rect(g, px + 1, py + HEADER + 1, SIDE_W - 1, ph - HEADER - 2, 0, 0x40000000);
-            g.fill(px + SIDE_W, py + HEADER + 1, px + SIDE_W + 1, py + ph - 1, Ui.L_LINE);
-        }
-        for (int i = 0; i < TAB_LABELS.length; i++) {
-            Tab tab = tabs().get(i);
-            boolean active = selected == null && tab.category == category;
-            boolean hover = Ui.inside(mouseX, mouseY, tab.x, tab.y, tab.w, tab.h);
-            float t = Ui.animate("tab:" + tab.label, active, 14f);
-            float h = Ui.animate("tabh:" + tab.label, hover, 18f);
-            if (Ui.sidebar()) {
-                float fillT = Math.max(t, h * 0.5f);
-                if (fillT > 0.01f) Ui.rect(g, tab.x, tab.y, tab.w, tab.h, 6, t > h * 0.5f ? Ui.withAlpha(Ui.selection(), Math.round(fillT * 0x28)) : Ui.withAlpha(0xFFFFFF, Math.round(fillT * 0x14)));
-                Gfx.push(g);
-                Gfx.translate(g, tab.x + tab.w / 2f - 6, tab.y + 4);
-                Gfx.scale(g, 0.75f, 0.75f);
-                g.renderItem(new net.minecraft.world.item.ItemStack(TAB_ICONS[i]), 0, 0);
-                Gfx.pop(g);
-                String label = font.plainSubstrByWidth(tab.label, Math.round(tab.w / 0.6f));
-                Ui.scaled(g, label, tab.x + tab.w / 2f - font.width(label) * 0.3f, tab.y + 22, 0.6f, Ui.mix(Ui.lMuted(), Ui.selection(), t), false);
-                continue;
-            }
-            int tx = tab.x + 4, tw = tab.w - 8;
-            if (lunar) {
-                if (Ui.gold() || Ui.square()) {
-                    // Gold/Eckig: Text in Auswahlfarbe mit feiner Linie darunter
-                    Ui.text(g, tab.label, tx, py + 13, Ui.mix(Ui.lMuted(), Ui.gold() ? Ui.selection() : 0xFFFFFFFF, Math.max(t, h * 0.6f)), false);
-                    int line = Math.round(tw * t);
-                    if (line > 0) g.fill(tx + (tw - line) / 2, py + 23, tx + (tw - line) / 2 + line, py + 24, Ui.selection());
-                    continue;
-                }
-                // Lunar/Glas: Kategorien als Pillen, die aktive hinterlegt (Lunar blau)
-                float fillT = Math.max(t, h * 0.4f);
-                int pill = Ui.glass() ? 0xFFFFFF : Ui.selection();
-                if (fillT > 0.01f) Ui.rect(g, tx - 5, py + 9, tw + 10, 15, 6, t > h * 0.4f ? Ui.withAlpha(pill, Math.round(fillT * (Ui.glass() ? 56 : 70))) : Ui.withAlpha(0xFFFFFF, Math.round(fillT * 40)));
-                Ui.text(g, tab.label, tx, py + 13, Ui.mix(0xFF9A9A9A, 0xFFFFFFFF, Math.max(t, h * 0.7f)), false);
-                continue;
-            }
-            // Neon (Synthwave): aktive Kategorie mit Verlauf hinterlegt
-            if (t > 0.01f) Ui.hGradient(g, tx - 4, py + 9, tw + 8, 15, Ui.withAlpha(Ui.PINK, Math.round(t * 50)), Ui.withAlpha(Ui.CYAN, Math.round(t * 18)));
-            Ui.text(g, tab.label, tx, py + 13, Ui.mix(Ui.MUTED, Ui.TEXT, Math.max(t, h * 0.7f)), false);
-            int line = Math.round(tw * t);
-            if (line > 0) {
-                int lx = tx + (tw - line) / 2;
-                Ui.glow(g, lx, py + 24, line, 2, 1, Ui.accent(), 3, t);
-                Ui.hGradient(g, lx, py + 24, line, 2, Ui.accent(), Ui.accent2());
-            }
-        }
-
-        int[] sb = searchBox();
-        boolean sHover = Ui.inside(mouseX, mouseY, sb[0], sb[1], sb[2], sb[3]);
-        if (lunar) Ui.outline(g, sb[0], sb[1], sb[2], sb[3], 4, searchFocused ? (Ui.gold() || Ui.sidebar() ? Ui.selection() : 0x90FFFFFF) : sHover ? 0x50FFFFFF : Ui.L_LINE,
-                Ui.mix(Ui.L_PANEL | 0xFF000000, 0xFF000000, 0.25f));
-        else Ui.outline(g, sb[0], sb[1], sb[2], sb[3], 8, searchFocused ? Ui.accent2() : sHover ? Ui.withAlpha(Ui.accent2(), 120) : Ui.LINE, Ui.SURFACE);
-        String shown = query.isEmpty() ? (searchFocused ? "" : "Suchen …") : query;
-        String clipped = font.plainSubstrByWidth(shown, sb[2] - 16);
-        if (query.length() > 0 && font.width(query) > sb[2] - 16) clipped = tail(query, sb[2] - 16);
-        Ui.text(g, clipped, sb[0] + 8, sb[1] + 4, query.isEmpty() ? Ui.MUTED : Ui.TEXT, false);
-        if (searchFocused && (System.currentTimeMillis() / 500) % 2 == 0) {
-            int caret = sb[0] + 8 + font.width(query.isEmpty() ? "" : clipped);
-            g.fill(caret, sb[1] + 3, caret + 1, sb[1] + 13, Ui.TEXT);
-        }
-        Ui.rect(g, px + (Ui.sidebar() ? 1 : 10), py + HEADER, pw - (Ui.sidebar() ? 2 : 20), 1, 0, lunar ? Ui.L_LINE : Ui.LINE);
-
-        Gfx.scissor(g, cx(), cy() - 3, cx() + cw(), cy() + ch());
-        Object hover = selected == null ? drawGrid(g, mouseX, mouseY) : drawSettings(g, mouseX, mouseY);
-        Gfx.noScissor(g);
-        drawScrollbar(g, mouseX, mouseY);
-
-        // Fußzeile
-        int fy = py + ph - FOOTER + 6;
-        int fx = cx();
-        Ui.rect(g, fx, fy - 6, cw(), 1, 0, lunar ? Ui.L_LINE : Ui.LINE);
-        int bw = font.width("HUD bearbeiten") + 20;
-        boolean editHover = Ui.inside(mouseX, mouseY, fx, fy, bw, 16);
-        float eh = Ui.animate("btn:edit", editHover, 16f);
-        if (lunar && (Ui.gold() || Ui.sidebar())) {
-            // Gold/Seitenleiste: gefüllter Knopf in der Auswahlfarbe
-            Ui.rect(g, fx, fy, bw, 16, 4, Ui.mix(Ui.selection(), 0xFFFFFFFF, eh * 0.15f));
-        } else if (lunar) {
-            Ui.outline(g, fx, fy, bw, 16, 4, Ui.mix(0x40FFFFFF, 0xB0FFFFFF, eh), Ui.mix(0xFF262626, 0xFF333333, eh));
-        } else {
-            Ui.glow(g, fx, fy, bw, 16, 8, Ui.accent(), 3, 0.4f + eh * 0.6f);
-            Ui.rect(g, fx, fy, bw, 16, 8, Ui.accent());
-            Ui.rect(g, fx + bw - 16, fy, 16, 16, 8, Ui.PINK);
-            Ui.hGradient(g, px + 18, fy, bw - 26, 16, Ui.mix(Ui.accent(), 0xFFFFFFFF, eh * 0.15f), Ui.mix(Ui.PINK, 0xFFFFFFFF, eh * 0.15f));
-        }
-        Ui.text(g, "HUD bearbeiten", fx + 10, fy + 4, Ui.gold() ? 0xFF1A1608 : 0xFFFFFFFF, !Ui.gold());
-        String info = MyticClient.MODULES.stream().filter(Module::enabled).count() + " von " + MyticClient.MODULES.size() + " aktiv";
-        Ui.text(g, info, px + pw - 12 - font.width(info), fy + 4, Ui.MUTED, false);
-
-        Gfx.pop(g);
-
-        // Tooltip erst nach kurzem Verweilen
-        if (hover != hovered) {
-            hovered = hover;
-            hoverSince = System.currentTimeMillis();
-        }
-        if (hover instanceof Module m && System.currentTimeMillis() - hoverSince > 450) {
-            Compat.tooltip(g, Component.literal(m.description), mouseX, mouseY);
-        }
+        // unten: HUD bearbeiten, Client-Einstellungen, Hinweis
+        float by = y + h - 28 * d - 24 * d - 12 * d - 38 * d - 10 * d - 48 * d;
+        kit.button("hud", nx, by, nw, 48 * d, "HUD bearbeiten", "layout", Widgets.SECONDARY, () -> Compat.setScreen(new HudEditScreen(this)));
+        kit.button("settings", nx, by + 58 * d, nw, 38 * d, "Client-Einstellungen", "gear", Widgets.GHOST, () -> Compat.setScreen(new SettingsScreen(this)));
+        float hy = y + h - 28 * d - 24 * d;
+        String hint = " öffnet dieses Menü";
+        float kw = kitKbdWidth("R-SHIFT", 24 * d), tw = kit.width(hint, 13, Tokens.MEDIUM);
+        float hx = x + sw / 2f - (kw + tw) / 2f;
+        kit.kbd("R-SHIFT", hx, hy, 24 * d, false, false);
+        kit.textMid(hint, hx + kw, hy + 12 * d, 13, Tokens.MEDIUM, Tokens.SUBTLE, 0);
     }
 
-    private String tail(String text, int width) {
-        String s = text;
-        while (s.length() > 1 && font.width(s) > width) s = s.substring(1);
-        return s;
+    private float kitKbdWidth(String text, float h) {
+        // gleiche Rechnung wie Kit.kbd (ohne zu zeichnen): mindestens 40, sonst Text + Rand
+        int s = de.myticlegacy.client.gui.ui.Type.pixelScale(kit.g, Math.min(h * 0.32f, 9 * d));
+        float t = de.myticlegacy.client.gui.ui.Type.pixelWidth(kit.g, text, s, 0);
+        return Math.max(40 * d * h / (34 * d), t + 24 * d * h / (34 * d));
     }
 
-    private Object drawGrid(GuiGraphics g, int mouseX, int mouseY) {
-        List<Module> modules = visibleModules();
-        if (modules.isEmpty()) {
-            Ui.centered(g, "Keine Mods gefunden", cx() + cw() / 2, cy() + 30, Ui.MUTED, false);
-            return null;
+    private void drawMain(float x, float y, float w, float h, boolean detail) {
+        // Kopf: Suche, Filter, Anzahl, Schließen
+        float pad = 32 * d;
+        kit.iconButton("close", x + w - pad - 40 * d, y + 24 * d, 40 * d, "x", true, this::onClose);
+        float fw = Math.max(180 * d, Math.min(420 * d, w - 2 * pad - 52 * d - 290 * d - 190 * d));
+        kit.field("search", search, x + pad, y + 21 * d, fw, 46 * d, "Mods durchsuchen …", "search");
+        float sx = x + pad + fw + 12 * d;
+        float segW = kit.seg("filter", sx, y + 22 * d, new String[]{"Alle", "Aktiv", "Inaktiv"}, null, null, filter, i -> {
+            filter = i;
+            gridScroll.reset();
+        });
+        List<Module> mods = visible();
+        String info = mods.size() + " von " + MyticClient.MODULES.size() + " · " + active() + " aktiv";
+        float ix = sx + segW + 16 * d, room = x + w - pad - 40 * d - 16 * d - ix;
+        if (room > kit.width(info, 14.5f, Tokens.MEDIUM)) kit.textMid(info, ix, y + 44 * d, 14.5f, Tokens.MEDIUM, Tokens.SUBTLE, 0);
+        kit.hline(x, y + HEAD * d, w);
+
+        // Raster
+        float bx = x + pad, by = y + HEAD * d, bw = w - 2 * pad, bh = h - HEAD * d;
+        int cols = detail ? 3 : 4;
+        if (bw / cols < 200 * d) cols = Math.max(1, cols - 1);
+        float tw = (bw - (cols - 1) * GAP * d) / cols, th = TILE_H * d;
+        int lines = (mods.size() + cols - 1) / cols;
+        float content = 28 * d + lines * (th + GAP * d) - GAP * d + 28 * d;
+        float off = kit.scroll(gridScroll, x, by, w, bh, content);
+        kit.clip(x, by + 1, w, bh - 2);
+        if (mods.isEmpty()) {
+            float cx = x + w / 2f, cy = by + 110 * d;
+            Icons.draw(kit.g, "search", cx - 16 * d, cy - 16 * d, 32 * d, Tokens.MUTED);
+            kit.textCenter("Keine Mods gefunden", cx, cy + 40 * d, 15, Tokens.MEDIUM, Tokens.MUTED);
         }
-        Object hover = null;
-        boolean inContent = Ui.inside(mouseX, mouseY, cx(), cy(), cw(), ch());
-        for (int i = 0; i < modules.size(); i++) {
-            Module m = modules.get(i);
-            int[] c = card(i);
-            int w = cardW();
-            if (c[1] + cardH() < cy() - 4 || c[1] > cy() + ch()) continue;
-            boolean over = inContent && Ui.inside(mouseX, mouseY, c[0], c[1], w, cardH());
-            if (over) hover = m;
-            boolean on = m.enabled();
-            float hv = Ui.animate("card:" + m.id, over, 16f);
-            float onT = Ui.animate("on:" + m.id, on, 12f);
-
-            if (Ui.sidebar()) {
-                drawSideCard(g, m, c[0], c[1], w, over, hv, onT, mouseX, mouseY);
-                continue;
-            }
-            boolean lunar = Ui.lunar();
-            float lit = Math.max(onT * 0.75f, hv);
-            if (lunar) {
-                int edge = Ui.gold() ? Ui.withAlpha(Ui.L_GREEN, Math.round(0x22 + hv * 0x60)) : Ui.mix(Ui.glass() ? 0x30FFFFFF : 0x18FFFFFF, 0x50FFFFFF, hv);
-                Ui.outline(g, c[0], c[1], w, CARD_H, Ui.cardRadius(), edge, Ui.mix(Ui.L_CARD, Ui.L_CARD_HOVER, hv));
-                // Eckig: aktive Karten mit Strich in der Schalter-Farbe unten
-                if (Ui.square() && onT > 0.01f) g.fill(c[0] + 1, c[1] + CARD_H - 3, c[0] + w - 1, c[1] + CARD_H - 1, Ui.alpha(Ui.L_GREEN, onT));
-            }
-            else if (lit > 0.02f) Ui.glow(g, c[0], c[1], w, CARD_H, 6, hv > onT ? Ui.accent2() : Ui.accent(), 4, lit * 0.7f);
-            if (!lunar) Ui.outline(g, c[0], c[1], w, CARD_H, 6, Ui.mix(Ui.LINE, Ui.withAlpha(hv > onT ? Ui.accent2() : Ui.accent(), 230), Math.max(onT * 0.7f, hv * 0.95f)),
-                    Ui.mix(Ui.SURFACE, Ui.SURFACE_HOVER, hv));
-
-            Gfx.push(g);
-            Gfx.translate(g, c[0] + w / 2f - 12, c[1] + 6 - Math.round(hv * 2));
-            Gfx.scale(g, 1.5f, 1.5f);
-            g.renderItem(m.icon(), 0, 0);
-            Gfx.pop(g);
-
-            // Name etwas kleiner, damit er in die schmalen Karten passt
-            String name = font.plainSubstrByWidth(m.name, Math.round((w - 6) / 0.8f));
-            Ui.scaled(g, name, c[0] + w / 2f - font.width(name) * 0.4f, c[1] + 33, 0.8f, lunar ? Ui.lText() : Ui.TEXT, false);
-
-            int barY = c[1] + CARD_H - BAR_OFF;
-            if (lunar) {
-                // Lunar: grüner bzw. roter Balken über die ganze Breite
-                // Gold: aus = dunkles Braun statt Rot
-                int state = Ui.mix(Ui.gold() ? 0xFF2A261A : Ui.L_RED, Ui.L_GREEN, onT);
-                Ui.rect(g, c[0] + 4, barY, w - 8, BAR_H, 2, over ? Ui.mix(state, 0xFFFFFFFF, 0.12f) : state);
-                String label = on ? "AKTIV" : "INAKTIV";
-                int labelColor = Ui.gold() ? Ui.mix(Ui.lMuted(), 0xFF1A1608, onT) : 0xFFFFFFFF;
-                Ui.scaled(g, label, c[0] + w / 2f - font.width(label) * 0.375f, barY + 2, 0.75f, labelColor, false);
-            }
-            int barColor = Ui.mix(0xFF2B2440, Ui.accent(), onT);
-            if (!lunar) Ui.rect(g, c[0] + 5, barY, w - 10, BAR_H, 5, over ? Ui.mix(barColor, 0xFFFFFFFF, 0.1f) : barColor);
-            if (!lunar && onT > 0.02f) {
-                Ui.hGradient(g, c[0] + 10, barY, w - 20, BAR_H, Ui.alpha(barColor, onT), Ui.alpha(Ui.mix(Ui.accent(), Ui.PINK, 0.55f), onT));
-                Ui.rect(g, c[0] + w - 15, barY, 10, BAR_H, 5, Ui.alpha(Ui.mix(Ui.accent(), Ui.PINK, 0.55f), onT));
-            }
-            if (!lunar) {
-                String label = on ? "AN" : "AUS";
-                Ui.scaled(g, label, c[0] + w / 2f - font.width(label) * 0.375f, barY + 2, 0.75f, on ? 0xFFFFFFFF : Ui.MUTED, false);
-            }
-
-            if (!m.settings.isEmpty()) {
-                boolean gearHover = over && Ui.inside(mouseX, mouseY, c[0] + w - 13, c[1] + 2, 11, 11);
-                int gearColor = gearHover ? (lunar ? (Ui.gold() ? Ui.selection() : 0xFFFFFFFF) : Ui.accent()) : Ui.withAlpha(Ui.MUTED, over ? 255 : 110);
-                Ui.scaled(g, "⚙", c[0] + w - 11, c[1] + 3, 0.85f, gearColor, false);
-            }
+        for (int i = 0; i < mods.size(); i++) {
+            float tx = bx + (i % cols) * (tw + GAP * d), ty = by + 28 * d + (i / cols) * (th + GAP * d) - off;
+            if (ty + th < by || ty > by + bh) continue;
+            drawTile(mods.get(i), tx, ty, tw, th);
         }
-        return hover;
+        kit.unclip();
+        kit.scrollbar("grid", gridScroll, x + w - 12 * d, by + 8 * d, bh - 16 * d);
     }
 
-    private Object drawSettings(GuiGraphics g, int mouseX, int mouseY) {
-        Module m = selected;
-        int x = cx();
-        int y = cy() - (int) Math.round(scrollPos);
-        int w = cw();
-
-        boolean backHover = Ui.inside(mouseX, mouseY, x, y + 2, 16, 16);
-        Ui.rect(g, x, y + 2, 16, 16, 8, Ui.lunar() ? (backHover ? Ui.L_CARD_HOVER : Ui.L_CARD) : (backHover ? Ui.SURFACE_HOVER : Ui.SURFACE));
-        Ui.centered(g, "‹", x + 8, y + 6, Ui.TEXT, false);
-        g.renderItem(m.icon(), x + 24, y + 2);
-        Ui.text(g, m.name, x + 44, y + 2, Ui.TEXT, true);
-        Ui.text(g, font.plainSubstrByWidth(m.description, w - 80), x + 44, y + 12, Ui.MUTED, false);
-        Ui.toggle(g, "set:on:" + m.id, x + w - 22, y + 6, m.enabled());
-
-        if (picker.setting() != null && !m.settings.contains(picker.setting())) picker.close();
-        int row = y + 32;
-        Object hover = null;
-        for (Setting<?> setting : m.settings) {
-            boolean over = Ui.inside(mouseX, mouseY, x, row, w, ROW_H);
-            Ui.rect(g, x, row, w, rowH(setting), Ui.lunar() ? 4 : 5, Ui.lunar() ? (over ? Ui.L_CARD_HOVER : Ui.L_CARD) : (over ? Ui.SURFACE_HOVER : Ui.SURFACE));
-            if (over && !Ui.lunar()) Ui.rect(g, x, row + 4, 2, ROW_H - 8, 1, Ui.accent2());
-            Ui.text(g, setting.label, x + 8, row + 7, Ui.TEXT, false);
-            int right = x + w - 8;
-            if (setting instanceof de.myticlegacy.client.setting.ActionSetting a) {
-                // Knopf (z. B. „Merken“) rechts in der Zeile
-                String label = a.button();
-                int bw = font.width(label) + 16;
-                boolean ls = Ui.lunar(), overBtn = Ui.inside(mouseX, mouseY, right - bw, row + 3, bw, 16);
-                Ui.outline(g, right - bw, row + 3, bw, 16, ls ? 4 : 8, overBtn ? 0xB0FFFFFF : ls ? 0x30FFFFFF : Ui.withAlpha(Ui.accent(), 150), ls ? 0xFF2A2A2A : 0xFF1C1433);
-                Ui.centered(g, label, right - bw / 2, row + 7, Ui.TEXT, false);
-            } else if (setting instanceof BoolSetting b) {
-                Ui.toggle(g, "set:" + m.id + "." + b.key, right - 20, row + 6, b.get());
-            } else if (setting instanceof SliderSetting sl) {
-                int trackW = 100;
-                int tx = right - trackW;
-                int ty = row + 10;
-                Ui.rect(g, tx, ty, trackW, 3, 1, 0xFF3A3352);
-                int fill = (int) Math.round(trackW * sl.fraction());
-                if (Ui.lunar()) {
-                    Ui.rect(g, tx, ty, Math.max(3, fill), 3, 1, 0xFFE6E6E6);
-                } else {
-                    Ui.glow(g, tx, ty, Math.max(3, fill), 3, 1, Ui.accent(), 2, 0.8f);
-                    Ui.hGradient(g, tx, ty, Math.max(3, fill), 3, Ui.accent2(), Ui.accent());
-                    Ui.glow(g, tx + fill - 4, ty - 3, 9, 9, 4, Ui.accent2(), 2, 0.9f);
-                }
-                Ui.rect(g, tx + fill - 4, ty - 3, 9, 9, 4, 0xFFFFFFFF);
-                String value = sl.display();
-                Ui.text(g, value, tx - 8 - font.width(value), row + 7, Ui.MUTED, false);
-            } else if (setting instanceof ColorSetting c) {
-                // Farbe als Feld mit Hex-Wert – Klick öffnet die Farbpalette
-                int col = c.get();
-                boolean open = picker.setting() == c;
-                String hexText = String.format("#%06X", col & 0xFFFFFF);
-                Ui.text(g, hexText, right - 26 - font.width(hexText), row + 7, Ui.MUTED, false);
-                Ui.rect(g, right - 20, row + 5, 20, 12, 3, open ? 0xFFFFFFFF : 0x60FFFFFF);
-                Ui.rect(g, right - 19, row + 6, 18, 10, 2, col == 0xFF000000 ? 0xFF101010 : col | 0xFF000000);
-                if (open) picker.draw(g, x + 8, row + ROW_H + 2);
-            } else if (setting instanceof TextSetting) {
-                // Textfeld (z. B. Auto Text): Klick zum Bearbeiten, Taste steht neben der Bezeichnung
-                TextSetting ts = (TextSetting) setting;
-                boolean edit = editingText == ts;
-                String hint = ts.hint();
-                if (!hint.isEmpty()) Ui.text(g, hint, x + 14 + font.width(setting.label), row + 7, Ui.MUTED, false);
-                int bw = Math.min(160, w / 2);
-                Ui.outline(g, right - bw, row + 3, bw, 16, 4, edit ? 0xB0FFFFFF : 0x30FFFFFF, Ui.lunar() ? 0xFF1C1C1C : 0xFF140F24);
-                String value = ts.get();
-                String shownText = value.isEmpty() && !edit ? "leer" : value;
-                String clippedText = font.plainSubstrByWidth(shownText, bw - 12);
-                if (edit && font.width(shownText) > bw - 12) clippedText = tail(shownText, bw - 12);
-                Ui.text(g, clippedText, right - bw + 6, row + 7, value.isEmpty() ? Ui.MUTED : Ui.TEXT, false);
-                if (edit && (System.currentTimeMillis() / 500) % 2 == 0) {
-                    int caretX = right - bw + 6 + font.width(clippedText);
-                    g.fill(caretX, row + 6, caretX + 1, row + 16, Ui.TEXT);
-                }
-            } else if (setting instanceof ModeSetting mode) {
-                int bw = Math.max(80, font.width(mode.get()) + 30);
-                boolean ls = Ui.lunar();
-                Ui.outline(g, right - bw, row + 3, bw, 16, ls ? 4 : 8, ls ? 0x30FFFFFF : Ui.withAlpha(Ui.accent(), 150), ls ? 0xFF2A2A2A : 0xFF1C1433);
-                Ui.text(g, "‹", right - bw + 6, row + 7, ls ? 0xFFB4B4B4 : Ui.accent2(), false);
-                Ui.text(g, "›", right - 10, row + 7, ls ? 0xFFB4B4B4 : Ui.accent2(), false);
-                Ui.centered(g, mode.get(), right - bw / 2, row + 7, Ui.TEXT, false);
-            }
-            row += rowH(setting) + 3;
-        }
-        int bw1 = font.width("Zurücksetzen") + 20;
-        boolean resetHover = Ui.inside(mouseX, mouseY, x, row + 4, bw1, 16);
-        Ui.rect(g, x, row + 4, bw1, 16, 8, resetHover ? Ui.SURFACE_HOVER : Ui.SURFACE);
-        Ui.text(g, "Zurücksetzen", x + 10, row + 8, Ui.MUTED, false);
+    private void drawTile(final Module m, float x, float y, float w, float h) {
+        String id = "t:" + m.id;
+        boolean hv = kit.hit(id, x, y, w, h, () -> select(m));
+        boolean on = m.enabled(), sel = m == selected;
+        float hvT = Motion.to(kit.key(id) + ":hv", hv, Tokens.MS_HOVER);
+        float selT = Motion.to(kit.key(id) + ":sel", sel, 200);
+        float onT = Motion.to(kit.key(id) + ":on", on, Tokens.MS_TOGGLE);
+        y -= 2 * d * hvT;
+        int fill = Draw.mix(Draw.mix(Tokens.SURFACE, Tokens.SURFACE_HOVER, hvT), 0x1A9B5CFF, selT);
+        int line = Draw.mix(Draw.mix(Tokens.LINE, Tokens.LINE_STRONG, hvT), Tokens.ACC_LINE, selT);
+        Draw.glass(kit.g, x, y, w, h, 16 * d, fill, line);
+        if (selT > 0.01f) Draw.ring(kit.g, x + 1, y + 1, w - 2, h - 2, 15 * d, 1, Draw.alpha(Tokens.ACC_LINE, selT));
+        float p = 18 * d;
+        iconSquare(m.icon(), x + p, y + p, 46 * d, onT);
         if (m instanceof HudModule) {
-            int bw2 = font.width("Position zurücksetzen") + 20;
-            boolean posHover = Ui.inside(mouseX, mouseY, x + bw1 + 6, row + 4, bw2, 16);
-            Ui.rect(g, x + bw1 + 6, row + 4, bw2, 16, 8, posHover ? Ui.SURFACE_HOVER : Ui.SURFACE);
-            Ui.text(g, "Position zurücksetzen", x + bw1 + 16, row + 8, Ui.MUTED, false);
+            float bw = kit.width("HUD", 11.5f, Tokens.SEMIBOLD) + 18 * d;
+            Widgets.badge(kit.g, x + w - p - bw, y + p, 22 * d, d, "HUD", false);
         }
-        return hover;
-    }
-
-    /** Karte im Stil „Seitenleiste“: Icon oben links, Schalter oben rechts, Name unten, Zahnrad unten rechts */
-    private void drawSideCard(GuiGraphics g, Module m, int x, int y, int w, boolean over, float hv, float onT, int mouseX, int mouseY) {
-        int h = cardH();
-        int edge = Ui.mix(Ui.mix(0x12FFFFFF, 0x30FFFFFF, hv), Ui.withAlpha(Ui.L_GREEN, 0x90), onT);
-        Ui.outline(g, x, y, w, h, Ui.cardRadius(), edge, Ui.mix(Ui.L_CARD, Ui.L_CARD_HOVER, hv));
-        Ui.rect(g, x + 6, y + 5, 20, 20, 4, 0x40000000);
-        Gfx.push(g);
-        Gfx.translate(g, x + 8, y + 7);
-        g.renderItem(m.icon(), 0, 0);
-        Gfx.pop(g);
-        Ui.toggle(g, "tg:" + m.id, x + w - 26, y + 7, m.enabled());
-        String name = font.plainSubstrByWidth(m.name, Math.round((w - (m.settings.isEmpty() ? 12 : 24)) / 0.85f));
-        Ui.scaled(g, name, x + 7, y + h - 14, 0.85f, Ui.lText(), false);
+        kit.textMid(m.name, x + p, y + p + 46 * d + 24 * d, 16.5f, Tokens.SEMIBOLD, Tokens.TEXT, w - 2 * p);
+        kit.paragraph(m.description, x + p, y + p + 46 * d + 42 * d, w - 2 * p, 13.5f, Tokens.MEDIUM, Tokens.MUTED, 19, 2);
+        float fy = y + h - p - 34 * d;
+        kit.textMid(on ? "AKTIV" : "AUS", x + p, fy + 17 * d, 12.5f, Tokens.SEMIBOLD, Draw.mix(Tokens.SUBTLE, 0xFFD9C2FF, onT), 0);
+        float tgx = x + w - p - 46 * d;
+        kit.toggle("tg:" + m.id, tgx, fy + 4 * d, on, () -> {
+            m.toggle();
+            MyticClient.config().save();
+        });
         if (!m.settings.isEmpty()) {
-            boolean gearHover = over && Ui.inside(mouseX, mouseY, x + w - 14, y + h - 15, 11, 11);
-            Ui.scaled(g, "⚙", x + w - 12, y + h - 14, 0.85f, gearHover ? Ui.selection() : Ui.withAlpha(Ui.lMuted(), over ? 255 : 120), false);
+            boolean gh = kit.iconButton("gear:" + m.id, tgx - 8 * d - 34 * d, fy, 34 * d, "gear", false, () -> select(m));
+            if (gh) kit.tooltip("Einstellungen", tgx - 8 * d - 17 * d, fy + 40 * d);
         }
     }
 
-    /** Scrollbalken rechts: Griff-Höhe und -Position, Klickfläche etwas breiter als der Balken */
-    private int barH() {
-        return Math.max(18, ch() * ch() / Math.max(1, contentHeight()));
+    /** Icon-Quadrat mit dem Item des Mods; an = Akzent-Verlauf */
+    private void iconSquare(ItemStack stack, float x, float y, float s, float onT) {
+        Draw.rect(kit.g, x, y, s, s, 12 * d, 0x12FFFFFF);
+        if (onT > 0.01f) Draw.gradient(kit.g, x, y, s, s, 12 * d, Draw.alpha(0x739B5CFF, onT), Draw.alpha(0x59EC5FBF, onT));
+        item(stack, x + s / 2f, y + s / 2f, s * 0.56f);
     }
 
-    private int barY() {
-        int total = contentHeight();
-        return cy() + (int) ((ch() - barH()) * (scrollPos / Math.max(1, total - ch())));
+    /** Item mittig bei cx, cy in Kantenlänge size zeichnen */
+    private void item(ItemStack stack, float cx, float cy, float size) {
+        if (stack == null || stack.isEmpty()) return;
+        Gfx.push(kit.g);
+        Gfx.translate(kit.g, cx - size / 2f, cy - size / 2f);
+        Gfx.scale(kit.g, size / 16f, size / 16f);
+        kit.g.renderItem(stack, 0, 0);
+        Gfx.pop(kit.g);
     }
 
-    private boolean scrollable() {
-        return contentHeight() > ch();
+    private void select(Module m) {
+        if (selected != m) detailScroll.reset();
+        selected = m;
     }
 
-    private boolean onScrollbar(double mx, double my) {
-        return scrollable() && Ui.inside(mx, my, px + pw - 10, cy(), 10, ch());
-    }
+    // ------------------------------------------------------------------------------------------ Detailbereich
 
-    /** Griff an die Mausposition ziehen (grabOffset = wo im Griff angefasst wurde) */
-    private void dragScrollbar(double my) {
-        int range = ch() - barH();
-        if (range <= 0) return;
-        double f = (my - grabOffset - cy()) / range;
-        scrollTarget = scrollPos = Math.max(0, Math.min(1, f)) * (contentHeight() - ch());
-    }
+    private void drawDetail(float x, float y, float w, float h) {
+        final Module m = selected;
+        float R = Tokens.RAD_XL * d;
+        Draw.rect(kit.g, x, y + 1, w - 1, h - 2, R, 0x24000000);
+        Draw.rect(kit.g, x, y + 1, R, h - 2, 0, 0x24000000);
+        kit.vline(x, y, h);
+        kit.block(x, y, w, h, null);
+        float p = 24 * d;
+        // Kopf
+        float is = 42 * d, iy = y + (HEAD * d - is) / 2f;
+        Draw.gradient(kit.g, x + p, iy, is, is, 12 * d, 0x739B5CFF, 0x59EC5FBF);
+        item(m.icon(), x + p + is / 2f, iy + is / 2f, is * 0.55f);
+        float closeX = x + w - p - 34 * d, tgX = closeX - 12 * d - 46 * d;
+        float tx = x + p + is + 14 * d, tw = tgX - 12 * d - tx;
+        kit.textMid(m.name, tx, y + 34 * d, 17, Tokens.SEMIBOLD, Tokens.TEXT, tw);
+        kit.textMid(m.category.label + (m instanceof HudModule ? " · Anzeige" : "") + " · " + (m.enabled() ? "aktiv" : "aus"), tx, y + 56 * d, 13, Tokens.MEDIUM, Tokens.SUBTLE, tw);
+        kit.toggle("dtg", tgX, y + HEAD * d / 2f - 13 * d, m.enabled(), () -> {
+            m.toggle();
+            MyticClient.config().save();
+        });
+        kit.iconButton("dclose", closeX, y + HEAD * d / 2f - 17 * d, 34 * d, "x", false, () -> selected = null);
+        kit.hline(x, y + HEAD * d, w);
 
-    private void drawScrollbar(GuiGraphics g, int mouseX, int mouseY) {
-        if (!scrollable()) return;
-        int barH = barH(), barY = barY();
-        float h = Ui.animate("menu:scrollbar", draggingBar || onScrollbar(mouseX, mouseY), 16f);
-        int w = 3 + Math.round(h * 2), x = px + pw - 4 - w;
-        if (Ui.lunar()) {
-            Ui.rect(g, x, barY, w, barH, 1, Ui.mix(0x60FFFFFF, 0xC0FFFFFF, h));
-        } else {
-            Ui.glow(g, x, barY, w, barH, 1, Ui.accent(), 2, 0.7f + h * 0.3f);
-            g.fillGradient(x, barY, x + w, barY + barH, Ui.accent2(), Ui.PINK);
+        // Live-Vorschau
+        float px = x + p, py = y + HEAD * d + 20 * d, pw = w - 2 * p, ph = 170 * d;
+        preview(m, px, py, pw, ph);
+
+        // Einstellungen
+        float foot = 76 * d;
+        float ly = py + ph + 14 * d, lh = y + h - foot - ly;
+        float descH = 0;
+        List<Setting<?>> list = m.settings;
+        float content = 0;
+        for (Setting<?> s : list) content += SettingRows.stackedHeight(s) * d;
+        int descLines = Math.max(1, Math.min(3, (int) Math.ceil(kit.width(m.description, 14.5f, Tokens.MEDIUM) / pw) + 0));
+        descH = (10 + descLines * 21 + 6) * d;
+        content += descH + (list.isEmpty() ? 40 * d : 0) + 12 * d;
+        float off = kit.scroll(detailScroll, x, ly, w, lh, content);
+        kit.clip(x, ly, w, lh);
+        float ry = ly - off;
+        kit.paragraph(m.description, px, ry + 10 * d, pw, 14.5f, Tokens.MEDIUM, Tokens.MUTED, 21, 3);
+        ry += descH;
+        if (list.isEmpty()) kit.text("Dieser Mod hat keine Einstellungen.", px, ry + 14 * d, 14.5f, Tokens.MEDIUM, Tokens.SUBTLE);
+        for (int i = 0; i < list.size(); i++) {
+            Setting<?> s = list.get(i);
+            float sh = SettingRows.stackedHeight(s) * d;
+            if (ry + sh >= ly && ry <= ly + lh) {
+                if (i > 0) SettingRows.divider(kit, px, ry, pw);
+                rows.stacked(kit, s, px, ry, pw);
+            }
+            ry += sh;
         }
+        kit.unclip();
+        kit.scrollbar("detail", detailScroll, x + w - 10 * d, ly + 4 * d, lh - 8 * d);
+
+        // Fuß
+        float fy = y + h - foot;
+        kit.hline(x, fy, w);
+        float bh = 38 * d, by = fy + (foot - bh) / 2f;
+        float bw = kit.button("reset", px, by, bh, "Standard", "rotL", Widgets.GHOST, () -> {
+            m.resetSettings();
+            MyticClient.config().save();
+        });
+        if (m instanceof HudModule) {
+            final HudModule hud = (HudModule) m;
+            kit.button("pos", px + bw + 8 * d, by, bh, "Position", "move", Widgets.GHOST, () -> {
+                hud.resetPosition();
+                MyticClient.config().save();
+            });
+            if (kit.hover("pos")) kit.tooltip("Position zurücksetzen", px + bw + 60 * d, by - 34 * d);
+        }
+        float gw = kit.width("Gespeichert", 12.5f, Tokens.SEMIBOLD) + 36 * d;
+        kit.badge("Gespeichert", "check", x + w - p - gw, fy + foot / 2f - 12 * d, Tokens.OK);
+    }
+
+    private void preview(Module m, float x, float y, float w, float h) {
+        float r = 16 * d, sky = h * 0.56f;
+        GuiGraphics g = kit.g;
+        Draw.rect(g, x, y, w, sky + r, r, 0xFF4B2F78);
+        Draw.vgradient(g, x, y + r, w, sky - r, 0xFF4B2F78, 0xFF9A4F86);
+        Draw.rect(g, x, y + sky, w, h - sky, r, 0xFF2D5230);
+        Draw.vgradient(g, x, y + sky, w, h - sky - r, 0xFF3D6B3C, 0xFF2D5230);
+        Draw.ring(g, x, y, w, h, r, 1, Tokens.LINE);
+        Draw.ring(g, x, y + sky, w, 1, 0, 1, 0x14000000);
+        kit.text("LIVE-VORSCHAU", x + 12 * d, y + 12 * d, 11, Tokens.SEMIBOLD, 0xB3FFFFFF);
+        float cx = x + w / 2f, cy = y + h * 0.54f;
+        if (m instanceof HudModule) {
+            HudModule hud = (HudModule) m;
+            float k = Math.max(0.5f, Math.min(Math.max(2f, Compat.guiScale()), Math.min((w - 40 * d) / Math.max(1, hud.width()), (h - 54 * d) / Math.max(1, hud.height()))));
+            kit.clip(x + 1, y + 1, w - 2, h - 2);
+            Gfx.push(g);
+            Gfx.translate(g, Math.round(cx - hud.width() * k / 2f), Math.round(cy - hud.height() * k / 2f + 8 * d));
+            Gfx.scale(g, k, k);
+            Gfx.translate(g, -hud.x(), -hud.y());
+            try {
+                hud.draw(g, true);
+            } catch (RuntimeException ignored) {
+                // Vorschau ohne Welt: lieber leer als abstürzen
+            }
+            Gfx.pop(g);
+            kit.unclip();
+            return;
+        }
+        String label = m.name + (m.enabled() ? " aktiv" : " aus");
+        float fs = 16, bh = 40 * d, bw = kit.width(label, fs, Tokens.SEMIBOLD) + 24 * d + 30 * d;
+        Draw.rect(g, cx - bw / 2f, cy - bh / 2f, bw, bh, 8 * d, 0x7308060E);
+        item(m.icon(), cx - bw / 2f + 12 * d + 10 * d, cy, 20 * d);
+        kit.textMid(label, cx - bw / 2f + 12 * d + 30 * d, cy, fs, Tokens.SEMIBOLD, 0xFFFFFFFF, 0);
     }
 
     // ------------------------------------------------------------------------------------------ Eingaben
 
-    private void clampScroll() {
-        scrollTarget = Math.max(0, Math.min(scrollTarget, Math.max(0, contentHeight() - ch())));
-    }
-
-    @Override
-    protected boolean scroll(double mouseX, double mouseY, double amount) {
-        scrollTarget -= amount * 26;
-        clampScroll();
-        return true;
-    }
-
-    @Override
-    protected boolean click(Input.Click event, boolean doubleClick) {
-        double mx = event.x();
-        double my = event.y();
-        if (event.button() != 0) return false;
-        int[] sb = searchBox();
-        searchFocused = Ui.inside(mx, my, sb[0], sb[1], sb[2], sb[3]);
-        if (searchFocused) return true;
-
-        for (Tab tab : tabs()) {
-            if (Ui.inside(mx, my, tab.x, tab.y, tab.w, tab.h)) {
-                category = tab.category;
-                selected = null;
-                scrollPos = scrollTarget = 0;
-                return true;
-            }
-        }
-        int fy = py + ph - FOOTER + 6;
-        if (Ui.inside(mx, my, cx(), fy, font.width("HUD bearbeiten") + 20, 16)) {
-            Compat.setScreen(new HudEditScreen(this));
-            return true;
-        }
-        if (onScrollbar(mx, my)) {
-            int barY = barY(), barH = barH();
-            // auf den Griff: dort festhalten; daneben: Griff mittig unter die Maus springen lassen
-            grabOffset = my >= barY && my < barY + barH ? my - barY : barH / 2.0;
-            draggingBar = true;
-            dragScrollbar(my);
-            return true;
-        }
-        if (!Ui.inside(mx, my, cx(), cy(), cw(), ch())) return false;
-        return selected == null ? clickGrid(mx, my) : clickSettings(mx, my);
-    }
-
-    private boolean clickGrid(double mx, double my) {
-        List<Module> modules = visibleModules();
-        for (int i = 0; i < modules.size(); i++) {
-            Module m = modules.get(i);
-            int[] c = card(i);
-            int w = cardW();
-            if (!Ui.inside(mx, my, c[0], c[1], w, cardH())) continue;
-            boolean gear, bar;
-            if (Ui.sidebar()) {
-                gear = Ui.inside(mx, my, c[0] + w - 16, c[1] + cardH() - 17, 15, 15);
-                bar = Ui.inside(mx, my, c[0] + w - 30, c[1] + 3, 28, 18);
-            } else {
-                gear = Ui.inside(mx, my, c[0] + w - 13, c[1] + 2, 11, 11);
-                bar = Ui.inside(mx, my, c[0] + 4, c[1] + CARD_H - BAR_OFF, w - 8, BAR_H);
-            }
-            if (!m.settings.isEmpty() && (gear || !bar)) {
-                selected = m;
-                scrollPos = scrollTarget = 0;
-            } else {
-                m.toggle();
-            }
-            return true;
-        }
-        return false;
-    }
-
-    private boolean clickSettings(double mx, double my) {
-        editingText = null;
-        Module m = selected;
-        int x = cx();
-        int y = cy() - (int) Math.round(scrollPos);
-        int w = cw();
-        if (Ui.inside(mx, my, x, y + 2, 16, 16)) {
-            selected = null;
-            scrollPos = scrollTarget = 0;
-            return true;
-        }
-        if (Ui.inside(mx, my, x + w - 26, y + 2, 26, 16)) {
-            m.toggle();
-            return true;
-        }
-        int row = y + 32;
-        for (Setting<?> setting : m.settings) {
-            if (picker.setting() == setting && picker.click(mx, my)) {
-                MyticClient.config().save();
-                return true;
-            }
-            if (Ui.inside(mx, my, x, row, w, ROW_H)) {
-                int right = x + w - 8;
-                if (setting instanceof de.myticlegacy.client.setting.ActionSetting a) {
-                    if (mx >= right - font.width(a.button()) - 16) a.run();
-                } else if (setting instanceof BoolSetting b) {
-                    b.toggle();
-                } else if (setting instanceof SliderSetting sl) {
-                    int tx = right - 100;
-                    if (mx >= tx - 6) {
-                        dragging = sl;
-                        sl.setFraction((mx - tx) / 100.0);
-                    }
-                } else if (setting instanceof ColorSetting c) {
-                    if (picker.setting() == c) picker.close();
-                    else picker.open(c);
-                } else if (setting instanceof TextSetting) {
-                    editingText = (TextSetting) setting;
-                    Compat.textInput(this, true);
-            } else if (setting instanceof ModeSetting mode) {
-                    int bw = Math.max(80, font.width(mode.get()) + 30);
-                    if (mx >= right - bw) mode.cycle(mx < right - bw / 2.0 ? -1 : 1);
-                }
-                MyticClient.config().save();
-                return true;
-            }
-            row += rowH(setting) + 3;
-        }
-        int bw1 = font.width("Zurücksetzen") + 20;
-        if (Ui.inside(mx, my, x, row + 4, bw1, 16)) {
-            m.resetSettings();
-            return true;
-        }
-        if (m instanceof HudModule hud && Ui.inside(mx, my, x + bw1 + 6, row + 4, font.width("Position zurücksetzen") + 20, 16)) {
-            hud.resetPosition();
-            MyticClient.config().save();
-            return true;
-        }
-        return false;
-    }
-
-    @Override
-    protected boolean drag(Input.Click event, double dx, double dy) {
-        if (draggingBar) {
-            dragScrollbar(event.y());
-            return true;
-        }
-        if (picker.drag(event.x(), event.y())) return true;
-        if (dragging == null) return false;
-        int tx = cx() + cw() - 8 - 100;
-        dragging.setFraction((event.x() - tx) / 100.0);
-        return true;
-    }
-
     @Override
     protected boolean release(Input.Click event) {
-        if (draggingBar) {
-            draggingBar = false;
-            return true;
-        }
-        if (picker.release()) {
-            MyticClient.config().save();
-            return true;
-        }
-        if (dragging == null) return false;
-        dragging = null;
-        MyticClient.config().save();
-        return true;
+        boolean r = super.release(event);
+        rows.saveIfDirty();
+        return r;
     }
 
     @Override
-    protected boolean onChar(Input.Typed event) {
-        if (editingText != null) {
-            if (!event.isAllowedChatCharacter()) return true;
-            String now = editingText.get();
-            if (now.length() < TextSetting.MAX) editingText.set(now + event.codepointAsString());
-            MyticClient.config().save();
-            return true;
-        }
-        if (selected != null || !event.isAllowedChatCharacter()) return false;
-        searchFocused = true;
-        if (query.length() < 30) {
-            query += event.codepointAsString();
-            scrollPos = scrollTarget = 0;
-        }
-        return true;
+    protected boolean typedFree(String s) {
+        if (s.isEmpty() || s.charAt(0) < ' ') return false;
+        kit.focus(search);
+        return kit.typed(s);
     }
 
     @Override
-    protected boolean onKey(Input.Key event) {
-        int key = event.key();
-        if (editingText != null) {
-            if (key == InputConstants.KEY_BACKSPACE) {
-                String now = editingText.get();
-                if (!now.isEmpty()) editingText.set(event.hasControlDown() ? "" : now.substring(0, now.length() - 1));
-                MyticClient.config().save();
-            } else if (key == InputConstants.KEY_ESCAPE || key == InputConstants.KEY_RETURN || key == InputConstants.KEY_NUMPADENTER) {
-                editingText = null;
-            }
-            return true;
-        }
-        if (key == InputConstants.KEY_ESCAPE) {
-            if (selected != null) {
-                selected = null;
-                scrollPos = scrollTarget = 0;
-                return true;
-            }
-            if (searchFocused && !query.isEmpty()) {
-                query = "";
-                searchFocused = false;
-                return true;
-            }
-        }
-        if (searchFocused && key == InputConstants.KEY_BACKSPACE) {
-            if (!query.isEmpty()) query = event.hasControlDown() ? "" : query.substring(0, query.length() - 1);
-            scrollPos = scrollTarget = 0;
-            return true;
-        }
-        if (key == InputConstants.KEY_RSHIFT) {
+    protected void back() {
+        if (selected != null) {
+            selected = null;
+        } else if (!search.text.isEmpty()) {
+            search.text = "";
+        } else {
             onClose();
-            return true;
         }
-        return false;
-    }
-
-    @Override
-    public void removed() {
-        Compat.textInput(this, false);
-        super.removed();
     }
 
     @Override
     public void onClose() {
+        rows.saveIfDirty();
         MyticClient.config().save();
         Compat.setScreen(parent);
-    }
-
-    @Override
-    public boolean isPauseScreen() {
-        return false;
     }
 }
