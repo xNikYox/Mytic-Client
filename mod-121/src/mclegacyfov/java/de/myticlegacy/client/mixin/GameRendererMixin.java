@@ -17,6 +17,7 @@ abstract class GameRendererMixin {
     private void mytic$zoom(Camera camera, float partialTick, boolean useFovSetting, CallbackInfoReturnable<Double> cir) {
         if (useFovSetting) {
             cir.setReturnValue((double) MyticClient.zoom.apply((float) cir.getReturnValueD()));
+            de.myticlegacy.client.compat.MapCompat.fov = (float) cir.getReturnValueD(); // für Wegpunkt-Markierungen
         }
     }
 

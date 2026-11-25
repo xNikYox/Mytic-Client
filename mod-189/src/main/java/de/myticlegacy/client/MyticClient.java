@@ -106,6 +106,7 @@ public final class MyticClient {
     public static FpsBoostModule fpsBoost;
     public static de.myticlegacy.client.module.ChatModule chat;
     public static FriendsModule friends;
+    public static de.myticlegacy.client.invsee.InvSeeModule invsee;
 
     private static Config config;
     private static boolean fullbrightApplied;
@@ -199,6 +200,8 @@ public final class MyticClient {
         }));
         hud(new ItemCounterModule());
         hud(new TargetHudModule());
+        invsee = new de.myticlegacy.client.invsee.InvSeeModule();
+        hud(invsee);
         hud(new TextModule("watermark", "Wasserzeichen", "Mytic-Client-Schriftzug im HUD", () -> Items.nether_star, false, 10000, 175, "", p -> "Mytic Client"));
 
         // ------------------------------------------------------------------------------ Mechanik & Visuell
@@ -227,6 +230,7 @@ public final class MyticClient {
         zoomKey = Compat.registerKey("key.myticclient.zoom", InputConstants.KEY_C);
         freelookKey = Compat.registerKey("key.myticclient.freelook", InputConstants.KEY_LALT);
         snaplookKey = Compat.registerKey("key.myticclient.snaplook", InputConstants.KEY_V);
+        invsee.register(); // InvSee-Übersicht: /invsee erkennen, Taste I wiederholt das letzte /invsee
         for (int i = 0; i < AutoTextModule.SLOTS; i++) autoTextKeys[i] = Compat.registerKey("key.myticclient.autotext" + (i + 1), 0);
 
         CombatTracker.register();
@@ -418,6 +422,7 @@ public final class MyticClient {
             if (Compat.screen(mc) == null) Compat.setScreen(ctrl ? new ModMenuScreen(null) : new HubScreen());
         }
         tickFriends(mc);
+        invsee.tick(mc);
         if (mc.theWorld == null) sessionStart = 0;
         else if (sessionStart == 0) sessionStart = System.currentTimeMillis();
         if (!toggleSneak.enabled() && sneakToggled) {

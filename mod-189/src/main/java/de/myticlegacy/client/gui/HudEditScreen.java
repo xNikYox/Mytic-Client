@@ -267,6 +267,7 @@ public class HudEditScreen extends InputScreen {
             case "watermark": return "sparkle";
             case "screenshot": return "camera";
             case "warnings": return "bell";
+            case "invsee": return "eye";
             default: return "layout";
         }
     }

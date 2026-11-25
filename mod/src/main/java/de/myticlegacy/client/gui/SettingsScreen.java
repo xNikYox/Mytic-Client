@@ -393,9 +393,40 @@ public class SettingsScreen extends DesignScreen {
         }
     }
 
-    private float aboutHeight() {
-        return 150 * d;
+    private boolean licenseOpen;
+    private static String[] licenseLines;
+
+    /** Lizenztext der InvSee-Übersicht (MIT, aus den Mod-Ressourcen) */
+    private static String[] licenseLines() {
+        if (licenseLines == null) {
+            String text;
+            try (java.io.InputStream in = SettingsScreen.class.getResourceAsStream("/assets/myticclient/licenses/InvSee-Summary-MIT.txt")) {
+                text = in == null ? "" : new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            } catch (java.io.IOException e) {
+                text = "";
+            }
+            // Absätze zusammenfügen (Zeilenumbrüche im Fließtext entfernen)
+            licenseLines = text.replace("\r", "").replaceAll("(?<!\n)\n(?!\n)", " ").split("\n\n+");
+        }
+        return licenseLines;
     }
+
+    private float licenseHeight(float w) {
+        if (!licenseOpen) return 0;
+        float h = 12 * d;
+        for (String para : licenseLines()) h += (lines(para, w) * 18 + 10) * d;
+        return h;
+    }
+
+    private int lines(String para, float w) {
+        return Math.max(1, (int) Math.ceil(kit.width(para, 12.5f, Tokens.MEDIUM) / Math.max(1, w * 0.92f)));
+    }
+
+    private float aboutHeight() {
+        return 150 * d + 150 * d + licenseHeight(aboutTextWidth);
+    }
+
+    private float aboutTextWidth = 600;
 
     private void about(float x, float y, float w) {
         Brand.emblem(kit.g, x + 8 * d, y + 12 * d, 84 * d);
@@ -404,6 +435,24 @@ public class SettingsScreen extends DesignScreen {
         kit.text("Version " + modVersion() + " · Minecraft " + Compat.versionName() + " · Fabric", tx, y + 58 * d, 15, Tokens.MEDIUM, Tokens.MUTED);
         kit.paragraph("Mytic Client ist ein Fan-Projekt und nicht offiziell mit Mojang Studios oder Microsoft verbunden.", tx, y + 88 * d,
                 w - (tx - x), 13, Tokens.MEDIUM, Tokens.SUBTLE, 19, 2);
+        // Lizenzen und Danksagungen
+        float ly = y + 150 * d;
+        aboutTextWidth = w - 16 * d;
+        kit.caption("Lizenzen und Danksagungen", x + 8 * d, ly);
+        kit.paragraph("InvSee-Übersicht basiert auf „InvSee Summary“ von Noah (MIT-Lizenz), neu geschrieben im Mytic-Design.",
+                x + 8 * d, ly + 26 * d, w - 16 * d, 14, Tokens.MEDIUM, Tokens.TEXT, 20, 2);
+        kit.paragraph("Schrift Inter (SIL Open Font License) · Schachfiguren „cburnett“ von Colin M.L. Burnett (BSD-Lizenz)",
+                x + 8 * d, ly + 70 * d, w - 16 * d, 13, Tokens.MEDIUM, Tokens.SUBTLE, 19, 2);
+        kit.button("license", x + 8 * d, ly + 100 * d, 34 * d, licenseOpen ? "MIT-Lizenztext ausblenden" : "MIT-Lizenztext (InvSee Summary)",
+                licenseOpen ? "chevD" : "chevR", de.myticlegacy.client.gui.ui.Widgets.GHOST, () -> licenseOpen = !licenseOpen);
+        if (licenseOpen) {
+            float py = ly + 150 * d;
+            for (String para : licenseLines()) {
+                int n = lines(para, w - 16 * d);
+                kit.paragraph(para.trim(), x + 8 * d, py, w - 16 * d, 12.5f, Tokens.MEDIUM, Tokens.MUTED, 18, n + 1);
+                py += (n * 18 + 10) * d;
+            }
+        }
     }
 
     // ------------------------------------------------------------------------------------------ Eingaben
