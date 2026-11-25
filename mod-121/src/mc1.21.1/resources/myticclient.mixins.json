@@ -17,6 +17,7 @@
     "AvatarRenderStateMixin",
     "LivingEntityRendererInvoker",
     "AbstractContainerScreenAccessor",
+    "InvSeeHiddenScreenMixin",
     "CapeLayerMixin",
     "ItemModelResolverMixin",
     "ShieldSpecialRendererMixin",

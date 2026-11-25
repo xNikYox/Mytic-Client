@@ -103,6 +103,7 @@ public final class MyticClient implements ClientModInitializer {
     public static final KeyMapping[] packKeys = new KeyMapping[de.myticlegacy.client.module.PackOverlayModule.SLOTS];
     public static ShulkerPreviewModule shulkerPreview;
     public static FriendsModule friends;
+    public static de.myticlegacy.client.invsee.InvSeeModule invsee;
 
     private static Config config;
     private static boolean fullbrightApplied;
@@ -199,6 +200,8 @@ public final class MyticClient implements ClientModInitializer {
         hud(new TargetHudModule());
         hud(new de.myticlegacy.client.hud.PitchModule());
         hud(new de.myticlegacy.client.hud.YawModule());
+        invsee = new de.myticlegacy.client.invsee.InvSeeModule();
+        hud(invsee);
         de.myticlegacy.client.hud.VanillaHudModule.createAll();
         for (var v : de.myticlegacy.client.hud.VanillaHudModule.all()) hud(v);
         hud(new TextModule("watermark", "Wasserzeichen", "Mytic-Client-Schriftzug im HUD", () -> Items.AMETHYST_SHARD, false, 10000, 175, "", p -> "Mytic Client"));
@@ -251,6 +254,7 @@ public final class MyticClient implements ClientModInitializer {
         clipKey = Compat.registerKey("key.myticclient.clip", InputConstants.KEY_F8);
         de.myticlegacy.client.games.GameToast.registerKeys(); // Herausforderung annehmen (J) / ablehnen (K)
         styles.registerKey(); // Mytic Styles (B)
+        invsee.register(); // InvSee-Übersicht: /invsee erkennen, Taste I wiederholt das letzte /invsee
         Runtime.getRuntime().addShutdownHook(new Thread(Diagnose::flush, "Mytic Diagnose"));
         for (int i = 0; i < profileKeys.length; i++) profileKeys[i] = Compat.registerKey("key.myticclient.hudprofile" + (i + 1), InputConstants.UNKNOWN.getValue());
         for (int i = 0; i < AutoTextModule.SLOTS; i++) autoTextKeys[i] = Compat.registerKey("key.myticclient.autotext" + (i + 1), -1);
@@ -391,6 +395,7 @@ public final class MyticClient implements ClientModInitializer {
         packOverlays.tick(mc);
         cloudSync.tick(mc);
         totemPops.tick(mc);
+        invsee.tick(mc);
 
         if (toggleSprint.enabled() && mc.player != null && Compat.screen(mc) == null
                 && mc.options.keyUp.isDown() && !mc.player.isShiftKeyDown() && !mc.player.isUsingItem()) {

@@ -23,5 +23,7 @@
   "key.myticclient.pack3": "Toggle pack overlay 3",
   "key.myticclient.gameaccept": "Accept game challenge",
   "key.myticclient.gamedecline": "Decline game challenge",
-  "key.myticclient.styles": "Open Mytic Styles"
+  "key.myticclient.styles": "Open Mytic Styles",
+  "key.myticclient.invsee_repeat": "Repeat last /invsee (InvSee Summary)",
+  "key.myticclient.invsee_config": "InvSee Summary: settings"
 }
