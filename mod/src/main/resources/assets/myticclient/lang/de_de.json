@@ -25,5 +25,9 @@
   "key.myticclient.gamedecline": "Spiel-Herausforderung ablehnen",
   "key.myticclient.styles": "Mytic Styles öffnen",
   "key.myticclient.invsee_repeat": "Letztes /invsee wiederholen (InvSee-Übersicht)",
-  "key.myticclient.invsee_config": "InvSee-Übersicht: Einstellungen"
+  "key.myticclient.invsee_config": "InvSee-Übersicht: Einstellungen",
+  "key.myticclient.minimap_worldmap": "Weltkarte öffnen",
+  "key.myticclient.minimap_waypoint": "Wegpunkt hier setzen",
+  "key.myticclient.minimap_waypoints": "Wegpunkte öffnen",
+  "key.myticclient.minimap_zoom": "Minimap-Zoom wechseln"
 }

@@ -104,6 +104,7 @@ public final class MyticClient implements ClientModInitializer {
     public static ShulkerPreviewModule shulkerPreview;
     public static FriendsModule friends;
     public static de.myticlegacy.client.invsee.InvSeeModule invsee;
+    public static de.myticlegacy.client.minimap.MinimapModule minimap;
 
     private static Config config;
     private static boolean fullbrightApplied;
@@ -202,6 +203,8 @@ public final class MyticClient implements ClientModInitializer {
         hud(new de.myticlegacy.client.hud.YawModule());
         invsee = new de.myticlegacy.client.invsee.InvSeeModule();
         hud(invsee);
+        minimap = new de.myticlegacy.client.minimap.MinimapModule();
+        hud(minimap);
         de.myticlegacy.client.hud.VanillaHudModule.createAll();
         for (var v : de.myticlegacy.client.hud.VanillaHudModule.all()) hud(v);
         hud(new TextModule("watermark", "Wasserzeichen", "Mytic-Client-Schriftzug im HUD", () -> Items.AMETHYST_SHARD, false, 10000, 175, "", p -> "Mytic Client"));
@@ -255,6 +258,7 @@ public final class MyticClient implements ClientModInitializer {
         de.myticlegacy.client.games.GameToast.registerKeys(); // Herausforderung annehmen (J) / ablehnen (K)
         styles.registerKey(); // Mytic Styles (B)
         invsee.register(); // InvSee-Übersicht: /invsee erkennen, Taste I wiederholt das letzte /invsee
+        minimap.register(); // Minimap: Weltkarte (M), Wegpunkt setzen (N), Wegpunkte (U)
         Runtime.getRuntime().addShutdownHook(new Thread(Diagnose::flush, "Mytic Diagnose"));
         for (int i = 0; i < profileKeys.length; i++) profileKeys[i] = Compat.registerKey("key.myticclient.hudprofile" + (i + 1), InputConstants.UNKNOWN.getValue());
         for (int i = 0; i < AutoTextModule.SLOTS; i++) autoTextKeys[i] = Compat.registerKey("key.myticclient.autotext" + (i + 1), -1);
@@ -323,6 +327,7 @@ public final class MyticClient implements ClientModInitializer {
         Ui.frame();
         Diagnose.hudFrame();
         if (Compat.hudHidden(mc) || Compat.screen(mc) instanceof HudEditScreen) return;
+        minimap.drawMarkers(graphics); // Wegpunkte in der Welt unter den Anzeigen
         for (HudModule module : HUD) {
             if (module.enabled()) module.draw(graphics, false);
         }
@@ -396,6 +401,7 @@ public final class MyticClient implements ClientModInitializer {
         cloudSync.tick(mc);
         totemPops.tick(mc);
         invsee.tick(mc);
+        minimap.tick(mc);
 
         if (toggleSprint.enabled() && mc.player != null && Compat.screen(mc) == null
                 && mc.options.keyUp.isDown() && !mc.player.isShiftKeyDown() && !mc.player.isUsingItem()) {
