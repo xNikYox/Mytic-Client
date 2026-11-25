@@ -47,6 +47,8 @@ public final class SimpleModules {
         public final ModeSetting menuStyle;
         /** Hintergrund des Mytic-Hauptmenüs: Szene des Launcher-Designs oder das Panorama. */
         public final ModeSetting titleBackground;
+        /** Bewegung im Hauptmenü (Hintergrund-Drift, Funken, Splash-Pulsieren); aus = alles steht still */
+        public final BoolSetting menuAnimations;
 
         public Theme() {
             super("theme", "Design", "Akzentfarbe, Mytic-Hauptmenü und Menü-Hintergrund", Category.CLIENT, () -> Items.nether_star, true);
@@ -56,7 +58,9 @@ public final class SimpleModules {
             menuSize = new ModeSetting(this, "menuSize", "Menügröße", "Kompakt", "Kompakt", "Groß");
             hudStyle = new ModeSetting(this, "hudStyle", "HUD-Stil", "Lunar", "Lunar", "Neon", "Klassisch");
             menuStyle = new ModeSetting(this, "menuStyle", "Menü-Stil", "Lunar", "Lunar", "Neon");
-            titleBackground = new ModeSetting(this, "titleBackground", "Hauptmenü-Hintergrund", "Launcher-Design", "Launcher-Design", "Panorama");
+            // neuer Schlüssel, damit alle das neue Standard-Design „Mytic (animiert)“ bekommen
+            titleBackground = new ModeSetting(this, "titleBg", "Hauptmenü-Hintergrund", "Mytic (animiert)", "Mytic (animiert)", "Minecraft-Panorama", "Einfarbig dunkel", "Launcher-Design");
+            menuAnimations = new BoolSetting(this, "menuAnimations", "Animationen im Menü", true);
         }
     }
 

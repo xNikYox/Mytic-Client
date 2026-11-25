@@ -54,6 +54,8 @@ public final class SimpleModules {
         public final ColorSetting menuHighlight;
         /** Hintergrund des Mytic-Hauptmenüs: Szene des Launcher-Designs oder das Minecraft-Panorama. */
         public final ModeSetting titleBackground;
+        /** Bewegung im Hauptmenü (Hintergrund-Drift, Funken, Splash-Pulsieren); aus = alles steht still */
+        public final BoolSetting menuAnimations;
         /** Einzelspieler, Mehrspieler, Optionen … im Mytic-Design (Grafiken über das Paket „Mytic Styles“) */
         public final BoolSetting vanillaMenus;
 
@@ -68,7 +70,9 @@ public final class SimpleModules {
             menuOpacity = new SliderSetting(this, "menuOpacity", "Menü-Deckkraft", 30, 100, 5, 75, " %");
             menuColor = new ColorSetting(this, "menuColor", "Menü-Farbe", MENU_COLOR_DEFAULT);
             menuHighlight = new ColorSetting(this, "menuHighlight", "Schalter-Farbe", HIGHLIGHT_DEFAULT);
-            titleBackground = new ModeSetting(this, "titleBackground", "Hauptmenü-Hintergrund", "Launcher-Design", "Launcher-Design", "Panorama");
+            // neuer Schlüssel, damit alle das neue Standard-Design „Mytic (animiert)“ bekommen
+            titleBackground = new ModeSetting(this, "titleBg", "Hauptmenü-Hintergrund", "Mytic (animiert)", "Mytic (animiert)", "Minecraft-Panorama", "Einfarbig dunkel", "Launcher-Design");
+            menuAnimations = new BoolSetting(this, "menuAnimations", "Animationen im Menü", true);
             vanillaMenus = new BoolSetting(this, "vanillaMenus", "Minecraft-Menüs im Mytic-Design", true);
         }
     }
