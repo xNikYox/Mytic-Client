@@ -114,7 +114,7 @@ public abstract class DesignScreen extends MyticScreen {
                 : key == InputConstants.KEY_RETURN || key == InputConstants.KEY_NUMPADENTER ? Kit.KEY_ENTER
                 : key == InputConstants.KEY_ESCAPE ? Kit.KEY_ESCAPE : key == InputConstants.KEY_TAB ? Kit.KEY_TAB : 0;
         if (k != 0 && kit.key(k)) return true;
-        if (kit.typing()) return true;
+        if (kit.typing()) return false; // 1.8.9: Zeichen kommen über dieselbe Taste (keyTyped) – nicht schlucken
         if (key == InputConstants.KEY_ESCAPE) {
             back();
             return true;
