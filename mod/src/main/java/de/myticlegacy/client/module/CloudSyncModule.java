@@ -26,8 +26,20 @@ import java.util.regex.Pattern;
 /**
  * Cloud-Sync: Mods (an/aus, Einstellungen), HUD-Positionen, HUD- und Server-Profile und alle Tasten am Mytic-Konto sichern
  * (Friends-Server, Anmeldung über den Launcher). Auf einem neuen PC wird beim ersten Start automatisch wiederhergestellt.
+ * <p>
+ * Neuere Launcher synchronisieren selbst („Einstellungen synchronisieren“, -Dmytic.sync=launcher): vor dem Start, nach
+ * Änderungen und beim Beenden. Dann gibt es hier nur die Knöpfe – sie laufen über die Launcher-Verbindung (Accounts), nach
+ * dem Herunterladen bzw. Wiederherstellen wird die Datei neu eingelesen. Ohne Launcher-Sync gilt der alte Weg (api/settings).
  */
 public class CloudSyncModule extends Module {
+    /** Der Launcher gleicht selbst ab – kein eigener automatischer Abgleich */
+    private static final boolean VIA_LAUNCHER = "launcher".equals(System.getProperty("mytic.sync", ""));
+    /** Launcher kann Sync (GET /sync klappt) – dann laufen die Knöpfe über ihn */
+    private volatile boolean launcherSync;
+    private boolean probed;
+    private volatile String seenCloudHash;
+    private volatile java.util.List<JsonObject> backups = java.util.Collections.emptyList();
+    private volatile int backupIndex;
     /** Diese Teile der Konfiguration wandern in die Cloud (Cosmetics etc. kommen ohnehin vom Server) */
     private static final String[] FIELDS = {"enabled", "positions", "settings", "hudProfiles", "hudProfile", "serverProfiles"};
     private static final Gson GSON = new Gson();
@@ -42,8 +54,107 @@ public class CloudSyncModule extends Module {
     public CloudSyncModule() {
         super("cloudsync", "Cloud-Sync", "Mods, HUD, Profile und Tasten am Konto sichern – auf anderen PCs wiederherstellen", Category.CLIENT, () -> Items.ENDER_CHEST, true);
         auto = new BoolSetting(this, "auto", "Automatisch sichern", true);
-        new ActionSetting(this, "upload", "Jetzt sichern", () -> busy ? "…" : "Sichern", () -> upload(true));
-        new ActionSetting(this, "download", "Aus der Cloud laden", () -> busy ? "…" : remoteTime > 0 ? "Laden (" + when(remoteTime) + ")" : "Laden", this::download);
+        new ActionSetting(this, "upload", "Jetzt hochladen", () -> busy ? "…" : "Hochladen", () -> upload(true));
+        new ActionSetting(this, "download", "Jetzt herunterladen", () -> busy ? "…" : remoteTime > 0 ? "Laden (" + when(remoteTime) + ")" : "Laden", this::download);
+        new ActionSetting(this, "backups", "Sicherungen", this::backupLabel, this::nextBackup);
+        new ActionSetting(this, "restore", "Gewählte Sicherung wiederherstellen", () -> busy ? "…" : "Wiederherstellen", this::restoreBackup);
+    }
+
+    // ---------- Launcher-Sync (Knöpfe über die Launcher-Verbindung) ----------
+
+    private static final java.util.Map<String, String> REASONS = java.util.Map.of("lokal", "dieser PC", "cloud", "Cloud", "wiederherstellen", "vor Wiederherst.");
+
+    private String backupLabel() {
+        if (!launcherSync) return "Nur mit Launcher-Sync";
+        java.util.List<JsonObject> list = backups;
+        if (list.isEmpty()) return busy ? "…" : "Laden";
+        JsonObject b = list.get(Math.min(backupIndex, list.size() - 1));
+        String reason = b.has("reason") ? REASONS.getOrDefault(b.get("reason").getAsString(), b.get("reason").getAsString()) : "";
+        return (backupIndex + 1) + "/" + list.size() + ": " + when(b.get("at").getAsLong()) + " (" + reason + ")";
+    }
+
+    /** Sicherungen laden bzw. die nächste wählen */
+    private void nextBackup() {
+        if (!launcherSync) {
+            Msg.actionBar("Sicherungen gibt es mit „Einstellungen synchronisieren“ im Mytic Launcher");
+            return;
+        }
+        if (!backups.isEmpty()) {
+            backupIndex = (backupIndex + 1) % backups.size();
+            return;
+        }
+        bridge("GET", "sync/backups", null, r -> {
+            java.util.List<JsonObject> list = new java.util.ArrayList<>();
+            if (r.has("backups")) for (JsonElement e : r.getAsJsonArray("backups")) list.add(e.getAsJsonObject());
+            backups = list;
+            backupIndex = 0;
+            if (list.isEmpty()) Msg.actionBar("Noch keine Sicherungen – sie entstehen vor jedem Überschreiben");
+        });
+    }
+
+    private void restoreBackup() {
+        if (!launcherSync || backups.isEmpty()) {
+            Msg.actionBar(launcherSync ? "Erst unter „Sicherungen“ eine Sicherung wählen" : "Sicherungen gibt es mit „Einstellungen synchronisieren“ im Mytic Launcher");
+            return;
+        }
+        JsonObject body = new JsonObject();
+        body.addProperty("id", backups.get(Math.min(backupIndex, backups.size() - 1)).get("id").getAsString());
+        bridge("POST", "sync/restore", body, r -> {
+            backups = java.util.Collections.emptyList();
+            reload("Sicherung wiederhergestellt");
+        });
+    }
+
+    /** Aufruf an den Launcher im Hintergrund; done läuft auf dem Spiel-Thread */
+    private void bridge(String method, String path, JsonObject body, java.util.function.Consumer<JsonObject> done) {
+        if (busy) return;
+        busy = true;
+        Thread t = new Thread(() -> {
+            try {
+                JsonObject r = de.myticlegacy.client.account.Accounts.call(method, path, body, 30000);
+                Minecraft.getInstance().execute(() -> {
+                    busy = false;
+                    done.accept(r);
+                });
+            } catch (Exception e) {
+                busy = false;
+                Minecraft.getInstance().execute(() -> Msg.actionBar("Cloud-Sync: " + e.getMessage()));
+            }
+        }, "Mytic Sync");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /** Vom Launcher geschriebene Einstellungen neu einlesen und übernehmen (geprüft wie Cloud-Daten) */
+    private static void reload(String what) {
+        try {
+            java.nio.file.Path file = net.fabricmc.loader.api.FabricLoader.getInstance().getConfigDir().resolve("myticclient.json");
+            JsonObject data = com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(file)).getAsJsonObject();
+            Msg.actionBar(apply(data, false, false) ? what + " – Cosmetics und Styles nach Neustart" : "Einstellungen fehlerhaft – nichts geändert");
+        } catch (Exception e) {
+            MyticClient.LOG.warn("Cloud-Sync: Einstellungen nicht neu geladen", e);
+            Msg.actionBar("Einstellungen konnten nicht neu geladen werden");
+        }
+    }
+
+    /** Lebenszeichen meldet einen anderen Stand als der letzte Abgleich dieses PCs → Hinweis (ohne eigene Abfrage beim Server) */
+    private void checkCloudHash() {
+        String h = Friends.syncHash();
+        if (h == null || h.equals(seenCloudHash) || busy) return;
+        seenCloudHash = h;
+        Thread t = new Thread(() -> {
+            try {
+                JsonObject st = de.myticlegacy.client.account.Accounts.call("GET", "sync", null, 10000);
+                JsonObject state = st.has("state") && st.get("state").isJsonObject() ? st.getAsJsonObject("state") : null;
+                String mine = state != null && state.has("hash") && !state.get("hash").isJsonNull() ? state.get("hash").getAsString() : null;
+                if (!h.equals(mine)) Minecraft.getInstance().execute(() ->
+                        Msg.actionBar("Cloud-Sync: neuere Einstellungen von einem anderen PC – Einstellungen → Konto → Jetzt herunterladen"));
+            } catch (Exception ignored) {
+                // Launcher weg – egal
+            }
+        }, "Mytic Sync");
+        t.setDaemon(true);
+        t.start();
     }
 
     private static String when(long t) {
@@ -213,6 +324,26 @@ public class CloudSyncModule extends Module {
     }
 
     public void tick(Minecraft mc) {
+        if (!probed && de.myticlegacy.client.account.Accounts.available()) { // kann der Launcher Sync? (lokale Anfrage)
+            probed = true;
+            Thread t = new Thread(() -> {
+                try {
+                    de.myticlegacy.client.account.Accounts.call("GET", "sync", null, 5000);
+                    launcherSync = true;
+                } catch (Exception ignored) {
+                    // älterer Launcher
+                }
+            }, "Mytic Sync");
+            t.setDaemon(true);
+            t.start();
+        }
+        if (VIA_LAUNCHER) {
+            if (launcherSync && ++ticks >= 200) { // alle 10 s schauen, ob das Lebenszeichen einen neuen Stand meldet
+                ticks = 0;
+                checkCloudHash();
+            }
+            return;
+        }
         if (!enabled() || !Friends.available()) return;
         if (!checkedRemote) { // einmal nach dem Start: neuer PC (noch nichts eingestellt) → Stand aus der Cloud holen
             checkedRemote = true;
@@ -248,6 +379,10 @@ public class CloudSyncModule extends Module {
     }
 
     private void upload(boolean manual) {
+        if (manual && launcherSync) {
+            bridge("POST", "sync/upload", null, r -> Msg.actionBar("Einstellungen hochgeladen"));
+            return;
+        }
         if (!Friends.available()) {
             Msg.actionBar("Cloud-Sync geht nur über den Mytic Launcher");
             return;
@@ -272,6 +407,11 @@ public class CloudSyncModule extends Module {
     }
 
     private void download() {
+        if (launcherSync) {
+            Msg.actionBar("Lade aus der Cloud …");
+            bridge("POST", "sync/download", null, r -> reload("Einstellungen aus der Cloud übernommen (alter Stand gesichert)"));
+            return;
+        }
         if (!Friends.available()) {
             Msg.actionBar("Cloud-Sync geht nur über den Mytic Launcher");
             return;

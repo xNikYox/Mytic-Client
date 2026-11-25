@@ -119,6 +119,8 @@ public final class Friends {
     private static volatile int gameHints;
     /** Spielzeit für das nächste Lebenszeichen (Stats) */
     private static JsonObject pendingPlay;
+    /** Stand des Einstellungs-Syncs aus dem letzten Lebenszeichen (Server mit sync1), sonst null */
+    private static volatile String syncHash;
     /** Freischaltungen aus dem letzten Lebenszeichen (Cosmetics) und Zähler, wie oft sie kamen */
     private static volatile JsonObject owned;
     private static volatile int ownedSeq;
@@ -331,6 +333,13 @@ public final class Friends {
             owned = data.getAsJsonObject("owned");
             ownedSeq++;
         }
+        if (data.has("sync") && data.get("sync").isJsonObject() && data.getAsJsonObject("sync").has("hash"))
+            syncHash = data.getAsJsonObject("sync").get("hash").getAsString();
+    }
+
+    /** Hash des Einstellungs-Syncs in der Cloud (kommt mit dem Lebenszeichen, ohne eigene Abfrage) oder null */
+    public static String syncHash() {
+        return syncHash;
     }
 
     /** Freischaltungen aus dem letzten Lebenszeichen ({items, admin}) oder null. */

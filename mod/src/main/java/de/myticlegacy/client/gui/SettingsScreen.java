@@ -222,6 +222,7 @@ public class SettingsScreen extends DesignScreen {
         if (cloud != null) {
             Group c = new Group("Sicherung");
             c.rows.add(toggleModule(cloud, null, null));
+            for (Setting<?> s : cloud.settings) c.rows.add(setting(s, null, null));
             groups.get(3).add(c);
         }
         // Über: eigener Inhalt (about())
