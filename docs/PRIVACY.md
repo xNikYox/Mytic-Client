@@ -11,6 +11,8 @@ Der Mytic Client ist ein kostenloser Launcher für Minecraft: Java Edition. Er l
 | Microsoft-Anmeldung (Zugriffs- und Aktualisierungstoken) | Anmeldung bei Xbox Live und Minecraft | nur lokal auf deinem PC, verschlüsselt mit der Betriebssystem-Verschlüsselung (Windows DPAPI bzw. Schlüsselbund) |
 | Minecraft-Name und UUID | Anzeige im Launcher, Spielstart | nur lokal (`%APPDATA%\.myticclient\accounts.json`) |
 | Einstellungen (RAM, Mods, HUD-Positionen) | deine Einstellungen merken | nur lokal |
+| Mytic-Einstellungen (Mods, HUD-Layouts und -Profile, Fadenkreuz, Chat, Cosmetics-Auswahl) – nur mit „Einstellungen synchronisieren“ (Standard: aus) | dieselben Einstellungen auf deinen anderen PCs | gepackt auf dem Mytic-Friends-Server, je Minecraft-Konto (ohne Anmeldedaten, ohne PC-spezifische Werte, nur die Art des Betriebssystems); die letzten 10 überschriebenen Stände als Sicherung lokal in `%APPDATA%\.myticclient\sync` |
+| Clips (Videos der letzten Sekunden) – nur mit eingeschaltetem Modul „Clips“ | auf Tastendruck speichern | nur im Arbeitsspeicher bzw. lokal in `mytic\clips` im Spielordner |
 | Profile anderer Launcher (Modrinth App, NoRiskClient, Lunar Client) | nur wenn du „Importieren“ öffnest: Version und Mods werden gelesen und in ein neues Mytic-Profil kopiert | nur lokal; die Originale bleiben unverändert |
 
 ## Mit welchen Diensten der Launcher spricht

@@ -848,7 +848,8 @@ const cloudSync = new CloudSync({
   dataDir: path.join(DIRS.base, "sync"),
   call: async (method, p, data) => friends.call(syncAccount || (await activeAccount()), method, p, data),
   uuid: () => (syncAccount ? syncAccount.uuid : accounts().selected || "-"),
-  device: os.hostname().slice(0, 40),
+  // nur die Art des PCs (kein Rechnername): „von Windows“ in der Anzeige reicht, um Stände zu unterscheiden
+  device: { win32: "Windows", darwin: "macOS", linux: "Linux" }[process.platform] || process.platform,
   log: (line) => emit("log", line),
 });
 
