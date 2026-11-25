@@ -33,6 +33,8 @@ Minecraft 1.8.9, 1.21 – 1.21.11 und 26.x · Fabric & Forge · Windows
 - **Einstellungen:** RAM, Fenstergröße, Vollbild, Java-Argumente und eine Reparatur-Funktion.
 - **Konsole:** lesbares Spiel-Log mit Filter für Warnungen und Fehler.
 - **Automatische Updates:** Neue Versionen erkennt der Launcher selbst und installiert sie mit einem Klick. Konten und Einstellungen bleiben erhalten.
+- **Einstellungen synchronisieren:** (Einstellungen → Cloud, Standard aus) Mod-Einstellungen, HUD-Layouts und -Profile, Fadenkreuz, Chat und Cosmetics-Auswahl wandern mit deinem Konto auf alle PCs – Abgleich beim Spielstart, Upload nach Änderungen und beim Beenden. Vor jedem Überschreiben wird der alte Stand gesichert („Sicherungen“ → „Wiederherstellen“).
+- **Clips:** (Modul „Clips“, Standard aus) die letzten 15, 30 oder 60 Sekunden per Taste (F8) als Video in `mytic/clips` speichern – als AVI ohne Zusatzprogramm, mit vorhandenem ffmpeg als MP4. Auch in 1.8.9.
 - **Eigener Ordner:** Alles liegt in `%APPDATA%\.myticclient` und bleibt getrennt von `.minecraft`.
 
 ### Im Spiel

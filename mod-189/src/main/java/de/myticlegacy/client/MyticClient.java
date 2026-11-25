@@ -24,6 +24,7 @@ import de.myticlegacy.client.module.CrosshairModule;
 import de.myticlegacy.client.module.LightOverlayModule;
 import de.myticlegacy.client.module.FpsBoostModule;
 import de.myticlegacy.client.module.FreelookModule;
+import de.myticlegacy.client.module.ClipModule;
 import de.myticlegacy.client.module.FriendsModule;
 import de.myticlegacy.client.module.Module;
 import de.myticlegacy.client.module.SimpleModules;
@@ -107,6 +108,8 @@ public final class MyticClient {
     public static de.myticlegacy.client.module.ChatModule chat;
     public static FriendsModule friends;
     public static de.myticlegacy.client.invsee.InvSeeModule invsee;
+    public static ClipModule clips;
+    public static KeyBinding clipKey;
 
     private static Config config;
     private static boolean fullbrightApplied;
@@ -225,12 +228,14 @@ public final class MyticClient {
         friends = module(new FriendsModule());
         theme = module(new SimpleModules.Theme());
         chat = module(new de.myticlegacy.client.module.ChatModule()); // Chat+
+        clips = module(new ClipModule());
 
         menuKey = Compat.registerKey("key.myticclient.menu", InputConstants.KEY_RSHIFT);
         zoomKey = Compat.registerKey("key.myticclient.zoom", InputConstants.KEY_C);
         freelookKey = Compat.registerKey("key.myticclient.freelook", InputConstants.KEY_LALT);
         snaplookKey = Compat.registerKey("key.myticclient.snaplook", InputConstants.KEY_V);
         invsee.register(); // InvSee-Übersicht: /invsee erkennen, Taste I wiederholt das letzte /invsee
+        clipKey = Compat.registerKey("key.myticclient.clip", org.lwjgl.input.Keyboard.KEY_F8);
         for (int i = 0; i < AutoTextModule.SLOTS; i++) autoTextKeys[i] = Compat.registerKey("key.myticclient.autotext" + (i + 1), 0);
 
         CombatTracker.register();
@@ -316,6 +321,7 @@ public final class MyticClient {
             if (module.enabled()) module.draw(graphics, false);
         }
         chat.renderToast(graphics); // Chat+: Erwähnung
+        clips.renderToast(graphics, clipKey); // Clip gespeichert
     }
 
     // ---------------------------------------------------------------------------------------------- Kamera
@@ -346,8 +352,11 @@ public final class MyticClient {
 
     @SubscribeEvent
     public void onRenderTick(TickEvent.RenderTickEvent event) {
-        if (event.phase != TickEvent.Phase.START) return;
         Minecraft mc = Minecraft.getMinecraft();
+        if (event.phase == TickEvent.Phase.END) { // Bild fertig (Welt, HUD, Menüs): für Clips abgreifen
+            clips.frame(mc);
+            return;
+        }
         ClickCounter.poll();
         zoom.frame();
         freelook.frameStart(mc);
@@ -437,6 +446,8 @@ public final class MyticClient {
         lightOverlay.tick(mc);
         fpsBoost.tick(mc);
         chat.tick(mc);
+        clips.tick(mc);
+        while (clipKey.isPressed()) clips.saveClip(mc);
         de.myticlegacy.client.cosmetics.Cosmetics.tick(mc);
         de.myticlegacy.client.cosmetics.MiniMe.register(mc);
         de.myticlegacy.client.cosmetics.Wings.register(mc);

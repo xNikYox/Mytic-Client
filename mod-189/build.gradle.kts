@@ -38,6 +38,8 @@ val sharedUi = layout.buildDirectory.dir("shared-ui")
 val copySharedUi by tasks.registering(Sync::class) {
     from("../mod/src/main/java") {
         include("de/myticlegacy/client/gui/ui/**")
+        // Clips: Ringpuffer und AVI-Schreiber sind reines Java 8 und für alle Versionen gleich
+        include("de/myticlegacy/client/clips/ClipBuffer.java", "de/myticlegacy/client/clips/MjpegAvi.java")
         filter { line -> line.replace("import net.minecraft.client.gui.GuiGraphics;", "import de.myticlegacy.client.compat.GuiGraphics;") }
     }
     into(sharedUi)

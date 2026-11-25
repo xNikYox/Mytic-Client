@@ -232,6 +232,16 @@ public final class Accounts {
         return json;
     }
 
+    /** Anfrage an den Launcher (blockierend, nur aus Hintergrund-Threads) – z. B. Einstellungs-Sync */
+    public static JsonObject call(String method, String path, JsonObject body, int readTimeout) throws Exception {
+        if (!available()) throw new Exception("Nur verfügbar, wenn das Spiel über den Mytic Launcher gestartet wurde");
+        try {
+            return request(method, path, body, readTimeout);
+        } catch (Exception e) {
+            throw new Exception(message(e));
+        }
+    }
+
     // ------------------------------------------------------------------------------------------ Umstellen
 
     /** UserApiService (Chat-Schlüssel, Blockliste, Chat-Rechte) für den neuen Token – authlib je nach Version */

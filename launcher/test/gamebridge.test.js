@@ -85,3 +85,32 @@ test("Neu anmelden, hinzufügen und entfernen über dieselbe Verbindung", async 
   assert.deepEqual(calls.map((c) => c[0]), ["refresh", "add", "remove", "remove"]);
   bridge.revoke(key);
 });
+
+test("Einstellungs-Sync über die Verbindung: nur mit Schlüssel, Fehler als Text", async () => {
+  const calls = [];
+  const sync = {
+    status: async () => ({ enabled: true, hash: "h" }),
+    backups: async () => [{ id: "1-lokal", at: 1, reason: "lokal" }],
+    upload: async () => (calls.push("up"), { action: "upload" }),
+    download: async () => { throw new Error("In der Cloud ist noch nichts gespeichert"); },
+    restore: async (id) => (calls.push(`restore:${id}`), { restored: id }),
+  };
+  const bridge = createBridge({ listAccounts: () => ACCOUNTS, switchAccount: async () => ({}), sync });
+  const key = bridge.issueKey();
+  const base = await bridge.start();
+  try {
+    assert.equal((await request(`${base}sync`)).status, 401);
+    assert.ok((await request(`${base}accounts`, { key })).json.features.includes("sync"));
+    assert.deepEqual((await request(`${base}sync`, { key })).json, { enabled: true, hash: "h" });
+    assert.equal((await request(`${base}sync/backups`, { key })).json.backups[0].id, "1-lokal");
+    assert.equal((await request(`${base}sync/upload`, { method: "POST", key })).json.action, "upload");
+    const failed = await request(`${base}sync/download`, { method: "POST", key });
+    assert.equal(failed.status, 502);
+    assert.match(failed.json.error, /noch nichts/);
+    assert.equal((await request(`${base}sync/restore`, { method: "POST", key, body: JSON.stringify({ id: "1-lokal" }) })).json.restored, "1-lokal");
+    assert.equal((await request(`${base}sync/nope`, { method: "POST", key })).status, 404);
+    assert.deepEqual(calls, ["up", "restore:1-lokal"]);
+  } finally {
+    bridge.revoke(key);
+  }
+});

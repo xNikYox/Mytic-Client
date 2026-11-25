@@ -13,10 +13,11 @@ const MAX_BODY = 2048;
  *   Microsoft-Login im Launcher); zusätzlich { relogin: true }, wenn neu angemeldet werden musste
  * addAccount(key): Microsoft-Login im Launcher, liefert { uuid, name }
  * removeAccount(uuid, key): Konto aus dem Launcher entfernen
+ * sync (optional, Einstellungs-Sync): { status(), upload(), download(), backups(), restore(id) } – Knöpfe im Spiel
  */
-const FEATURES = ["refresh", "add", "remove"];
+const FEATURES = ["refresh", "add", "remove", "sync"];
 
-function createBridge({ listAccounts, switchAccount, refreshAccount, addAccount, removeAccount, log = () => {} }) {
+function createBridge({ listAccounts, switchAccount, refreshAccount, addAccount, removeAccount, sync, log = () => {} }) {
   const keys = new Set();
   let server = null;
   let port = 0;
@@ -48,8 +49,9 @@ function createBridge({ listAccounts, switchAccount, refreshAccount, addAccount,
       const accounts = listAccounts().map(({ uuid, name, type, expiresAt, needsLogin }) => ({
         uuid, name, type: type || "microsoft", expiresAt: Number(expiresAt) || 0, needsLogin: Boolean(needsLogin),
       }));
-      return send(res, 200, { accounts, features: FEATURES.filter((f) => ({ refresh: refreshAccount, add: addAccount, remove: removeAccount })[f]) });
+      return send(res, 200, { accounts, features: FEATURES.filter((f) => ({ refresh: refreshAccount, add: addAccount, remove: removeAccount, sync })[f]) });
     }
+    if (sync && req.url.startsWith("/sync")) return handleSync(req, res);
     if (req.method !== "POST") return send(res, 404, { error: "not found" });
     const actions = { "/switch": switchAccount, "/refresh": refreshAccount, "/remove": removeAccount };
     if (req.url === "/add" && addAccount) {
@@ -80,6 +82,35 @@ function createBridge({ listAccounts, switchAccount, refreshAccount, addAccount,
       log(`[Konto ${req.url.slice(1)}] ${error.message}`);
       return send(res, 502, { error: error.message });
     }
+  }
+
+  /** Einstellungs-Sync: GET /sync (Status), GET /sync/backups, POST /sync/upload|download, POST /sync/restore { id } */
+  async function handleSync(req, res) {
+    const route = `${req.method} ${req.url}`;
+    let raw = "";
+    for await (const chunk of req) {
+      raw += chunk;
+      if (raw.length > MAX_BODY) return send(res, 413, { error: "too large" });
+    }
+    try {
+      if (route === "GET /sync") return send(res, 200, await sync.status());
+      if (route === "GET /sync/backups") return send(res, 200, { backups: await sync.backups() });
+      if (route === "POST /sync/upload") return send(res, 200, await sync.upload());
+      if (route === "POST /sync/download") return send(res, 200, await sync.download());
+      if (route === "POST /sync/restore") {
+        let id;
+        try {
+          id = String(JSON.parse(raw).id || "");
+        } catch {
+          return send(res, 400, { error: "bad json" });
+        }
+        return send(res, 200, await sync.restore(id));
+      }
+    } catch (error) {
+      log(`[Sync] ${error.message}`);
+      return send(res, 502, { error: error.message });
+    }
+    return send(res, 404, { error: "not found" });
   }
 
   /** Startet den Server (einmal) und gibt die Adresse zurück */

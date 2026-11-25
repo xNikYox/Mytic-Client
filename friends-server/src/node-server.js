@@ -6,7 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
-import { createApi, SHOT_BODY_MAX } from "./api.js";
+import { createApi, SHOT_BODY_MAX, SYNC_BODY_MAX } from "./api.js";
 import { SCHEMA, MIGRATIONS } from "./schema.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -46,7 +46,7 @@ export function createServer(api, { trustProxy } = {}) {
   return http.createServer(async (req, res) => {
     const ip = clientIp(req, trustProxy);
     // Inhalt mit harter Grenze lesen (Screenshot-Upload größer); api.js prüft zusätzlich und bremst je Adresse
-    const max = /\/api\/shots\/?(\?|$)/.test(req.url || "") ? SHOT_BODY_MAX : 16 * 1024;
+    const max = /\/api\/shots\/?(\?|$)/.test(req.url || "") ? SHOT_BODY_MAX : /\/api\/sync\/?(\?|$)/.test(req.url || "") ? SYNC_BODY_MAX : 16 * 1024;
     const chunks = [];
     let size = 0;
     if (Number(req.headers["content-length"] || 0) > max) {

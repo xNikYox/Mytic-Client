@@ -15,12 +15,15 @@ export const ONLINE_MS = 150 * 1000;
 /**
  * Was POST /api/presence kann (steht in jeder Freundesliste): "presence2" = Spielzeit (play), Einladungen (games),
  * Freischaltungen (owned) und versteckter Status (hidden) – ältere Server ignorieren diese Felder, die Mod fragt dann einzeln.
+ * "sync1" = GET/PUT /api/sync gibt es, und das Lebenszeichen bringt den Stand des Einstellungs-Syncs mit (sync).
  */
-const CAPS = ["presence2"];
+const CAPS = ["presence2", "sync1"];
 const CHALLENGE_MS = 2 * 60 * 1000;
 const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
 const HEAD_MS = 24 * 60 * 60 * 1000;
 const SETTINGS_MAX = 256 * 1024;      // Cloud-Einstellungen (JSON-Text)
+export const SYNC_MAX = 256 * 1024;   // Einstellungs-Sync: gzip-Daten (vor Base64)
+export const SYNC_BODY_MAX = 400 * 1024;     // Anfrage-Inhalt beim Sync-Upload (Base64 + JSON)
 const SHOT_MAX = 1900 * 1024;         // Screenshot als Base64 (≈ 1,4 MB JPEG; SQLite-Zeile max. 2 MB)
 const SHOTS_PER_USER = 100;           // ältere Uploads werden gelöscht
 const SHOTS_PER_DAY = 30;             // Uploads je Konto und Tag (UTC), auch gelöschte zählen
@@ -1214,6 +1217,9 @@ export function createApi(db, options = {}) {
         const items = await grantsOf(me.uuid);
         result.owned = { items: [...items].sort(), admin: owns(items, "admin") };
       }
+      // Stand des Einstellungs-Syncs: so merken Launcher und Mod ohne eigene Abfrage, ob ein anderer PC hochgeladen hat
+      const sync = await db.get("SELECT version, hash, updated FROM sync_blobs WHERE uuid = ?", [me.uuid]);
+      if (sync) result.sync = { version: sync.version, hash: sync.hash, updatedAt: sync.updated };
       return result;
     },
 
@@ -1437,6 +1443,47 @@ export function createApi(db, options = {}) {
       const t = now();
       await db.run("INSERT INTO cloud_settings (uuid, data, updated) VALUES (?, ?, ?) ON CONFLICT(uuid) DO UPDATE SET data = excluded.data, updated = excluded.updated", [me.uuid, text, t]);
       return { updated: t };
+    },
+
+    /**
+     * Einstellungs-Sync (Launcher): ein Stand je Konto. ?have=<hash> – ist das der aktuelle Stand, kommt nur
+     * { unchanged: true } ohne Daten zurück (spart Datenmenge; der Launcher fragt höchstens einmal je Spielstart).
+     */
+    "GET /api/sync": async (request) => {
+      const me = await auth(request);
+      const have = new URL(request.url).searchParams.get("have");
+      const row = await db.get("SELECT version, hash, data, device, updated FROM sync_blobs WHERE uuid = ?", [me.uuid]);
+      if (!row) return { version: 0, hash: null, updatedAt: 0, data: null };
+      const meta = { version: row.version, hash: row.hash, updatedAt: row.updated, device: row.device || null };
+      if (have && have === row.hash) return { ...meta, unchanged: true };
+      return { ...meta, data: row.data };
+    },
+
+    /**
+     * Neuen Stand hochladen: { data: Base64(gzip(JSON)), hash: SHA-256 des Inhalts (hex), ifVersion?, device? }.
+     * Zuletzt geschrieben gewinnt. Mit ifVersion: hat inzwischen ein anderer PC hochgeladen, gibt es 409 samt dem Stand
+     * des Servers – der Launcher sichert ihn lokal (Wiederherstellen) und lädt dann mit force: true hoch.
+     */
+    "PUT /api/sync": async (request) => {
+      const me = await auth(request);
+      const input = await body(request, SYNC_BODY_MAX);
+      const { data, hash } = input;
+      if (typeof hash !== "string" || !/^[0-9a-f]{64}$/.test(hash)) throw new HttpError(400, "Ungültige Prüfsumme");
+      if (typeof data !== "string" || !data || data.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(data)) throw new HttpError(400, "Ungültige Daten");
+      const size = data.length / 4 * 3 - (data.endsWith("==") ? 2 : data.endsWith("=") ? 1 : 0);
+      if (size > SYNC_MAX) throw new HttpError(413, "Einstellungen zu groß");
+      if (!data.startsWith("H4sI")) throw new HttpError(400, "Keine gzip-Daten"); // 1f 8b 08 als Base64
+      const device = clean(input.device, 40);
+      const row = await db.get("SELECT version, hash, data, device, updated FROM sync_blobs WHERE uuid = ?", [me.uuid]);
+      if (row && row.hash === hash) return { version: row.version, hash: row.hash, updatedAt: row.updated, unchanged: true };
+      if (row && input.force !== true && input.ifVersion !== undefined && input.ifVersion !== row.version) {
+        return { conflict: true, version: row.version, hash: row.hash, updatedAt: row.updated, device: row.device || null, data: row.data };
+      }
+      const t = now();
+      const version = (row ? row.version : 0) + 1;
+      await db.run("INSERT INTO sync_blobs (uuid, version, hash, data, size, device, updated) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(uuid) DO UPDATE SET version = excluded.version, hash = excluded.hash, data = excluded.data, size = excluded.size, device = excluded.device, updated = excluded.updated",
+        [me.uuid, version, hash, data, size, device, t]);
+      return { version, hash, updatedAt: t };
     },
 
     /** Screenshot hochladen (JPEG als Base64, vom Launcher verkleinert) → öffentlicher Link */
@@ -1714,7 +1761,7 @@ export function createApi(db, options = {}) {
   }
 
   /** Strengere Töpfe für Anmeldung ohne Konto und für Uploads. */
-  const STRICT = { "POST /api/auth/challenge": "auth", "POST /api/auth/login": "auth", "POST /api/auth/offline": "auth", "POST /api/shots": "upload" };
+  const STRICT = { "POST /api/auth/challenge": "auth", "POST /api/auth/login": "auth", "POST /api/auth/offline": "auth", "POST /api/shots": "upload", "PUT /api/sync": "upload" };
 
   return async function handle(request, info) {
     try {
@@ -1728,7 +1775,7 @@ export function createApi(db, options = {}) {
   async function dispatch(request, ip) {
     const url = new URL(request.url);
     if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, content-type, x-admin-key", "access-control-allow-methods": "GET, POST" } });
+      return new Response(null, { status: 204, headers: { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, content-type, x-admin-key", "access-control-allow-methods": "GET, POST, PUT" } });
     }
     // Pfad ab "/api/" – so funktioniert der Server auch hinter einem Proxy mit Präfix
     const index = url.pathname.indexOf("/api/");

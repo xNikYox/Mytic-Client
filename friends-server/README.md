@@ -51,3 +51,19 @@ bei einem verpassten Lebenszeichen.
 
 **Kapazität:** 100 000 / ≈ 70 ≈ **1 400 Spielstunden pro Tag**, z. B. rund 700 Nutzer mit je 2 Stunden
 (vorher ≈ 90 Spielstunden, also ≈ 45 Nutzer).
+
+## Einstellungs-Sync (`GET`/`PUT /api/sync`)
+
+Der Launcher synchronisiert die Mytic-Einstellungen (Mods, HUD, Profile, Fadenkreuz, Chat, Cosmetics-Auswahl) je Konto:
+
+- `GET /api/sync?have=<hash>` → `{ version, hash, updatedAt, device, data }`; ist `have` schon der aktuelle Stand, kommt
+  `{ …, unchanged: true }` ohne Daten.
+- `PUT /api/sync` mit `{ data: Base64(gzip(JSON)), hash: SHA-256 des JSON, ifVersion?, force?, device? }` → `{ version, hash, updatedAt }`.
+  Höchstens 256 KB gzip. Gleicher Hash schreibt nichts (`unchanged`). Mit `ifVersion` und inzwischen neuerem Stand kommt
+  `{ conflict: true, …, data }` (Status 200) zurück – der Launcher sichert den Stand des Servers lokal und lädt mit `force: true` hoch.
+- Das Lebenszeichen (`POST /api/presence`) bringt `sync: { version, hash, updatedAt }` mit, `caps` enthält `"sync1"`.
+  Ältere Clients ignorieren beides; `/api/settings` (alte Cloud-Sync der Mod) bleibt unverändert.
+
+Anfragen: höchstens 1 `GET` je Spielstart (0, wenn der Stand aus einem Lebenszeichen schon bekannt ist), 1 `PUT` je
+geänderter Einstellung (frühestens 30 s nach der letzten Änderung, gesammelt) und 1 beim Beenden, falls sich etwas geändert
+hat – typisch 1–3 Anfragen je Spielsitzung, nichts im Takt.

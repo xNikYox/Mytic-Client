@@ -335,6 +335,7 @@ public final class MyticClient implements ClientModInitializer {
         }
         de.myticlegacy.client.games.GameToast.render(graphics); // Herausforderung oben rechts
         de.myticlegacy.client.module.ChatModule.renderToast(graphics); // Chat+: Erwähnung
+        de.myticlegacy.client.module.ClipToast.render(graphics, clipKey); // Clip gespeichert
     }
 
     /** Status für die Freundesliste weitergeben und Benachrichtigungen im Chat zeigen. */

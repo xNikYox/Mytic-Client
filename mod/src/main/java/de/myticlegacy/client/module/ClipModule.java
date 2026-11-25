@@ -2,30 +2,38 @@ package de.myticlegacy.client.module;
 
 import de.myticlegacy.client.clips.ClipRecorder;
 import de.myticlegacy.client.compat.FrameGrab;
+import de.myticlegacy.client.setting.ActionSetting;
 import de.myticlegacy.client.setting.ModeSetting;
-import de.myticlegacy.client.setting.SliderSetting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.item.Items;
 
+import java.nio.file.Path;
+
 /**
- * Clips: nimmt im Hintergrund die letzten Sekunden auf, eine Taste speichert sie als MP4 in den Ordner „clips“.
- * Standardmäßig aus. Beim ersten Einschalten wird ffmpeg gesucht bzw. (Windows) einmalig geladen.
+ * Clips (Instant Replay): hält die letzten 15/30/60 Sekunden verkleinert im Arbeitsspeicher (JPEG, höchstens 300 MB),
+ * eine Taste speichert sie als Video in .minecraft/mytic/clips – als AVI (Motion-JPEG, ohne Zusatzprogramm) oder, wenn
+ * ffmpeg da ist, als MP4. Standardmäßig aus.
  */
 public class ClipModule extends Module {
     private static ClipModule instance;
-    public final SliderSetting length;
+    public final ModeSetting length;
     public final ModeSetting resolution;
     public final ModeSetting fps;
+    public final ModeSetting format;
     private String config = "";
-    private String shownStatus = "";
     private long lastFrame;
     private boolean announced;
+    /** Gespeicherter Clip für die Karte „Clip gespeichert“ (und Zeitpunkt) */
+    private static volatile Path lastClip;
+    private static volatile long lastClipAt;
 
     public ClipModule() {
-        super("clips", "Clips", "Die letzten Sekunden per Taste als Video speichern (Ordner „clips“)", Category.CLIENT, () -> Items.JUKEBOX, false);
-        length = new SliderSetting(this, "length", "Länge", 10, 120, 5, 30, " s");
-        resolution = new ModeSetting(this, "resolution", "Auflösung", "1080p", "720p", "1080p", "Bildschirm");
+        super("clips", "Clips", "Die letzten Sekunden per Taste als Video speichern (Ordner „mytic/clips“)", Category.CLIENT, () -> Items.JUKEBOX, false);
+        length = new ModeSetting(this, "duration", "Länge (Sekunden)", "30", "15", "30", "60");
+        resolution = new ModeSetting(this, "resolution", "Auflösung", "720p", "480p", "720p", "1080p");
         fps = new ModeSetting(this, "fps", "Bilder pro Sekunde", "30", "30", "60");
+        format = new ModeSetting(this, "format", "Format", "MP4, wenn ffmpeg da ist", "AVI (immer)", "MP4, wenn ffmpeg da ist");
+        new ActionSetting(this, "folder", "Clip-Ordner", () -> "Ordner öffnen", ClipRecorder::openFolder);
         instance = this;
     }
 
@@ -33,46 +41,56 @@ public class ClipModule extends Module {
         return "60".equals(fps.get()) ? 60 : 30;
     }
 
+    private int seconds() {
+        try {
+            return Integer.parseInt(length.get());
+        } catch (NumberFormatException e) {
+            return 30;
+        }
+    }
+
     private int outHeight() {
-        return switch (resolution.get()) {
-            case "720p" -> 720;
-            case "1080p" -> 1080;
-            default -> 0;
-        };
+        switch (resolution.get()) {
+            case "480p":
+                return 480;
+            case "1080p":
+                return 1080;
+            default:
+                return 720;
+        }
     }
 
     public void tick(Minecraft mc) {
         boolean want = enabled() && mc.level != null;
         if (!want) {
-            if (!enabled()) ClipRecorder.resetRetries(); // ausgeschaltet: beim nächsten Einschalten sofort neu versuchen
             if (ClipRecorder.running()) ClipRecorder.stop();
             config = "";
             announced = false;
             return;
         }
-        if (!ClipRecorder.ready()) {
-            ClipRecorder.prepare();
-            String s = ClipRecorder.status;
-            if (!s.equals(shownStatus)) {
-                shownStatus = s;
-                if (!s.isEmpty()) Msg.actionBar("Clips: " + s);
-            }
+        String err = ClipRecorder.error();
+        if (err != null) {
+            if (!config.equals("error")) Msg.actionBar("Clips: " + err);
+            config = "error";
+            ClipRecorder.stop();
             return;
         }
+        if (config.equals("error")) return; // nicht jeden Tick neu versuchen (aus- und einschalten = neuer Versuch)
         int w = FrameGrab.width(), h = FrameGrab.height();
-        int len = (int) Math.round(length.get());
+        int len = seconds();
         String c = w + "x" + h + "/" + outHeight() + "/" + targetFps() + "/" + len;
         if (!ClipRecorder.running() || !c.equals(config)) {
+            if (config.isEmpty()) ClipRecorder.cleanupOld();
             config = c;
             if (FrameGrab.gpuScale()) {
-                // Grafikkarte verkleinert und dreht schon – ffmpeg bekommt fertige Bilder in Clip-Größe (gerade Zahlen)
-                int oh = (outHeight() > 0 && outHeight() < h ? outHeight() : h) & ~1;
+                // Grafikkarte verkleinert und dreht – der Kodierer bekommt fertige Bilder in Clip-Größe (gerade Zahlen)
+                int oh = (outHeight() < h ? outHeight() : h) & ~1;
                 int ow = Math.max(2, Math.round(w * (float) oh / h) & ~1);
                 ClipRecorder.start(w, h, ow, oh, 0, targetFps(), len, false);
             } else ClipRecorder.start(w, h, w, h, outHeight(), targetFps(), len, FrameGrab.flipped());
             if (!announced && ClipRecorder.running()) {
                 announced = true;
-                Msg.actionBar("Clips: Aufnahme läuft (" + ClipRecorder.encoderName() + ")");
+                Msg.actionBar("Clips: Aufnahme läuft (" + outHeight() + "p, " + targetFps() + " fps, " + len + " s)");
             }
         }
     }
@@ -86,18 +104,39 @@ public class ClipModule extends Module {
         FrameGrab.grab();
     }
 
-    /** Taste „Clip speichern“ */
+    /** Taste „Clip speichern“; mit Umschalt kurz nach dem Speichern: Ordner öffnen */
     public void saveClip(Minecraft mc) {
+        if (de.myticlegacy.client.compat.Compat.shiftDown() && lastClip != null && System.currentTimeMillis() - lastClipAt < ClipToast.SHOW_MS) {
+            ClipRecorder.openFolder();
+            lastClipAt = 0;
+            return;
+        }
         if (!enabled()) {
             Msg.actionBar("Clips sind aus – im Mod-Menü unter Client einschalten");
             return;
         }
         if (!ClipRecorder.running()) {
-            Msg.actionBar(ClipRecorder.status.isEmpty() ? "Clips: Aufnahme startet noch …" : "Clips: " + ClipRecorder.status);
+            Msg.actionBar("Clips: Aufnahme startet noch …");
             return;
         }
         Msg.actionBar("Clip wird gespeichert …");
-        ClipRecorder.save((clip, error) -> mc.execute(() ->
-                Msg.actionBar(error != null ? "Clip: " + error : "Clip gespeichert: " + clip.getFileName())));
+        ClipRecorder.save(seconds(), format.get().startsWith("MP4"), (clip, error) -> mc.execute(() -> {
+            if (error != null) {
+                Msg.actionBar("Clip: " + error);
+                return;
+            }
+            lastClip = clip;
+            lastClipAt = System.currentTimeMillis();
+            Msg.actionBar("Clip gespeichert – Ordner öffnen: Umschalt + Clip-Taste");
+        }));
+    }
+
+    /** Gerade gespeicherter Clip (für die Karte) oder null */
+    static Path recentClip() {
+        return lastClip != null && System.currentTimeMillis() - lastClipAt < ClipToast.SHOW_MS ? lastClip : null;
+    }
+
+    static long recentAt() {
+        return lastClipAt;
     }
 }
