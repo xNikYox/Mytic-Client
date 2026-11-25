@@ -1,129 +1,174 @@
 package de.myticlegacy.client.stats;
 
+import de.myticlegacy.client.compat.Compat;
 import de.myticlegacy.client.friends.Friends;
-import de.myticlegacy.client.gui.PanelScreen;
-import de.myticlegacy.client.gui.Ui;
+import de.myticlegacy.client.gui.DesignScreen;
+import de.myticlegacy.client.gui.HubScreen;
+import de.myticlegacy.client.gui.ui.Draw;
+import de.myticlegacy.client.gui.ui.Icons;
+import de.myticlegacy.client.gui.ui.Motion;
+import de.myticlegacy.client.gui.ui.Tokens;
 import net.minecraft.client.gui.GuiGraphics;
 
 import java.util.List;
 
-/** Statistiken im Spiel (Rechts-Shift → Statistiken): Kennzahlen, Verlauf der letzten 14 Tage, Server, Versionen, Profile. */
-public class StatsScreen extends PanelScreen {
+/**
+ * Statistiken im neuen Design (Rechts-Shift → Statistiken): Kennzahlen-Kacheln, Verlauf der letzten 14 Tage als
+ * Balken (heute im Akzent-Verlauf, Tooltip beim Überfahren), meistgespielte Server, Versionen und Profile mit
+ * Anteils-Balken.
+ */
+public class StatsScreen extends DesignScreen {
+    private static final float W = 1600, H = 880, HEAD = 88;
+
     public StatsScreen() {
-        super("Statistiken");
+        super("stats", "Statistiken");
         Stats.refresh(true);
     }
 
     @Override
-    protected String title() {
-        return "STATISTIKEN";
-    }
-
-    private static int text() {
-        return Ui.lunar() ? 0xFFFFFFFF : Ui.TEXT;
-    }
-
-    private static int muted() {
-        return Ui.lunar() ? 0xFF9A9A9A : Ui.MUTED;
-    }
-
-    private static int card() {
-        return Ui.lunar() ? Ui.L_CARD : Ui.SURFACE;
-    }
-
-    private static int hi() {
-        return Ui.lunar() ? (Ui.glass() ? Ui.accent() : Ui.L_GREEN) : Ui.accent();
-    }
-
-    private static int radius(int r) {
-        return Ui.square() ? 0 : r;
+    protected void back() {
+        Compat.setScreen(new HubScreen());
     }
 
     @Override
-    protected void drawContent(GuiGraphics g, int mouseX, int mouseY, int headerX) {
-        Stats.Data d = Stats.data();
-        int x0 = px + 12, y0 = py + HEADER + 8, w = pw - 24;
+    public void onClose() {
+        Compat.setScreen(new HubScreen());
+    }
+
+    @Override
+    protected void frame(GuiGraphics g) {
+        float[] r = center(W, H);
+        float x = r[0], y = r[1], w = r[2], h = r[3];
+        kit.window(x, y, w, h, minecraft.level == null);
+        Stats.Data data = Stats.data();
+
+        // Kopf
+        kit.iconButton("back", x + 28 * d, y + 24 * d, 40 * d, "chevL", true, this::back);
+        kit.text("Statistiken", x + 84 * d, y + 26 * d, 21, Tokens.SEMIBOLD, Tokens.TEXT);
+        String sub = !Friends.available() ? "Nur über den Mytic Launcher" : Stats.loading() ? "Wird aktualisiert …"
+                : data == null ? "Lädt …" : "Gezählt wird die Zeit in einer Welt";
+        kit.text(sub, x + 84 * d, y + 54 * d, 14.5f, Tokens.MEDIUM, Tokens.SUBTLE);
+        if (Friends.available()) {
+            kit.iconButton("reload", x + w - 32 * d - 96 * d, y + 24 * d, 40 * d, "refresh", true, Stats.loading() ? null : () -> Stats.refresh(true));
+            if (kit.hover("reload")) kit.tooltip("Aktualisieren", x + w - 32 * d - 76 * d, y + 70 * d);
+        }
+        kit.iconButton("close", x + w - 32 * d - 40 * d, y + 24 * d, 40 * d, "x", true, () -> Compat.setScreen(null));
+        kit.hline(x, y + HEAD * d, w);
+
+        float bx = x + 32 * d, by = y + HEAD * d + 28 * d, bw = w - 64 * d, bh = y + h - 32 * d - by;
         if (!Friends.available()) {
-            Ui.centered(g, "Statistiken gibt es nur mit der Freundesliste – starte über den Mytic Launcher.", px + pw / 2, py + ph / 2 - 4, muted(), false);
+            empty(x, y + HEAD * d, w, h - HEAD * d, "chart", "Statistiken gibt es nur mit der Freundesliste",
+                    "Starte Minecraft über den Mytic Launcher, dann wird deine Spielzeit gezählt.");
             return;
         }
-        if (d == null) {
-            String msg = Stats.error() != null ? "Nicht geladen: " + Stats.error() : "Lädt …";
-            Ui.centered(g, msg, px + pw / 2, py + ph / 2 - 4, muted(), false);
+        if (data == null) {
+            String err = Stats.error();
+            empty(x, y + HEAD * d, w, h - HEAD * d, err != null ? "info" : "refresh", err != null ? "Nicht geladen" : "Lädt …",
+                    err != null ? err : "Deine Spielzeit kommt vom Mytic-Server.");
             return;
         }
-        Ui.text(g, Stats.loading() ? "aktualisiert …" : "Gezählt wird die Zeit in einer Welt", headerX, py + 13, muted(), false);
 
         // Kennzahlen
         String[][] tiles = {
-                {"Gesamt", Stats.duration(d.seconds)},
-                {"Heute", Stats.duration(d.today)},
-                {"7 Tage", Stats.duration(d.week)},
-                {"Starts", String.valueOf(d.launches)},
-                {"Längste Sitzung", Stats.duration(d.longest)},
+                {"Gesamt", Stats.duration(data.seconds), "clock"},
+                {"Heute", Stats.duration(data.today), "sun"},
+                {"7 Tage", Stats.duration(data.week), "chart"},
+                {"Starts", String.valueOf(data.launches), "play"},
+                {"Längste Sitzung", Stats.duration(data.longest), "hourglass"},
         };
-        int tw = (w - 4 * 6) / 5;
+        float gap = 14 * d, tw = (bw - 4 * gap) / 5f, th = 104 * d;
         for (int i = 0; i < tiles.length; i++) {
-            int tx = x0 + i * (tw + 6);
-            Ui.rect(g, tx, y0, tw, 30, radius(4), card());
-            Ui.scaled(g, tiles[i][0], tx + 6, y0 + 5, 0.75f, muted(), false);
-            Ui.text(g, tiles[i][1], tx + 6, y0 + 16, i == 0 ? hi() : text(), false);
+            float tx = bx + i * (tw + gap);
+            card(tx, by, tw, th);
+            if (i == 0) Draw.rect(kit.g, tx + 1, by + 1, tw - 2, th - 2, 15 * d, 0x1A9B5CFF);
+            Icons.draw(kit.g, tiles[i][2], tx + 18 * d, by + 18 * d, 18 * d, i == 0 ? Tokens.ACC : Tokens.SUBTLE);
+            kit.caption(tiles[i][0], tx + 44 * d, by + 22 * d);
+            kit.textMid(tiles[i][1], tx + 18 * d, by + 70 * d, 24, Tokens.SEMIBOLD, i == 0 ? 0xFFFFFFFF : Tokens.TEXT, tw - 36 * d);
         }
 
-        int top = y0 + 38, bottom = py + ph - FOOTER - 6;
-        int leftW = (w - 8) * 3 / 5, rightX = x0 + leftW + 8, rightW = w - leftW - 8;
+        float top = by + th + 18 * d, bottom = by + bh;
+        float leftW = (bw - 18 * d) * 0.6f, rightX = bx + leftW + 18 * d, rightW = bw - leftW - 18 * d;
+        float chartH = Math.max(160 * d, (bottom - top) * 0.55f);
+        chart(data, bx, top, leftW, chartH);
+        list("Meistgespielte Server", "servers", data.servers, bx, top + chartH + 18 * d, leftW, bottom - top - chartH - 18 * d, false);
+        float half = (bottom - top - 18 * d) / 2f;
+        list("Versionen", "cube", data.versions, rightX, top, rightW, half, true);
+        list("Profile", "layout", data.profiles, rightX, top + half + 18 * d, rightW, bottom - top - half - 18 * d, true);
+    }
 
-        // Verlauf: letzte 14 Tage
-        int chartH = Math.max(40, (bottom - top) / 2 - 6);
-        Ui.rect(g, x0, top, leftW, chartH, radius(4), card());
-        Ui.scaled(g, "LETZTE 14 TAGE", x0 + 6, top + 5, 0.7f, muted(), false);
-        List<Stats.Day> days = d.days.subList(Math.max(0, d.days.size() - 14), d.days.size());
+    private void card(float x, float y, float w, float h) {
+        Draw.rect(kit.g, x, y, w, h, 16 * d, Tokens.SURFACE);
+        Draw.ring(kit.g, x, y, w, h, 16 * d, 1, Tokens.LINE);
+    }
+
+    private void empty(float x, float y, float w, float h, String icon, String title, String text) {
+        float cx = x + w / 2f, cy = y + h / 2f - 40 * d;
+        Draw.rect(kit.g, cx - 32 * d, cy - 32 * d, 64 * d, 64 * d, 18 * d, Tokens.SURFACE);
+        Icons.draw(kit.g, icon, cx - 14 * d, cy - 14 * d, 28 * d, Tokens.MUTED);
+        kit.textCenter(title, cx, cy + 60 * d, 17, Tokens.SEMIBOLD, Tokens.TEXT);
+        if (text != null) kit.textCenter(text, cx, cy + 88 * d, 14.5f, Tokens.MEDIUM, Tokens.MUTED);
+    }
+
+    /** Balken der letzten 14 Tage */
+    private void chart(Stats.Data data, float x, float y, float w, float h) {
+        card(x, y, w, h);
+        float pad = 20 * d;
+        kit.caption("Letzte 14 Tage", x + pad, y + pad);
+        List<Stats.Day> days = data.days.subList(Math.max(0, data.days.size() - 14), data.days.size());
         long max = 1;
         for (Stats.Day day : days) max = Math.max(max, day.seconds());
-        int barArea = chartH - 26, bw = Math.max(3, (leftW - 12) / Math.max(1, days.size()) - 3);
-        String tip = null;
-        for (int i = 0; i < days.size(); i++) {
-            Stats.Day day = days.get(i);
-            int bx = x0 + 6 + i * (bw + 3), bh = Math.max(day.seconds() > 0 ? 2 : 1, (int) (barArea * day.seconds() / max));
-            int by = top + 14 + barArea - bh;
-            boolean today = i == days.size() - 1;
-            boolean over = Ui.inside(mouseX, mouseY, bx, top + 14, bw, barArea);
-            g.fill(bx, by, bx + bw, top + 14 + barArea, today ? hi() : Ui.withAlpha(text(), over ? 170 : 90));
-            if (over) tip = day.day().substring(8) + "." + day.day().substring(5, 7) + ".: " + Stats.duration(day.seconds()) + " · " + day.launches() + " Starts";
+        kit.textRight("Max " + Stats.duration(max), x + w - pad, y + pad + 5 * d, 13, Tokens.MEDIUM, Tokens.SUBTLE);
+        float areaTop = y + pad + 30 * d, areaH = h - (areaTop - y) - pad - 26 * d, areaW = w - 2 * pad;
+        // feine Hilfslinien
+        for (int i = 0; i <= 3; i++) kit.hline(x + pad, areaTop + areaH * i / 3f, areaW);
+        if (days.isEmpty()) {
+            kit.textCenter("Noch keine Daten", x + w / 2, areaTop + areaH / 2, 14.5f, Tokens.MEDIUM, Tokens.MUTED);
+            return;
         }
-        Ui.scaled(g, tip != null ? tip : "Max " + Stats.duration(max), x0 + 6, top + chartH - 9, 0.7f, tip != null ? text() : muted(), false);
-
-        // Server
-        int sy = top + chartH + 8;
-        list(g, "MEISTGESPIELTE SERVER", d.servers, x0, sy, leftW, bottom - sy, false);
-
-        // Versionen und Profile
-        int vh = (bottom - top) / 2 - 4;
-        list(g, "VERSIONEN", d.versions, rightX, top, rightW, vh, true);
-        int py2 = top + vh + 8;
-        list(g, "PROFILE", d.profiles, rightX, py2, rightW, bottom - py2, true);
+        int n = days.size();
+        float slot = areaW / n, bw = Math.max(4 * d, slot * 0.62f);
+        for (int i = 0; i < n; i++) {
+            Stats.Day day = days.get(i);
+            float sx = x + pad + i * slot, bx = sx + (slot - bw) / 2;
+            float bh = day.seconds() <= 0 ? 2 * d : Math.max(4 * d, areaH * day.seconds() / max);
+            boolean today = i == n - 1;
+            boolean hv = kit.hit("bar" + i, sx, areaTop, slot, areaH + 26 * d, null);
+            float hvT = Motion.to(kit.key("barh" + i), hv, Tokens.MS_HOVER);
+            float r = Math.min(6 * d, bw / 2);
+            if (today) Draw.accentRect(kit.g, bx, areaTop + areaH - bh, bw, bh, r, 1f);
+            else Draw.rect(kit.g, bx, areaTop + areaH - bh, bw, bh, r, Draw.mix(0x2EFFFFFF, 0x66FFFFFF, hvT));
+            String label = day.day().length() >= 10 ? day.day().substring(8, 10) + "." : "";
+            kit.textCenter(label, sx + slot / 2, areaTop + areaH + 14 * d, 12, Tokens.MEDIUM, today ? Tokens.ACC_TEXT : Tokens.SUBTLE);
+            if (hv) {
+                String date = day.day().length() >= 10 ? day.day().substring(8, 10) + "." + day.day().substring(5, 7) + "." : day.day();
+                kit.tooltip(date + ": " + Stats.duration(day.seconds()) + " · " + day.launches() + (day.launches() == 1 ? " Start" : " Starts"),
+                        sx + slot / 2, areaTop + areaH - bh - 36 * d);
+            }
+        }
     }
 
     /** Liste mit Anteils-Balken */
-    private void list(GuiGraphics g, String title, List<Stats.Entry> entries, int x, int y, int w, int h, boolean launches) {
-        Ui.rect(g, x, y, w, h, radius(4), card());
-        Ui.scaled(g, title, x + 6, y + 5, 0.7f, muted(), false);
+    private void list(String title, String icon, List<Stats.Entry> entries, float x, float y, float w, float h, boolean launches) {
+        card(x, y, w, h);
+        float pad = 20 * d;
+        Icons.draw(kit.g, icon, x + pad, y + pad - 3 * d, 16 * d, Tokens.SUBTLE);
+        kit.caption(title, x + pad + 24 * d, y + pad);
         if (entries.isEmpty()) {
-            Ui.text(g, "Noch keine Daten", x + 6, y + 16, muted(), false);
+            kit.textMid("Noch keine Daten", x + pad, y + pad + 40 * d, 14.5f, Tokens.MEDIUM, Tokens.MUTED, 0);
             return;
         }
         long max = Math.max(1, entries.get(0).seconds());
-        int ry = y + 15;
+        float ry = y + pad + 30 * d, rowH = 44 * d;
         for (Stats.Entry e : entries) {
-            if (ry > y + h - 12) break;
+            if (ry + rowH > y + h - pad / 2) break;
             String right = Stats.duration(e.seconds()) + (launches ? " · " + e.launches() + "×" : "");
-            int rw = Math.round(font.width(right) * 0.75f);
-            g.fill(x + 6, ry + 8, x + 6 + (int) ((w - 12) * e.seconds() / max), ry + 10, Ui.withAlpha(hi(), 170));
-            String name = e.name();
-            while (name.length() > 3 && font.width(name) > w - 18 - rw) name = name.substring(0, name.length() - 2) + "…";
-            Ui.text(g, name, x + 6, ry, text(), false);
-            Ui.scaled(g, right, x + w - 6 - rw, ry + 1, 0.75f, muted(), false);
-            ry += 13;
+            float rw = kit.width(right, 13.5f, Tokens.MEDIUM);
+            kit.textMid(e.name().isEmpty() ? "—" : e.name(), x + pad, ry + 12 * d, 15, Tokens.MEDIUM, Tokens.TEXT, w - 2 * pad - rw - 12 * d);
+            kit.textRight(right, x + w - pad, ry + 12 * d, 13.5f, Tokens.MEDIUM, Tokens.MUTED);
+            float tw = w - 2 * pad, fill = Math.max(4 * d, tw * e.seconds() / (float) max);
+            Draw.rect(kit.g, x + pad, ry + 26 * d, tw, 5 * d, 2.5f * d, 0x14FFFFFF);
+            Draw.accentRect(kit.g, x + pad, ry + 26 * d, fill, 5 * d, 2.5f * d, 0.85f);
+            ry += rowH;
         }
     }
 }
