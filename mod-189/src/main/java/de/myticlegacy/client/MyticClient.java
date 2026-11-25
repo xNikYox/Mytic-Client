@@ -218,6 +218,7 @@ public final class MyticClient {
         autoText = module(new AutoTextModule());
         lightOverlay = module(new LightOverlayModule());
         fpsBoost = module(new FpsBoostModule());
+        module(new de.myticlegacy.client.module.PerfProfileModule()); // Leistungsprofile (auch unter Einstellungen → Leistung)
         friends = module(new FriendsModule());
         theme = module(new SimpleModules.Theme());
         chat = module(new de.myticlegacy.client.module.ChatModule()); // Chat+

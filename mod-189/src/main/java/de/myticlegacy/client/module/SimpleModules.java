@@ -48,6 +48,8 @@ public final class SimpleModules {
         public final ModeSetting titleBackground;
         /** Bewegung im Hauptmenü (Hintergrund-Drift, Funken, Splash-Pulsieren); aus = alles steht still */
         public final BoolSetting menuAnimations;
+        /** Weiche Übergänge im HUD (z. B. Keystrokes); aus = sofort (Leistungsprofil „Maximale FPS“) */
+        public final BoolSetting hudAnimations;
 
         public Theme() {
             super("theme", "Design", "Akzentfarbe, Mytic-Hauptmenü und Menü-Hintergrund", Category.CLIENT, () -> Items.nether_star, true);
@@ -59,6 +61,7 @@ public final class SimpleModules {
             // neuer Schlüssel, damit alle das neue Standard-Design „Mytic (animiert)“ bekommen
             titleBackground = new ModeSetting(this, "titleBg", "Hauptmenü-Hintergrund", "Mytic (animiert)", "Mytic (animiert)", "Minecraft-Panorama", "Einfarbig dunkel", "Launcher-Design");
             menuAnimations = new BoolSetting(this, "menuAnimations", "Animationen im Menü", true);
+            hudAnimations = new BoolSetting(this, "hudAnimations", "HUD-Animationen", true);
         }
     }
 

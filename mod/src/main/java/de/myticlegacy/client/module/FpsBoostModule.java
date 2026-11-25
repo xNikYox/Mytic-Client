@@ -116,12 +116,12 @@ public class FpsBoostModule extends Module {
         }
     }
 
-    private static String encode(Object value) {
+    static String encode(Object value) {
         return value instanceof Enum ? ((Enum<?>) value).name() : String.valueOf(value);
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private static Object decode(String text, Object sample) {
+    static Object decode(String text, Object sample) {
         try {
             if (sample instanceof Enum) return Enum.valueOf(((Enum) sample).getDeclaringClass(), text);
             if (sample instanceof Boolean) return Boolean.valueOf(text);

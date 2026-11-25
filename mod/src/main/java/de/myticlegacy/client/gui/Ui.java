@@ -49,6 +49,7 @@ public final class Ui {
 
     /** Weicher Übergang zu einem Zielwert (0..1), z. B. für Hover-Effekte – unabhängig von den FPS. */
     public static float animate(Object key, boolean target, float speed) {
+        if (de.myticlegacy.client.MyticClient.theme != null && !de.myticlegacy.client.MyticClient.theme.hudAnimations.get()) return target ? 1f : 0f;
         long now = System.nanoTime();
         Long last = ANIMATED_AT.put(key, now);
         float dt = last == null ? 0f : Math.min(0.1f, (now - last) / 1_000_000_000f);

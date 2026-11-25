@@ -222,6 +222,7 @@ public final class MyticClient implements ClientModInitializer {
         autoText = module(new AutoTextModule());
         lightOverlay = module(new LightOverlayModule());
         fpsBoost = module(new FpsBoostModule());
+        module(new de.myticlegacy.client.module.PerfProfileModule()); // Leistungsprofile (auch unter Einstellungen → Leistung)
         module(new de.myticlegacy.client.module.BackgroundFpsModule());
         styles = module(new de.myticlegacy.client.styles.StylesModule());
         chat = module(new de.myticlegacy.client.module.ChatModule());

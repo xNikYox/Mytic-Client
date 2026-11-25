@@ -48,6 +48,8 @@ public final class SimpleModules {
         public final BoolSetting menuAnimations;
         /** Einzelspieler, Mehrspieler, Optionen … im Mytic-Design (Grafiken über das Paket „Mytic Styles“) */
         public final BoolSetting vanillaMenus;
+        /** Weiche Übergänge im HUD (z. B. Keystrokes); aus = sofort (Leistungsprofil „Maximale FPS“) */
+        public final BoolSetting hudAnimations;
 
         public Theme() {
             super("theme", "Design", "Akzentfarbe, Mytic-Hauptmenü und Menü-Hintergrund", Category.CLIENT, () -> Items.AMETHYST_SHARD, true);
@@ -60,6 +62,7 @@ public final class SimpleModules {
             titleBackground = new ModeSetting(this, "titleBg", "Hauptmenü-Hintergrund", "Mytic (animiert)", "Mytic (animiert)", "Minecraft-Panorama", "Einfarbig dunkel", "Launcher-Design");
             menuAnimations = new BoolSetting(this, "menuAnimations", "Animationen im Menü", true);
             vanillaMenus = new BoolSetting(this, "vanillaMenus", "Minecraft-Menüs im Mytic-Design", true);
+            hudAnimations = new BoolSetting(this, "hudAnimations", "HUD-Animationen", true);
         }
     }
 
