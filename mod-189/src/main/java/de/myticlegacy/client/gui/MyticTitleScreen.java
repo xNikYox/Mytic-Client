@@ -345,7 +345,7 @@ public class MyticTitleScreen extends MyticScreen {
 
     private void drawAccount(GuiGraphics g) {
         String name = mc.getSession().getUsername();
-        boolean switchable = false;
+        boolean switchable = de.myticlegacy.client.account.Accounts.available();
         float h = 44 * d, hs = 30 * d, fs = 14.5f * d;
         float nw = Type.width(g, name, fs, Tokens.SEMIBOLD);
         float w = 7 * d + hs + 10 * d + nw + (switchable ? 10 * d + 30 * d + 6 * d : 14 * d);
@@ -363,6 +363,7 @@ public class MyticTitleScreen extends MyticScreen {
             float bx = x + w - 6 * d - 30 * d, by = y + (h - 30 * d) / 2f;
             if (hv > 0.01f) Draw.rect(g, bx, by, 30 * d, 30 * d, 9 * d, Draw.alpha(Tokens.SURFACE_HOVER, hv));
             Icons.draw(g, "swap", bx + 6 * d, by + 6 * d, 18 * d, Draw.mix(Tokens.MUTED, Tokens.TEXT, hv));
+            hit("title:acc", x, y, w, h, () -> Compat.setScreen(new de.myticlegacy.client.account.AccountScreen(this)));
         }
     }
 
