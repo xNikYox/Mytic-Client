@@ -9,4 +9,17 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 public interface AbstractContainerScreenAccessor {
     @Accessor("hoveredSlot")
     Slot mytic$hoveredSlot();
+
+    /** Lage des Inventar-Fensters (InvSee-Übersicht daneben) */
+    @Accessor("leftPos")
+    int mytic$left();
+
+    @Accessor("topPos")
+    int mytic$top();
+
+    @Accessor("imageWidth")
+    int mytic$imageWidth();
+
+    @Accessor("imageHeight")
+    int mytic$imageHeight();
 }
