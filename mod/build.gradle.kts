@@ -22,6 +22,16 @@ java {
     targetCompatibility = JavaVersion.VERSION_21
 }
 
+// Selbsttest für Clips (Ringpuffer, JPEG, AVI) – reines Java ohne Minecraft, läuft bei jedem Build
+val clipsTest by tasks.registering(JavaExec::class) {
+    classpath = sourceSets.test.get().output + sourceSets.main.get().output
+    mainClass.set("de.myticlegacy.client.clips.ClipsSelfTest")
+    jvmArgs("-Djava.awt.headless=true")
+}
+tasks.check { dependsOn(clipsTest) }
+// keine JUnit-Tests – die übliche test-Aufgabe würde nur Laufzeit-Bibliotheken von Loom laden (offline nicht im Cache)
+tasks.test { enabled = false }
+
 tasks.processResources {
     inputs.property("version", project.version)
     filesMatching("fabric.mod.json") { expand("version" to project.version) }

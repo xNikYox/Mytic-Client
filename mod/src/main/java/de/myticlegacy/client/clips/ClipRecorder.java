@@ -4,169 +4,229 @@ import de.myticlegacy.client.MyticClient;
 import net.fabricmc.loader.api.FabricLoader;
 
 import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.ByteBuffer;
-import java.nio.channels.Channels;
-import java.nio.channels.WritableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
-import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.stream.Stream;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
 
 /**
- * Clips: nimmt laufend die letzten Sekunden auf und speichert sie auf Tastendruck als MP4.
+ * Clips (Instant Replay): hält die letzten Sekunden als JPEG-Bilder im Arbeitsspeicher ({@link ClipBuffer}) und schreibt
+ * sie auf Tastendruck im Hintergrund als Motion-JPEG-AVI ({@link MjpegAvi}) – ohne Zusatzprogramm. Ist ffmpeg vorhanden
+ * (eigener Ordner aus älteren Versionen oder im PATH) und gewünscht, wird danach in eine kleinere MP4 umgewandelt.
  * <p>
- * Die Bilder kommen roh (RGBA, von der Grafikkarte) über eine Pipe zu ffmpeg. ffmpeg kodiert – wenn möglich mit der
- * Grafikkarte (NVENC, Quick Sync, AMF) – in kurze Stücke von {@link #SEGMENT} Sekunden, die im Kreis überschrieben
- * werden. Beim Speichern werden die letzten Stücke ohne neues Kodieren zu einer MP4 zusammengefügt.
+ * Die Bilder liefern FrameGrab/GlGrab: auf der Grafikkarte verkleinert und asynchron ausgelesen (Pixel-Puffer + Fence).
  */
 public final class ClipRecorder {
-    public static final int SEGMENT = 2;
-    /** Feste ffmpeg-Version (gyan.dev „essentials“) – nie die wechselnde „release“-Adresse, damit die Prüfsumme passt */
-    private static final String WIN_URL = "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-9.0.2-essentials_build.zip";
-    /** SHA-256 der ZIP (von gyan.dev veröffentlicht und selbst nachgerechnet); passt sie nicht, wird nichts ausgeführt */
-    private static final String WIN_SHA256 = "60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba";
-    private static final String[][] ENCODERS = {
-            {"h264_nvenc", "-preset", "p2", "-rc", "vbr", "-cq", "23", "-b:v", "0"},
-            {"h264_qsv", "-preset", "veryfast", "-global_quality", "23"},
-            {"h264_amf", "-quality", "speed", "-rc", "cqp", "-qp_i", "22", "-qp_p", "24"},
-            {"h264_videotoolbox", "-b:v", "10M"},
-            {"libx264", "-preset", "ultrafast", "-tune", "zerolatency", "-crf", "23"},
-    };
-
-    private static Path ffmpeg;
-    private static String encoder;
-    /** Kodierer nimmt RGBA direkt (NVENC/AMF wandeln selbst auf der Grafikkarte um) – ffmpeg spart die Umwandlung */
-    private static boolean rgbaDirect;
-    private static final AtomicBoolean preparing = new AtomicBoolean();
-    public static volatile String status = "";
-
-    private static Process process;
-    private static Thread writer;
-    private static ArrayBlockingQueue<ByteBuffer> queue;
-    private static ArrayBlockingQueue<ByteBuffer> pool;
-    private static int width, height, sourceWidth, sourceHeight, fps, seconds;
-    private static boolean flipped;
-    private static Path session;
+    private static volatile ClipBuffer buffer;
+    private static int sourceWidth, sourceHeight;
     private static volatile boolean saving;
+    public static volatile String status = "";
+    /** ffmpeg: null = noch nicht gesucht, leer = keins */
+    private static volatile String ffmpeg;
 
     private ClipRecorder() {
     }
 
-    // ---------- ffmpeg finden / laden ----------
+    public static Path clipsDir() {
+        return FabricLoader.getInstance().getGameDir().resolve("mytic").resolve("clips");
+    }
 
     private static boolean windows() {
         return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
     }
 
-    public static Path toolsDir() {
+    /** Ordner, in den ältere Mytic-Versionen ffmpeg geladen haben (wird weiter genutzt, aber nicht mehr geladen) */
+    private static Path toolsDir() {
         String local = System.getenv("LOCALAPPDATA");
         Path base = windows() && local != null ? Path.of(local) : Path.of(System.getProperty("user.home"));
         return base.resolve(windows() ? "MyticClient" : ".mytic-client").resolve("ffmpeg");
     }
 
-    public static Path clipsDir() {
-        return FabricLoader.getInstance().getGameDir().resolve("clips");
+    /** Nichts mehr einzurichten – AVI geht immer */
+    public static boolean ready() {
+        return true;
     }
 
-    public static boolean ready() {
-        return ffmpeg != null && encoder != null;
+    public static void prepare() {
+    }
+
+    public static void resetRetries() {
     }
 
     public static boolean running() {
-        return process != null && process.isAlive();
+        ClipBuffer b = buffer;
+        return b != null && b.running();
     }
 
     public static String encoderName() {
-        if (encoder == null) return "–";
-        return switch (encoder) {
-            case "h264_nvenc" -> "NVIDIA (NVENC)";
-            case "h264_qsv" -> "Intel (Quick Sync)";
-            case "h264_amf" -> "AMD (AMF)";
-            case "h264_videotoolbox" -> "Apple (VideoToolbox)";
-            default -> "Prozessor (x264)";
-        };
+        return "MJPEG im Arbeitsspeicher";
     }
 
-    /** Fehlgeschlagene Einrichtungen und frühester nächster Versuch – sonst würde jeder Tick ffmpeg neu laden (≈100 MB) */
-    private static volatile int failures;
-    private static volatile long retryAt;
-    private static final long[] RETRY_MS = {30_000, 120_000, 600_000};
-
-    /** Nach Aus- und Wieder-Einschalten der Clips: sofort neu versuchen */
-    public static void resetRetries() {
-        failures = 0;
-        retryAt = 0;
+    /** Speicher, den die Aufnahme gerade belegt (MB) */
+    public static long memoryMb() {
+        ClipBuffer b = buffer;
+        return b == null ? 0 : b.bytes() >> 20;
     }
 
-    private static void failed(String why) {
-        int n = ++failures;
-        if (n >= 3) {
-            retryAt = Long.MAX_VALUE;
-            status = why + " – Clips aus- und wieder einschalten für einen neuen Versuch";
-        } else {
-            retryAt = System.currentTimeMillis() + RETRY_MS[n - 1];
-            status = why + " – neuer Versuch in " + RETRY_MS[n - 1] / 1000 + " s";
+    /**
+     * Aufnahme starten. srcW/srcH = Größe des Spielbilds, w/h = Größe der gelieferten Bilder (von der Grafikkarte schon
+     * verkleinert oder gleich srcW/srcH), outHeight = Zielhöhe (0 = wie geliefert), flip = Bilder kommen auf dem Kopf.
+     */
+    public static synchronized void start(int srcW, int srcH, int w, int h, int outHeight, int fps, int seconds, boolean flip) {
+        stop();
+        sourceWidth = srcW;
+        sourceHeight = srcH;
+        flipped = flip;
+        int oh = (outHeight > 0 && outHeight < h ? outHeight : h) & ~1;
+        int ow = Math.max(2, Math.round(w * (float) oh / h) & ~1);
+        buffer = new ClipBuffer(w, h, ow, oh, flip, fps, seconds, ClipBuffer.defaultBudget());
+        status = "";
+        MyticClient.LOG.info("Clips: Aufnahme {}x{} (Spiel {}x{}) → {}x{}, {} fps, {} s, höchstens {} MB", w, h, srcW, srcH, ow, oh, fps, seconds,
+                buffer.budget >> 20);
+    }
+
+    public static synchronized void stop() {
+        ClipBuffer b = buffer;
+        buffer = null;
+        if (b != null) b.stop();
+    }
+
+    public static int width() {
+        ClipBuffer b = buffer;
+        return b == null ? 0 : b.inW;
+    }
+
+    public static int height() {
+        ClipBuffer b = buffer;
+        return b == null ? 0 : b.inH;
+    }
+
+    /** Bilder kommen auf dem Kopf (Weg ohne Verkleinern auf der Grafikkarte, z. B. Vulkan) */
+    public static boolean flipped() {
+        return flipped;
+    }
+
+    private static volatile boolean flipped;
+
+    public static int sourceWidth() {
+        return sourceWidth;
+    }
+
+    public static int sourceHeight() {
+        return sourceHeight;
+    }
+
+    public static ByteBuffer borrow() {
+        ClipBuffer b = buffer;
+        return b == null ? null : b.borrow();
+    }
+
+    public static void release(ByteBuffer buf) {
+        ClipBuffer b = buffer;
+        if (b != null) b.release(buf);
+    }
+
+    public static void submit(ByteBuffer buf) {
+        ClipBuffer b = buffer;
+        if (b != null) b.submit(buf);
+    }
+
+    /** Fehler der Aufnahme (z. B. kein JPEG-Kodierer) oder null */
+    public static String error() {
+        ClipBuffer b = buffer;
+        return b == null ? null : b.error();
+    }
+
+    // ---------- Speichern ----------
+
+    public interface Done {
+        void done(Path clip, String error);
+    }
+
+    /** Die letzten {@code seconds} Sekunden speichern (im Hintergrund): AVI, auf Wunsch danach MP4 mit ffmpeg */
+    public static void save(int seconds, boolean mp4, Done done) {
+        ClipBuffer b = buffer;
+        if (b == null || !b.running()) {
+            done.done(null, "Aufnahme läuft nicht");
+            return;
         }
-    }
-
-    /** ffmpeg suchen, sonst (Windows) einmalig laden, dann den schnellsten Kodierer bestimmen. Läuft im Hintergrund. */
-    public static void prepare() {
-        if (ready() || System.currentTimeMillis() < retryAt || !preparing.compareAndSet(false, true)) return;
+        if (saving) {
+            done.done(null, "Wird schon gespeichert …");
+            return;
+        }
+        final List<ClipBuffer.Frame> frames = b.last(seconds);
+        if (frames.size() < 2) {
+            done.done(null, "Noch nichts aufgenommen");
+            return;
+        }
+        saving = true;
+        final int w = b.outW, h = b.outH, fps = b.fps;
         Thread t = new Thread(() -> {
             try {
-                Path found = find();
-                if (found == null && windows()) found = download();
-                if (found == null) {
-                    failed(windows() ? "ffmpeg konnte nicht geladen werden" : "ffmpeg fehlt – bitte installieren (z. B. Paketmanager)");
-                    return;
+                Files.createDirectories(clipsDir());
+                String name = "clip_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH.mm.ss"));
+                Path avi = clipsDir().resolve(name + ".avi"), part = clipsDir().resolve(name + ".avi.part");
+                MjpegAvi.write(part.toFile(), frames, w, h, MjpegAvi.fps(frames, fps));
+                Files.move(part, avi, StandardCopyOption.REPLACE_EXISTING);
+                Path out = avi;
+                if (mp4) {
+                    Path converted = toMp4(avi);
+                    if (converted != null) out = converted;
                 }
-                status = "Grafikkarten-Kodierung wird geprüft …";
-                for (String[] enc : ENCODERS) {
-                    if (test(found, enc[0])) {
-                        ffmpeg = found;
-                        encoder = enc[0];
-                        rgbaDirect = (enc[0].equals("h264_nvenc") || enc[0].equals("h264_amf")) && test(found, enc[0], "rgba");
-                        status = "";
-                        failures = 0;
-                        MyticClient.LOG.info("Clips: ffmpeg {} mit {}", found, enc[0]);
-                        return;
-                    }
-                }
-                failed("Kein passender Video-Kodierer gefunden");
+                done.done(out, null);
             } catch (Exception e) {
-                failed("Fehler: " + e.getMessage());
-                MyticClient.LOG.warn("Clips: ffmpeg nicht bereit", e);
+                MyticClient.LOG.warn("Clips: Speichern fehlgeschlagen", e);
+                done.done(null, "Speichern fehlgeschlagen");
             } finally {
-                preparing.set(false);
+                saving = false;
             }
-        }, "Mytic-Clips-Setup");
+        }, "Mytic-Clips-Save");
         t.setDaemon(true);
+        t.setPriority(Thread.NORM_PRIORITY - 2);
         t.start();
     }
 
-    private static Path find() {
+    /** AVI → MP4 (H.264) mit ffmpeg, falls vorhanden; danach die AVI löschen. Sonst null (AVI bleibt). */
+    private static Path toMp4(Path avi) {
+        String exe = findFfmpeg();
+        if (exe.isEmpty()) return null;
+        Path mp4 = avi.resolveSibling(avi.getFileName().toString().replaceAll("\\.avi$", ".mp4"));
+        try {
+            Process p = new ProcessBuilder(exe, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", avi.toString(),
+                    "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-threads", "2", "-movflags", "+faststart", mp4.toString())
+                    .redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start();
+            if (!p.waitFor(180, TimeUnit.SECONDS)) {
+                p.destroyForcibly();
+                Files.deleteIfExists(mp4);
+                return null;
+            }
+            if (p.exitValue() != 0 || !Files.isRegularFile(mp4) || Files.size(mp4) == 0) {
+                Files.deleteIfExists(mp4);
+                return null;
+            }
+            Files.deleteIfExists(avi);
+            return mp4;
+        } catch (Exception e) {
+            MyticClient.LOG.warn("Clips: Umwandeln in MP4 fehlgeschlagen – AVI bleibt", e);
+            return null;
+        }
+    }
+
+    /** ffmpeg suchen (einmal): eigener Ordner früherer Versionen, dann PATH. Leer = keins. */
+    public static String findFfmpeg() {
+        String f = ffmpeg;
+        if (f != null) return f;
         Path own = toolsDir().resolve(windows() ? "ffmpeg.exe" : "ffmpeg");
-        if (Files.isRegularFile(own) && works(own.toString())) return own;
-        if (works("ffmpeg")) return Path.of("ffmpeg");
-        return null;
+        if (Files.isRegularFile(own) && works(own.toString())) f = own.toString();
+        else if (works("ffmpeg")) f = "ffmpeg";
+        else f = "";
+        ffmpeg = f;
+        return f;
     }
 
     private static boolean works(String exe) {
@@ -178,327 +238,26 @@ public final class ClipRecorder {
         }
     }
 
-    private static boolean test(Path exe, String enc) {
-        return test(exe, enc, "yuv420p");
-    }
-
-    /** Probelauf: kann der Kodierer Bilder im Format pixFmt annehmen? */
-    private static boolean test(Path exe, String enc, String pixFmt) {
+    /** Ordner im Datei-Explorer öffnen (ohne AWT) */
+    public static void openFolder() {
         try {
-            Process p = new ProcessBuilder(exe.toString(), "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=black:s=640x360:d=0.3:r=30",
-                    "-c:v", enc, "-pix_fmt", pixFmt, "-f", "null", "-").redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start();
-            if (!p.waitFor(20, TimeUnit.SECONDS)) {
-                p.destroyForcibly();
-                return false;
-            }
-            return p.exitValue() == 0;
+            Path dir = clipsDir();
+            Files.createDirectories(dir);
+            String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
+            String cmd = os.contains("win") ? "explorer" : os.contains("mac") ? "open" : "xdg-open";
+            new ProcessBuilder(cmd, dir.toAbsolutePath().toString()).start();
         } catch (Exception e) {
-            return false;
+            MyticClient.LOG.warn("Clips: Ordner nicht geöffnet", e);
         }
     }
 
-    /**
-     * Windows: ffmpeg.exe aus dem „essentials“-Paket von gyan.dev holen (nur diese eine Datei wird entpackt). Die ganze
-     * ZIP wird beim Laden per SHA-256 geprüft; erst wenn sie stimmt, wird die entpackte ffmpeg.exe übernommen.
-     */
-    private static Path download() throws IOException, InterruptedException {
-        Path dir = toolsDir();
-        Files.createDirectories(dir);
-        Path target = dir.resolve("ffmpeg.exe"), part = dir.resolve("ffmpeg.exe.part");
-        status = "ffmpeg wird geladen …";
-        HttpClient http = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.ALWAYS).connectTimeout(java.time.Duration.ofSeconds(20)).build();
-        HttpResponse<InputStream> res = http.send(HttpRequest.newBuilder(URI.create(WIN_URL)).header("User-Agent", "MyticClient").build(), HttpResponse.BodyHandlers.ofInputStream());
-        if (res.statusCode() != 200) throw new IOException("HTTP " + res.statusCode());
-        long total = res.headers().firstValueAsLong("content-length").orElse(-1);
-        java.security.MessageDigest sha;
-        try {
-            sha = java.security.MessageDigest.getInstance("SHA-256");
-        } catch (java.security.NoSuchAlgorithmException e) {
-            throw new IOException(e);
-        }
-        boolean extracted = false;
-        try (InputStream raw = res.body(); java.security.DigestInputStream hashed = new java.security.DigestInputStream(raw, sha);
-             Counting in = new Counting(hashed, total); ZipInputStream zip = new ZipInputStream(in)) {
-            ZipEntry e;
-            while ((e = zip.getNextEntry()) != null) {
-                if (extracted || !e.getName().endsWith("/bin/ffmpeg.exe")) continue;
-                Files.copy(zip, part, StandardCopyOption.REPLACE_EXISTING);
-                extracted = true;
-            }
-            in.transferTo(java.io.OutputStream.nullOutputStream()); // Rest lesen, damit die Prüfsumme die ganze Datei umfasst
-        } catch (IOException | RuntimeException e) {
-            Files.deleteIfExists(part);
-            throw e;
-        }
-        String got = java.util.HexFormat.of().formatHex(sha.digest());
-        if (!got.equals(WIN_SHA256)) {
-            Files.deleteIfExists(part);
-            MyticClient.LOG.warn("Clips: ffmpeg-Download hat falsche Prüfsumme ({}) – verworfen", got);
-            throw new IOException("Download beschädigt oder verändert (Prüfsumme falsch)");
-        }
-        if (!extracted) return null;
-        Files.move(part, target, StandardCopyOption.REPLACE_EXISTING);
-        status = "ffmpeg geladen";
-        return works(target.toString()) ? target : null;
-    }
-
-    /** zählt geladene Bytes für die Fortschrittsanzeige */
-    private static final class Counting extends java.io.FilterInputStream {
-        private final long total;
-        private long done;
-        private int lastPct = -1;
-
-        Counting(InputStream in, long total) {
-            super(in);
-            this.total = total;
-        }
-
-        private void add(long n) {
-            if (n <= 0) return;
-            done += n;
-            int pct = total > 0 ? (int) (done * 100 / total) : -1;
-            if (pct != lastPct) {
-                lastPct = pct;
-                status = pct >= 0 ? "ffmpeg wird geladen … " + pct + " %" : "ffmpeg wird geladen … " + (done >> 20) + " MB";
-            }
-        }
-
-        @Override
-        public int read() throws IOException {
-            int b = super.read();
-            if (b >= 0) add(1);
-            return b;
-        }
-
-        @Override
-        public int read(byte[] b, int off, int len) throws IOException {
-            int n = super.read(b, off, len);
-            add(n);
-            return n;
-        }
-    }
-
-    // ---------- Aufnahme ----------
-
-    /**
-     * Aufnahme starten. srcW/srcH = Größe des Spielbilds, w/h = Größe der gelieferten Bilder (von der Grafikkarte schon
-     * verkleinert oder gleich srcW/srcH), outHeight = Zielhöhe für ffmpeg (0 = wie geliefert),
-     * flip = Bilder kommen auf dem Kopf (OpenGL).
-     */
-    public static synchronized void start(int srcW, int srcH, int w, int h, int outHeight, int targetFps, int lengthSeconds, boolean flip) {
-        stop();
-        if (!ready()) return;
-        flipped = flip;
-        sourceWidth = srcW;
-        sourceHeight = srcH;
-        width = w;
-        height = h;
-        fps = targetFps;
-        seconds = lengthSeconds;
-        try {
-            session = Files.createDirectories(clipsDir().resolve(".puffer").resolve(Long.toString(System.currentTimeMillis())));
-            cleanupOld();
-            List<String> cmd = new ArrayList<>(List.of(ffmpeg.toString(), "-hide_banner", "-loglevel", "error", "-nostdin",
-                    "-f", "rawvideo", "-pix_fmt", "rgba", "-s", w + "x" + h, "-use_wallclock_as_timestamps", "1", "-thread_queue_size", "8", "-i", "pipe:0"));
-            List<String> vf = new ArrayList<>();
-            if (flip) vf.add("vflip");
-            int oh = outHeight > 0 && outHeight < h ? outHeight : h;
-            if (oh != h || (w & 1) != 0 || (h & 1) != 0) vf.add("scale=-2:" + (oh & ~1));
-            if (!rgbaDirect) vf.add("format=yuv420p");
-            if (!vf.isEmpty()) cmd.addAll(List.of("-vf", String.join(",", vf)));
-            cmd.addAll(List.of("-fps_mode", "cfr", "-r", Integer.toString(fps)));
-            for (String[] enc : ENCODERS) {
-                if (!enc[0].equals(encoder)) continue;
-                cmd.add("-c:v");
-                cmd.addAll(List.of(enc));
-            }
-            cmd.addAll(List.of("-g", Integer.toString(fps * SEGMENT), "-force_key_frames", "expr:gte(t,n_forced*" + SEGMENT + ")",
-                    "-f", "segment", "-segment_time", Integer.toString(SEGMENT), "-segment_wrap", Integer.toString(seconds / SEGMENT + 3),
-                    "-segment_format", "mpegts", "-reset_timestamps", "1", session.resolve("s%03d.ts").toString()));
-            process = new ProcessBuilder(cmd).redirectErrorStream(true).redirectOutput(session.resolve("ffmpeg.log").toFile()).start();
-            int size = w * h * 4;
-            queue = new ArrayBlockingQueue<>(3);
-            pool = new ArrayBlockingQueue<>(4);
-            for (int i = 0; i < 4; i++) pool.add(ByteBuffer.allocateDirect(size));
-            Process p = process;
-            ArrayBlockingQueue<ByteBuffer> q = queue, free = pool;
-            writer = new Thread(() -> {
-                try (OutputStream out = p.getOutputStream(); WritableByteChannel ch = Channels.newChannel(out)) {
-                    while (p.isAlive()) {
-                        ByteBuffer b = q.poll(500, TimeUnit.MILLISECONDS);
-                        if (b == null) continue;
-                        b.rewind();
-                        while (b.hasRemaining()) ch.write(b);
-                        free.offer(b);
-                    }
-                } catch (Exception ignored) {
-                    // Aufnahme beendet
-                }
-            }, "Mytic-Clips");
-            writer.setDaemon(true);
-            writer.start();
-            MyticClient.LOG.info("Clips: Aufnahme {}x{} (Spiel {}x{}) → {}p, {} fps, {} s, {}{}", w, h, srcW, srcH, oh, fps, seconds, encoder,
-                    rgbaDirect ? ", RGBA direkt" : "");
-        } catch (IOException e) {
-            MyticClient.LOG.warn("Clips: Start fehlgeschlagen", e);
-            status = "Aufnahme konnte nicht starten";
-            stop();
-        }
-    }
-
-    public static synchronized void stop() {
-        if (process != null) {
-            try {
-                process.getOutputStream().close();
-            } catch (IOException ignored) {
-            }
-            Process p = process;
-            Path dir = session;
-            process = null;
-            // ffmpeg in Ruhe beenden lassen, dann den Puffer löschen (außer es wird gerade gespeichert)
-            Thread t = new Thread(() -> {
-                try {
-                    if (!p.waitFor(5, TimeUnit.SECONDS)) p.destroyForcibly();
-                    while (saving) Thread.sleep(200);
-                } catch (InterruptedException ignored) {
-                }
-                delete(dir);
-            }, "Mytic-Clips-Stop");
-            t.setDaemon(true);
-            t.start();
-        }
-        if (writer != null) writer.interrupt();
-        writer = null;
-        queue = null;
-        pool = null;
-        session = null;
-    }
-
-    public static int width() {
-        return width;
-    }
-
-    /** Bilder kommen auf dem Kopf (alter Weg ohne Verkleinern auf der Grafikkarte) */
-    public static boolean flipped() {
-        return flipped;
-    }
-
-    /** Größe des Spielbilds, für das die Aufnahme läuft (Fenstergröße geändert → Aufnahme startet neu) */
-    public static int sourceWidth() {
-        return sourceWidth;
-    }
-
-    public static int sourceHeight() {
-        return sourceHeight;
-    }
-
-    public static int height() {
-        return height;
-    }
-
-    /** Freier Puffer für das nächste Bild oder null (dann wird dieses Bild ausgelassen) */
-    public static ByteBuffer borrow() {
-        ArrayBlockingQueue<ByteBuffer> p = pool;
-        if (p == null || !running()) return null;
-        ByteBuffer b = p.poll();
-        if (b != null) b.clear();
-        return b;
-    }
-
-    /** ungenutzten Puffer zurückgeben */
-    public static void release(ByteBuffer b) {
-        ArrayBlockingQueue<ByteBuffer> p = pool;
-        if (p != null) p.offer(b);
-    }
-
-    /** gefülltes Bild an ffmpeg geben */
-    public static void submit(ByteBuffer b) {
-        ArrayBlockingQueue<ByteBuffer> q = queue;
-        if (q == null || !q.offer(b)) {
-            ArrayBlockingQueue<ByteBuffer> p = pool;
-            if (p != null) p.offer(b);
-        }
-    }
-
-    // ---------- Speichern ----------
-
-    public interface Done {
-        void done(Path clip, String error);
-    }
-
-    /** Die letzten Sekunden als MP4 speichern (im Hintergrund) */
-    public static void save(Done done) {
-        Path dir = session;
-        if (dir == null || !running()) {
-            done.done(null, "Aufnahme läuft nicht");
-            return;
-        }
-        if (saving) {
-            done.done(null, "Wird schon gespeichert …");
-            return;
-        }
-        saving = true;
-        int len = seconds;
-        Thread t = new Thread(() -> {
-            try {
-                Thread.sleep(1200); // ffmpeg schreibt mit kurzer Verzögerung
-                List<Path> segs;
-                try (Stream<Path> s = Files.list(dir)) {
-                    segs = new ArrayList<>(s.filter(p -> p.getFileName().toString().endsWith(".ts")).sorted(Comparator.comparingLong(ClipRecorder::modified)).toList());
-                }
-                int need = (len + SEGMENT - 1) / SEGMENT + 1;
-                if (segs.size() > need) segs = segs.subList(segs.size() - need, segs.size());
-                if (segs.isEmpty()) {
-                    done.done(null, "Noch nichts aufgenommen");
-                    return;
-                }
-                Path list = dir.resolve("liste.txt");
-                StringBuilder sb = new StringBuilder();
-                for (Path p : segs) sb.append("file '").append(p.toAbsolutePath().toString().replace("\\", "/").replace("'", "'\\''")).append("'\n");
-                Files.writeString(list, sb.toString());
-                Files.createDirectories(clipsDir());
-                Path out = clipsDir().resolve("clip_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH.mm.ss")) + ".mp4");
-                Process p = new ProcessBuilder(ffmpeg.toString(), "-hide_banner", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", list.toString(),
-                        "-c", "copy", "-movflags", "+faststart", out.toString()).redirectErrorStream(true).redirectOutput(dir.resolve("save.log").toFile()).start();
-                if (!p.waitFor(60, TimeUnit.SECONDS)) {
-                    p.destroyForcibly();
-                    done.done(null, "Speichern dauerte zu lange");
-                } else if (p.exitValue() != 0 || !Files.isRegularFile(out)) {
-                    done.done(null, "Speichern fehlgeschlagen");
-                } else done.done(out, null);
-            } catch (Exception e) {
-                MyticClient.LOG.warn("Clips: Speichern fehlgeschlagen", e);
-                done.done(null, "Speichern fehlgeschlagen");
-            } finally {
-                saving = false;
-            }
-        }, "Mytic-Clips-Save");
-        t.setDaemon(true);
-        t.start();
-    }
-
-    private static long modified(Path p) {
-        try {
-            return Files.getLastModifiedTime(p).toMillis();
-        } catch (IOException e) {
-            return 0;
-        }
-    }
-
-    /** Reste alter Aufnahmen (z. B. nach Absturz) entfernen */
-    private static void cleanupOld() {
-        Path base = clipsDir().resolve(".puffer");
-        try (Stream<Path> s = Files.list(base)) {
-            s.filter(p -> !p.equals(session)).forEach(ClipRecorder::delete);
-        } catch (IOException ignored) {
-        }
-    }
-
-    private static void delete(Path dir) {
-        if (dir == null) return;
-        try (Stream<Path> s = Files.walk(dir)) {
-            s.sorted(Comparator.reverseOrder()).map(Path::toFile).forEach(File::delete);
-        } catch (IOException ignored) {
+    /** Alte Reste (Puffer früherer ffmpeg-Aufnahmen) im alten Ordner „clips/.puffer“ entfernen */
+    public static void cleanupOld() {
+        Path old = FabricLoader.getInstance().getGameDir().resolve("clips").resolve(".puffer");
+        if (!Files.isDirectory(old)) return;
+        try (java.util.stream.Stream<Path> s = Files.walk(old)) {
+            s.sorted(java.util.Comparator.reverseOrder()).map(Path::toFile).forEach(File::delete);
+        } catch (Exception ignored) {
         }
     }
 }
