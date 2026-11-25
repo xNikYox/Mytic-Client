@@ -13,4 +13,9 @@ public final class Blit {
     public static void region(GuiGraphics g, ResourceLocation texture, int x, int y, int w, int h, float u, float v, int uw, int vh, int texW, int texH) {
         g.blit(RenderType::guiTextured, texture, x, y, u, v, w, h, uw, vh, texW, texH);
     }
+
+    /** Wie region(), aber eingefärbt (ARGB multipliziert). */
+    public static void tint(GuiGraphics g, ResourceLocation texture, int x, int y, int w, int h, float u, float v, int uw, int vh, int texW, int texH, int argb) {
+        g.blit(RenderType::guiTextured, texture, x, y, u, v, w, h, uw, vh, texW, texH, argb);
+    }
 }

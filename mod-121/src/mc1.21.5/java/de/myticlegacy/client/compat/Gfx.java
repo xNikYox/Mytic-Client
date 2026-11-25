@@ -42,4 +42,9 @@ public final class Gfx {
     public static void raise(GuiGraphics g, float z) {
         g.pose().translate(0, 0, z);
     }
+
+    /** Drehen um den Ursprung (Grad, im Uhrzeigersinn auf dem Bildschirm). */
+    public static void rotate(GuiGraphics g, float degrees) {
+        g.pose().mulPose(com.mojang.math.Axis.ZP.rotationDegrees(degrees));
+    }
 }

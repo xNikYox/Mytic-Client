@@ -13,4 +13,9 @@ public final class Blit {
     public static void region(GuiGraphics g, Identifier texture, int x, int y, int w, int h, float u, float v, int uw, int vh, int texW, int texH) {
         g.blit(RenderPipelines.GUI_TEXTURED, texture, x, y, u, v, w, h, uw, vh, texW, texH);
     }
+
+    /** Wie region(), aber eingefärbt (ARGB multipliziert, z. B. weiße Masken in einer Farbe). */
+    public static void tint(GuiGraphics g, Identifier texture, int x, int y, int w, int h, float u, float v, int uw, int vh, int texW, int texH, int argb) {
+        g.blit(RenderPipelines.GUI_TEXTURED, texture, x, y, u, v, w, h, uw, vh, texW, texH, argb);
+    }
 }

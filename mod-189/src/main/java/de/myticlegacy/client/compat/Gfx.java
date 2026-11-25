@@ -63,4 +63,14 @@ public final class Gfx {
     public static void noScissor(GuiGraphics g) {
         GL11.glDisable(GL11.GL_SCISSOR_TEST);
     }
+
+    /** Drehen um den Ursprung (Grad). Hinweis: scissor() rechnet Drehungen nicht mit. */
+    public static void rotate(GuiGraphics g, float degrees) {
+        GlStateManager.rotate(degrees, 0, 0, 1);
+    }
+
+    /** Aktuelle Skalierung der Zeichenfläche (GUI-Einheiten je Zeichen-Einheit), für Kanten in echten Pixeln */
+    public static float scaleX(GuiGraphics g) {
+        return current[2];
+    }
 }

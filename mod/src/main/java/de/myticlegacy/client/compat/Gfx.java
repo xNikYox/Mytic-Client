@@ -42,4 +42,9 @@ public final class Gfx {
     public static void raise(GuiGraphics g, float z) {
         // ab 1.21.6 zeichnet die Oberfläche in Reihenfolge, ohne Tiefe
     }
+
+    /** Drehen um den Ursprung (Grad, im Uhrzeigersinn auf dem Bildschirm). */
+    public static void rotate(GuiGraphics g, float degrees) {
+        g.pose().rotate((float) Math.toRadians(degrees));
+    }
 }

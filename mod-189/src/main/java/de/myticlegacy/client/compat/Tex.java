@@ -36,4 +36,15 @@ public final class Tex {
         GlStateManager.color(1f, 1f, 1f, 1f);
         Gui.drawScaledCustomSizeModalRect(x, y, 0, 0, texW, texH, w, h, texW, texH);
     }
+
+    /** Ausschnitt einer eigenen Textur eingefärbt zeichnen (ARGB wird mit den Texturfarben multipliziert). */
+    public static void drawTinted(GuiGraphics g, Object texture, int x, int y, int w, int h, float u, float v, int uw, int vh, int texW, int texH, int argb) {
+        if ((argb >>> 24) == 0) return;
+        Minecraft.getMinecraft().getTextureManager().bindTexture((ResourceLocation) texture);
+        GlStateManager.enableBlend();
+        GlStateManager.tryBlendFuncSeparate(770, 771, 1, 0);
+        GlStateManager.color(((argb >> 16) & 255) / 255f, ((argb >> 8) & 255) / 255f, (argb & 255) / 255f, ((argb >>> 24) & 255) / 255f);
+        Gui.drawScaledCustomSizeModalRect(x, y, u, v, uw, vh, w, h, texW, texH);
+        GlStateManager.color(1f, 1f, 1f, 1f);
+    }
 }

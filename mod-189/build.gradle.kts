@@ -33,6 +33,19 @@ tasks.withType<JavaCompile> {
     options.compilerArgs.add("-Xlint:-options")
 }
 
+// Bausteine des neuen Mytic-Designs (gui/ui, Java 8) kommen aus ../mod; nur die Zeichenfläche heißt hier anders
+val sharedUi = layout.buildDirectory.dir("shared-ui")
+val copySharedUi by tasks.registering(Sync::class) {
+    from("../mod/src/main/java") {
+        include("de/myticlegacy/client/gui/ui/**")
+        filter { line -> line.replace("import net.minecraft.client.gui.GuiGraphics;", "import de.myticlegacy.client.compat.GuiGraphics;") }
+    }
+    into(sharedUi)
+}
+sourceSets.main { java.srcDir(sharedUi) }
+tasks.compileJava { dependsOn(copySharedUi) }
+tasks.matching { it.name == "sourcesJar" }.configureEach { dependsOn(copySharedUi) }
+
 tasks.processResources {
     inputs.property("version", project.version)
     filesMatching("mcmod.info") { expand("version" to project.version) }

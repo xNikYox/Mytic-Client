@@ -32,4 +32,10 @@ public final class Tex {
     public static void draw(GuiGraphics g, Object texture, int x, int y, int w, int h, int texW, int texH) {
         Blit.region(g, (Identifier) texture, x, y, w, h, 0, 0, texW, texH, texW, texH);
     }
+
+    /** Ausschnitt einer eigenen Textur eingefärbt zeichnen (ARGB wird mit den Texturfarben multipliziert). */
+    public static void drawTinted(GuiGraphics g, Object texture, int x, int y, int w, int h, float u, float v, int uw, int vh, int texW, int texH, int argb) {
+        if ((argb >>> 24) == 0) return;
+        Blit.tint(g, (Identifier) texture, x, y, w, h, u, v, uw, vh, texW, texH, argb);
+    }
 }
