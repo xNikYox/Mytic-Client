@@ -13,6 +13,21 @@ public interface ChatComponentAccessor {
     @Accessor("allMessages")
     List<GuiMessage> mytic$all();
 
+    @Accessor("trimmedMessages")
+    List<GuiMessage.Line> mytic$trimmed();
+
+    @Accessor("chatScrollbarPos")
+    int mytic$scrollPos();
+
     @Invoker("refreshTrimmedMessages")
     void mytic$refresh();
+
+    @Invoker("getScale")
+    double mytic$scale();
+
+    @Invoker("getLineHeight")
+    int mytic$lineHeight();
+
+    @Invoker("getWidth")
+    int mytic$width();
 }

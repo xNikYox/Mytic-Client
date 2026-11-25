@@ -269,6 +269,7 @@ public final class MyticClient implements ClientModInitializer {
                 ScreenEvents.afterRender(screen).register((s, g, mouseX, mouseY, delta) -> shulkerPreview.draw(s, g, mouseX, mouseY));
             }
         });
+        ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> de.myticlegacy.client.gui.ChatBar.attach(screen)); // Chat+: Tabs, Suche, Kopieren
         ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> {
             if (screen instanceof TitleScreen && theme.customMenu.get()) {
                 client.execute(() -> {
@@ -323,6 +324,7 @@ public final class MyticClient implements ClientModInitializer {
             if (module.enabled()) module.draw(graphics, false);
         }
         de.myticlegacy.client.games.GameToast.render(graphics); // Herausforderung oben rechts
+        de.myticlegacy.client.module.ChatModule.renderToast(graphics); // Chat+: Erwähnung
     }
 
     /** Status für die Freundesliste weitergeben und Benachrichtigungen im Chat zeigen. */

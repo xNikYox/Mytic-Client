@@ -104,6 +104,7 @@ public final class MyticClient {
     public static AutoTextModule autoText;
     public static LightOverlayModule lightOverlay;
     public static FpsBoostModule fpsBoost;
+    public static de.myticlegacy.client.module.ChatModule chat;
     public static FriendsModule friends;
 
     private static Config config;
@@ -219,6 +220,7 @@ public final class MyticClient {
         fpsBoost = module(new FpsBoostModule());
         friends = module(new FriendsModule());
         theme = module(new SimpleModules.Theme());
+        chat = module(new de.myticlegacy.client.module.ChatModule()); // Chat+
 
         menuKey = Compat.registerKey("key.myticclient.menu", InputConstants.KEY_RSHIFT);
         zoomKey = Compat.registerKey("key.myticclient.zoom", InputConstants.KEY_C);
@@ -228,6 +230,7 @@ public final class MyticClient {
 
         CombatTracker.register();
         MinecraftForge.EVENT_BUS.register(this);
+        MinecraftForge.EVENT_BUS.register(chat);
         MinecraftForge.EVENT_BUS.register(new de.myticlegacy.client.cosmetics.Nametags());
         FMLCommonHandler.instance().bus().register(this);
         Display.setTitle(NAME + " " + Compat.versionName());
@@ -307,6 +310,7 @@ public final class MyticClient {
         for (HudModule module : HUD) {
             if (module.enabled()) module.draw(graphics, false);
         }
+        chat.renderToast(graphics); // Chat+: Erwähnung
     }
 
     // ---------------------------------------------------------------------------------------------- Kamera
@@ -426,6 +430,7 @@ public final class MyticClient {
         autoText.tick(mc);
         lightOverlay.tick(mc);
         fpsBoost.tick(mc);
+        chat.tick(mc);
         de.myticlegacy.client.cosmetics.Cosmetics.tick(mc);
         de.myticlegacy.client.cosmetics.MiniMe.register(mc);
         de.myticlegacy.client.cosmetics.Wings.register(mc);
