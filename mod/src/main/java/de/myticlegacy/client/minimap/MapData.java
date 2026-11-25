@@ -142,11 +142,12 @@ public final class MapData {
         dirty.removeAll(regions);
         for (long r : regions) {
             int rx = (int) (r >> 32), rz = (int) r;
-            // Momentaufnahme jetzt (Hauptthread), Schreiben im Hintergrund
+            // Momentaufnahme jetzt (Hauptthread), Schreiben im Hintergrund. Die Farb-Felder werden nie verändert, nur
+            // ersetzt (put/load legen neue an) – deshalb reicht die Referenz, ohne Kopie (spart bis zu 1 MB je Region)
             Map<Integer, int[]> snap = new HashMap<>();
             for (int i = 0; i < 1024; i++) {
                 int[] c = chunks.get(pack((rx << 5) + (i & 31), (rz << 5) + (i >> 5)));
-                if (c != null) snap.put(i, c.clone());
+                if (c != null) snap.put(i, c);
             }
             IO.execute(() -> write(rx, rz, snap));
         }

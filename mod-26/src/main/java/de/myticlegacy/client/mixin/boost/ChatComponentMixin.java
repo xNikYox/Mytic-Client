@@ -35,7 +35,10 @@ public abstract class ChatComponentMixin {
     @Inject(method = "addMessageToDisplayQueue", at = @At("HEAD"), cancellable = true, require = 0)
     private void mytic$filterLines(GuiMessage message, CallbackInfo ci) {
         ChatModule.bind((ChatComponent) (Object) this);
-        if (!ChatModule.visible(message)) ci.cancel();
+        if (!ChatModule.visible(message)) {
+            ChatModule.hidden(message);
+            ci.cancel();
+        }
     }
 
     @Inject(method = "addMessageToDisplayQueue", at = @At("TAIL"), require = 0)

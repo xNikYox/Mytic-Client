@@ -88,6 +88,8 @@ public class ClipModule extends Module {
             return;
         }
         if (config.equals("error")) return;
+        // erst nach „Loading terrain“ starten – beim Betreten braucht das Spiel Thread, Kerne und Speicher selbst
+        if (loading(mc)) return;
         int[] s = size(mc);
         String c = s[0] + "x" + s[1] + "/" + s[3] + "/" + targetFps() + "/" + seconds();
         if (!ClipRecorder.running() || !c.equals(config)) {
@@ -98,9 +100,14 @@ public class ClipModule extends Module {
         }
     }
 
+    /** Welt wird gerade betreten (Ladebildschirm) – dann nicht aufnehmen */
+    private static boolean loading(Minecraft mc) {
+        return mc.theWorld == null || mc.thePlayer == null || mc.currentScreen instanceof net.minecraft.client.gui.GuiDownloadTerrain;
+    }
+
     /** Ende jedes Bildes (RenderTickEvent END) */
     public void frame(Minecraft mc) {
-        if (!ClipRecorder.running() || mc.theWorld == null) return;
+        if (!ClipRecorder.running() || loading(mc)) return;
         long now = System.nanoTime(), step = 1_000_000_000L / targetFps();
         if (now - lastFrame < step * 9 / 10) return;
         lastFrame = now;

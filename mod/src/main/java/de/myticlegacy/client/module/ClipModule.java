@@ -76,10 +76,14 @@ public class ClipModule extends Module {
             return;
         }
         if (config.equals("error")) return; // nicht jeden Tick neu versuchen (aus- und einschalten = neuer Versuch)
+        // Aufnahme erst starten, wenn die Welt geladen ist – beim Betreten („Joining world“) braucht Minecraft den
+        // Spiel-Thread, die Rechenkerne und den Speicher für die ersten Chunks (Puffer, JPEG-Threads, GPU-Auslesen)
+        boolean loading = de.myticlegacy.client.compat.LevelLoading.active(mc);
+        if (loading && !ClipRecorder.running()) return;
         int w = FrameGrab.width(), h = FrameGrab.height();
         int len = seconds();
         String c = w + "x" + h + "/" + outHeight() + "/" + targetFps() + "/" + len;
-        if (!ClipRecorder.running() || !c.equals(config)) {
+        if (!loading && (!ClipRecorder.running() || !c.equals(config))) {
             if (config.isEmpty()) ClipRecorder.cleanupOld();
             config = c;
             if (FrameGrab.gpuScale()) {
@@ -98,6 +102,7 @@ public class ClipModule extends Module {
     /** Jedes fertige Bild (vom Mixin kurz vor der Anzeige); holt höchstens so viele Bilder wie eingestellt */
     public static void onFrame() {
         if (instance == null || !ClipRecorder.running()) return;
+        if (de.myticlegacy.client.compat.LevelLoading.active(Minecraft.getInstance())) return; // Ladebildschirm nicht aufnehmen
         long now = System.nanoTime(), step = 1_000_000_000L / instance.targetFps();
         if (now - instance.lastFrame < step * 9 / 10) return;
         instance.lastFrame = now;

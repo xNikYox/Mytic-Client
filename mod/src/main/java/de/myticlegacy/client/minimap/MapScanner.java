@@ -4,6 +4,7 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.BiomeColors;
 import net.minecraft.core.BlockPos;
 import net.minecraft.tags.FluidTags;
+import net.minecraft.world.level.ColorResolver;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.levelgen.Heightmap;
@@ -17,10 +18,15 @@ import java.util.Map;
 /**
  * Liest die Oberfläche geladener Chunks (oberster sichtbarer Block je Spalte, wie bei einer Karte aus Papier):
  * keine Höhlen, keine Erze, keine Wesen. Gras, Laub und Wasser in Biom-Farben, Höhenstufen als Licht und Schatten,
- * Wasser je nach Tiefe dunkler. Je Tick nur wenige Chunks (nahe öfter, ferne seltener).
+ * Wasser je nach Tiefe dunkler. Je Tick nur wenige Chunks (nahe öfter, ferne seltener) und höchstens
+ * {@link #BUDGET_NANOS} Rechenzeit – der Scan läuft auf dem Spiel-Thread und darf das Laden neuer Chunks (z. B. beim
+ * Server-Beitritt) nicht ausbremsen. Biom-Farben ohne Überblendung: die gemittelten Farben aus BiomeColors kosten je
+ * Spalte bis zu 121 Biom-Abfragen und verdrängen den Farb-Zwischenspeicher, den Minecraft beim Chunk-Bauen braucht.
  */
 public final class MapScanner {
     private static final int MAX_RADIUS = 34;
+    /** Höchstens so viel Zeit pro Tick (ns) für ferne Chunks */
+    private static final long BUDGET_NANOS = 1_500_000L;
     /** Chunk-Versätze nach Entfernung sortiert */
     private static final int[][] SPIRAL;
 
@@ -54,7 +60,8 @@ public final class MapScanner {
         int radius = Math.min(MAX_RADIUS, renderDistance + 1);
         int limit = (2 * radius + 1) * (2 * radius + 1);
         int done = 0;
-        for (int tries = 0; tries < 96 && done < 4; tries++) {
+        long start = System.nanoTime();
+        for (int tries = 0; tries < 96 && done < 4 && System.nanoTime() - start < BUDGET_NANOS; tries++) {
             if (cursor >= limit || cursor >= SPIRAL.length) cursor = 25;
             int[] s = SPIRAL[cursor++];
             int cx = playerCx + s[0], cz = playerCz + s[1];
@@ -108,20 +115,25 @@ public final class MapScanner {
                         depth++;
                     }
                     pos.setY(y);
-                    int water = BiomeColors.getAverageWaterColor(level, pos);
+                    int water = tint(BiomeColors.WATER_COLOR_RESOLVER, level, x, z);
                     int base = mix(water, MapColor.WATER.col, 0.35f);
                     out[i] = 0xFF000000 | scale(base, 1.04f - Math.min(depth, 10) * 0.045f);
                     continue;
                 }
                 int base = mc.col;
-                if (mc == MapColor.GRASS) base = scale(BiomeColors.getAverageGrassColor(level, pos), 0.9f);
-                else if (mc == MapColor.PLANT) base = mix(scale(BiomeColors.getAverageFoliageColor(level, pos), 0.85f), base, 0.3f);
+                if (mc == MapColor.GRASS) base = scale(tint(BiomeColors.GRASS_COLOR_RESOLVER, level, x, z), 0.9f);
+                else if (mc == MapColor.PLANT) base = mix(scale(tint(BiomeColors.FOLIAGE_COLOR_RESOLVER, level, x, z), 0.85f), base, 0.3f);
                 int diff = y - up;
                 float shade = diff >= 2 ? 1.1f : diff == 1 ? 1.03f : diff == 0 ? 0.94f : diff == -1 ? 0.85f : 0.77f;
                 out[i] = 0xFF000000 | scale(base, shade);
             }
         }
         return out;
+    }
+
+    /** Biom-Farbe einer Spalte ohne Überblendung (eine Biom-Abfrage, am Farb-Zwischenspeicher vorbei) */
+    private int tint(ColorResolver resolver, ClientLevel level, int x, int z) {
+        return resolver.getColor(level.getBiome(pos).value(), x, z);
     }
 
     static int scale(int rgb, float f) {

@@ -194,6 +194,8 @@ public class MinimapModule extends HudModule {
         }
         wasDead = dead;
         if (!enabled() || blocked() != null) return;
+        // beim Betreten der Welt nicht scannen: der Spiel-Thread baut gerade die ersten Chunks fertig
+        if (de.myticlegacy.client.compat.LevelLoading.active(mc)) return;
         scanner.tick(level, data, player.getBlockX() >> 4, player.getBlockZ() >> 4, mc.options.getEffectiveRenderDistance());
         long now = System.currentTimeMillis();
         if (now - lastSave > 60_000) {

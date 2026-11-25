@@ -145,13 +145,35 @@ public class ChatModule extends Module {
         return shown;
     }
 
-    /** Neueste Nachricht (und ihre Zeilen) entfernen – sie wird mit Zähler neu eingefügt */
+    /**
+     * Neueste Nachricht (und ihre Zeilen) entfernen – sie wird mit Zähler neu eingefügt. Nur die Zeilen dieser einen
+     * Nachricht werden aus der Anzeige genommen; früher wurde die ganze Anzeige (bis zu 2000 Nachrichten, jede neu
+     * umgebrochen) bei jeder Wiederholung neu aufgebaut – schickt ein Server beim Betreten viele gleiche Zeilen, stand das
+     * Spiel dabei sekundenlang.
+     */
     private static void removeNewest(ChatComponentAccessor chat) {
         List<GuiMessage> all = chat.mytic$all();
         if (all.isEmpty()) return;
-        all.remove(0);
-        chat.mytic$refresh(); // Anzeigezeilen aus den übrigen Nachrichten neu aufbauen
+        GuiMessage newest = all.remove(0);
+        Object[] lines = lastLines;
+        lastLines = null;
+        if (newest == lastShown && lines != null) {
+            List<?> trimmed = chat.mytic$trimmed();
+            boolean top = trimmed.size() >= lines.length;
+            for (int i = 0; top && i < lines.length; i++) top = trimmed.get(i) == lines[i];
+            if (top) {
+                for (int i = 0; i < lines.length; i++) trimmed.remove(0);
+                return;
+            }
+        } else if (newest != lastShown && newest == lastHidden) {
+            return; // war im aktiven Tab gar nicht zu sehen – keine Zeilen zu entfernen
+        }
+        chat.mytic$refresh(); // unbekannter Stand: Anzeigezeilen aus den übrigen Nachrichten neu aufbauen
     }
+
+    /** Zuletzt angezeigte Nachricht und ihre Zeilen (oben in der Anzeige) bzw. zuletzt ausgeblendete Nachricht */
+    private static GuiMessage lastShown, lastHidden;
+    private static Object[] lastLines;
 
     /** Wortfilter und Spam-Filter */
     private boolean blocked(String text) {
@@ -378,6 +400,13 @@ public class ChatModule extends Module {
         return !search || plain.toLowerCase(Locale.ROOT).contains(query.toLowerCase(Locale.ROOT));
     }
 
+    /** Vom Mixin: diese Nachricht wird nicht angezeigt (Tab, Suche, Filter) */
+    public static void hidden(GuiMessage gm) {
+        lastHidden = gm;
+        lastShown = null;
+        lastLines = null;
+    }
+
     /** Neue Nachricht im Verlauf: ungelesene Tabs zählen */
     public static void arrived(GuiMessage gm) {
         if (!on() || !instance.tabs.get() || gm.content() == BLOCKED) return;
@@ -388,13 +417,19 @@ public class ChatModule extends Module {
 
     /** Zeilen einer gerade angezeigten Nachricht merken (Strg + Klick) */
     public static void linesAdded(List<?> trimmed, GuiMessage gm) {
+        lastShown = gm;
+        lastHidden = null;
+        lastLines = null;
         if (trimmed.isEmpty()) return;
         String text = plain(gm.content());
+        int n = 0;
         for (int i = 0; i < trimmed.size(); i++) {
             Object line = trimmed.get(i);
             LINE_TEXT.put(line, text);
+            n = i + 1;
             if (i + 1 < trimmed.size() && endOfEntry(trimmed.get(i + 1))) break;
         }
+        lastLines = trimmed.subList(0, n).toArray();
     }
 
     private static boolean endOfEntry(Object line) {
