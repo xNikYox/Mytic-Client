@@ -54,7 +54,7 @@ public class ChessScreen extends PanelScreen {
 
     @Override
     protected String title() {
-        return "SCHACH";
+        return "Schach";
     }
 
     @Override
@@ -124,13 +124,9 @@ public class ChessScreen extends PanelScreen {
         return Ui.square() ? 0 : r;
     }
 
-    /** Feldfarben: dunkle Felder nehmen Menü-Farbe bzw. Akzent an */
+    /** Feldfarben im Mytic-Design: helle Felder leicht lila, dunkle Felder Mytic-Lila gedämpft */
     private static int[] squares() {
-        int menu = MyticClient.theme != null ? MyticClient.theme.menuColor.get() | 0xFF000000 : SimpleModules.Theme.MENU_COLOR_DEFAULT;
-        boolean custom = menu != SimpleModules.Theme.MENU_COLOR_DEFAULT;
-        if (!Ui.lunar()) return new int[]{Ui.mix(0xFFCFC6E8, Ui.accent(), 0.12f), Ui.mix(0xFF2A1D4A, Ui.accent(), 0.35f)};
-        int tint = Ui.glass() ? Ui.accent() : custom ? menu : 0xFF6E6880;
-        return new int[]{Ui.mix(0xFFDDD7C9, tint, 0.08f), Ui.mix(0xFF5F5A6E, tint, custom || Ui.glass() ? 0.45f : 0.15f)};
+        return new int[]{0xFFE4DDF2, 0xFF5B4A86};
     }
 
     static void button(GuiGraphics g, int[] r, String label, boolean primary, int mx, int my) {

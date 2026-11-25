@@ -59,7 +59,7 @@ public class StylesScreen extends PanelScreen {
 
     @Override
     protected String title() {
-        return "MYTIC STYLES";
+        return "Mytic Styles";
     }
 
     /** Schließen = übernehmen */

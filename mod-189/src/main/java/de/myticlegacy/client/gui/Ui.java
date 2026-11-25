@@ -11,14 +11,15 @@ import java.util.Map;
 
 /** Zeichen-Helfer für das Mytic-Design: abgerundete Flächen, Farben, weiche Übergänge. */
 public final class Ui {
-    public static final int PANEL = 0xF20A0716;
-    public static final int SURFACE = 0xFF130D24;
-    public static final int SURFACE_HOVER = 0xFF1F1638;
-    public static final int LINE = 0xFF2C2050;
-    public static final int TEXT = 0xFFF1EEF9;
-    public static final int MUTED = 0xFF9A93B4;
-    public static final int GREEN = 0xFF5BE38A;
-    public static final int RED = 0xFFFF5C72;
+    // Flächen-Farben des Mytic-Designs „Dunkles Glas“ (deckend, damit outline() mit Rand + Innenfläche funktioniert)
+    public static final int PANEL = 0xF0120E1C;
+    public static final int SURFACE = 0xFF1B1726;
+    public static final int SURFACE_HOVER = 0xFF252036;
+    public static final int LINE = 0xFF2B2639;
+    public static final int TEXT = de.myticlegacy.client.gui.ui.Tokens.TEXT;
+    public static final int MUTED = de.myticlegacy.client.gui.ui.Tokens.MUTED;
+    public static final int GREEN = de.myticlegacy.client.gui.ui.Tokens.OK;
+    public static final int RED = de.myticlegacy.client.gui.ui.Tokens.BAD;
 
     private static final Map<Object, Float> ANIMATIONS = new HashMap<Object, Float>();
     private static long lastFrame = System.nanoTime();
@@ -139,45 +140,32 @@ public final class Ui {
         return mx >= x && my >= y && mx < x + w && my < y + h;
     }
 
-    /** Schalter wie bei Lunar: Pille mit Knopf, animiert. */
-    // ------------------------------------------------------------------ Lunar-Stil
+    // ------------------------------------------------------------------ Mytic-Design (früher wählbare Menü-Stile)
 
-    public static final int L_PANEL = 0xF2141414;
-    public static final int L_CARD = 0xFF222222;
-    public static final int L_CARD_HOVER = 0xFF2C2C2C;
-    public static final int L_LINE = 0x22FFFFFF;
-    public static final int L_GREEN = 0xFF33B45A;
-    public static final int L_RED = 0xFFD8434B;
+    public static final int L_PANEL = PANEL;
+    public static final int L_CARD = SURFACE;
+    public static final int L_CARD_HOVER = SURFACE_HOVER;
+    public static final int L_LINE = de.myticlegacy.client.gui.ui.Tokens.LINE;
+    public static final int L_GREEN = de.myticlegacy.client.gui.ui.Tokens.ACC_1;
+    public static final int L_RED = de.myticlegacy.client.gui.ui.Tokens.BAD;
 
-    /** Menü im Lunar-Stil (Design → Menü-Stil, Standard) statt Neon. */
+    /** Immer das Mytic-Layout (die alten Menü-Stile gibt es nicht mehr) */
     public static boolean lunar() {
-        return MyticClient.theme == null || MyticClient.theme.menuStyle.is("Lunar");
+        return true;
     }
 
-    /** Schlichtes Panel wie bei Lunar: dunkelgrau, feiner heller Rand, keine Leuchteffekte. */
+    /** Glas-Fläche wie die Fenster des neuen Designs */
     public static void lunarPanel(GuiGraphics g, int x, int y, int w, int h, int r) {
-        rect(g, x - 2, y + 2, w + 4, h + 2, r + 2, 0x45000000);
-        rect(g, x, y, w, h, r, 0x2EFFFFFF);
-        rect(g, x + 1, y + 1, w - 2, h - 2, Math.max(0, r - 1), L_PANEL);
+        float rr = Math.max(r, 4) * 1.6f;
+        de.myticlegacy.client.gui.ui.Draw.shadow(g, x, y + rr, w, h, rr, rr * 3, -rr, 0x8C000000);
+        de.myticlegacy.client.gui.ui.Draw.glass(g, x, y, w, h, rr, PANEL, 0x24FFFFFF);
     }
 
+    /** Schalter im neuen Design (Akzent-Verlauf, gleitender Knopf), 20 × 11 GUI-Pixel */
     public static void toggle(GuiGraphics g, Object key, int x, int y, boolean on) {
-        float t = animate(key, on, 14f);
-        if (lunar()) {
-            rect(g, x, y, 20, 10, 5, mix(0xFF4A4A4A, L_GREEN, t));
-            rect(g, x + 1 + Math.round(10 * t), y + 1, 8, 8, 4, 0xFFFFFFFF);
-            return;
-        }
-        if (t > 0.01f) glow(g, x, y, 20, 10, 5, withAlpha(accent2(), Math.round(200 * t)), 3, 0.8f);
-        rect(g, x, y, 20, 10, 5, 0xFF2A2240);
-        if (t > 0.01f) {
-            int w = Math.max(10, Math.round(20 * t));
-            rect(g, x, y, w, 10, 5, alpha(accent(), t));
-            hGradient(g, x + 3, y + 1, w - 6, 8, alpha(accent(), t), alpha(accent2(), t));
-        }
-        int knob = x + 1 + Math.round(10 * t);
-        rect(g, knob, y + 1, 8, 8, 4, 0xFFFFFFFF);
+        de.myticlegacy.client.gui.ui.Widgets.toggle(g, "ui:" + key, x, y - 0.5f, 20f / 46f, on, false);
     }
+
     // ------------------------------------------------------------------ Neon-Design
 
     public static final int CYAN = 0xFF22E5FF;

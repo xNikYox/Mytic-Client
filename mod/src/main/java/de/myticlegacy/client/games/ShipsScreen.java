@@ -35,7 +35,7 @@ public class ShipsScreen extends GameScreen {
 
     @Override
     protected String title() {
-        return "SCHIFFE VERSENKEN";
+        return "Schiffe versenken";
     }
 
     @Override

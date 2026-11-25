@@ -88,7 +88,7 @@ public class ChallengeScreen extends PanelScreen {
 
     @Override
     protected String title() {
-        return "NEUES SPIEL";
+        return "Neues Spiel";
     }
 
     @Override

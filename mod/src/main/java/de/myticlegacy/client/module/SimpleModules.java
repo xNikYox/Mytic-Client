@@ -37,21 +37,11 @@ public final class SimpleModules {
     }
 
     public static final class Theme extends Module {
-        /** Standardwert der Menü-Farbe: dann die Grautöne des gewählten Menü-Stils */
-        public static final int MENU_COLOR_DEFAULT = 0xFF1B1B1D;
-        /** Standard der Schalter-Farbe: dann nutzt jeder Menü-Stil seine eigene (Lunar grün, Gold gold, Seitenleiste blau) */
-        public static final int HIGHLIGHT_DEFAULT = 0xFF33B45A;
         public final ColorSetting accent;
         public final BoolSetting customMenu;
         public final ModeSetting menuBackground;
         public final ModeSetting menuSize;
         public final ModeSetting hudStyle;
-        public final ModeSetting menuStyle;
-        public final SliderSetting menuOpacity;
-        /** Grundfarbe des Mod-Menüs (Lunar/Eckig); Standard = Grau des Menü-Stils */
-        public final ColorSetting menuColor;
-        /** Farbe aktiver Schalter und Markierungen (Lunar/Eckig) */
-        public final ColorSetting menuHighlight;
         /** Hintergrund des Mytic-Hauptmenüs: Szene des Launcher-Designs oder das Minecraft-Panorama. */
         public final ModeSetting titleBackground;
         /** Bewegung im Hauptmenü (Hintergrund-Drift, Funken, Splash-Pulsieren); aus = alles steht still */
@@ -66,10 +56,6 @@ public final class SimpleModules {
             menuBackground = new ModeSetting(this, "menuBackground", "Menü-Hintergrund", "Unschärfe", "Unschärfe", "Abdunkeln", "Aus");
             menuSize = new ModeSetting(this, "menuSize", "Menügröße", "Kompakt", "Kompakt", "Groß");
             hudStyle = new ModeSetting(this, "hudStyle", "HUD-Stil", "Lunar", "Lunar", "Neon", "Klassisch");
-            menuStyle = new ModeSetting(this, "menuStyle", "Menü-Stil", "Eckig", "Eckig", "Lunar", "Glas", "Neon", "Gold", "Seitenleiste");
-            menuOpacity = new SliderSetting(this, "menuOpacity", "Menü-Deckkraft", 30, 100, 5, 75, " %");
-            menuColor = new ColorSetting(this, "menuColor", "Menü-Farbe", MENU_COLOR_DEFAULT);
-            menuHighlight = new ColorSetting(this, "menuHighlight", "Schalter-Farbe", HIGHLIGHT_DEFAULT);
             // neuer Schlüssel, damit alle das neue Standard-Design „Mytic (animiert)“ bekommen
             titleBackground = new ModeSetting(this, "titleBg", "Hauptmenü-Hintergrund", "Mytic (animiert)", "Mytic (animiert)", "Minecraft-Panorama", "Einfarbig dunkel", "Launcher-Design");
             menuAnimations = new BoolSetting(this, "menuAnimations", "Animationen im Menü", true);

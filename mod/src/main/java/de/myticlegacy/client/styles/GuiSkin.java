@@ -36,28 +36,16 @@ public final class GuiSkin {
 
     /** Schlüssel des aktuellen Aussehens – ändert er sich, müssen die Grafiken neu erzeugt werden */
     public static String key() {
-        if (!enabled()) return "aus";
-        Ui.refreshPalette();
-        return MyticClient.theme.menuStyle.get() + "/" + Integer.toHexString(Ui.L_PANEL) + Integer.toHexString(Ui.L_CARD) + Integer.toHexString(Ui.L_CARD_HOVER)
-                + Integer.toHexString(Ui.L_LINE) + Integer.toHexString(Ui.L_SELECT) + Integer.toHexString(Ui.L_GREEN) + Integer.toHexString(Ui.accent())
-                + Integer.toHexString(Ui.SURFACE) + Integer.toHexString(Ui.PANEL);
+        return enabled() ? "mytic-glas-2" : "aus";
     }
 
-    /** Farben je Stil: Fläche, Fläche (hover), Rand, Rand (hover/aktiv), Hintergrund, Auswahl, Radius */
+    /** Farben: Fläche, Fläche (hover), Rand, Rand (hover/aktiv), Hintergrund, Auswahl, Radius */
     private record Look(int card, int cardHover, int line, int lineActive, int panel, int select, float radius, boolean glow) {
     }
 
+    /** Neues Mytic-Design „Dunkles Glas“: dunkle Glasflächen, feine helle Ränder, Mytic-Lila für Auswahl */
     private static Look look() {
-        Ui.refreshPalette();
-        if (!Ui.lunar()) { // Neon / Synthwave
-            int acc = Ui.accent() | 0xFF000000;
-            return new Look(Ui.SURFACE | 0xFF000000, Ui.SURFACE_HOVER | 0xFF000000, Ui.mix(0xFF2C2050, acc, 0.35f), Ui.accent2() | 0xFF000000, Ui.PANEL, acc, 4, true);
-        }
-        int select = Ui.gold() || Ui.sidebar() ? Ui.L_SELECT : Ui.glass() ? 0xFFFFFFFF : Ui.L_GREEN;
-        int line = Ui.gold() ? Ui.withAlpha(Ui.L_GREEN, 0x70) : Ui.glass() ? 0x66FFFFFF : 0x40FFFFFF;
-        int lineActive = Ui.gold() || Ui.sidebar() ? Ui.L_SELECT : 0xD0FFFFFF;
-        float r = Ui.square() ? 0 : Ui.gold() ? 1.5f : Ui.glass() ? 5 : 3;
-        return new Look(opaque(Ui.L_CARD, 0.92f), opaque(Ui.L_CARD_HOVER, 0.96f), line, lineActive, Ui.L_PANEL, select, r, false);
+        return new Look(0xB8161222, 0xD0221C33, 0x2EFFFFFF, 0x8CB56CFF, 0xFF0F0C18, de.myticlegacy.client.gui.ui.Tokens.ACC_1, 5, false);
     }
 
     /** Karten-Farbe mit Mindest-Deckkraft (sonst sind Knöpfe vor dem Panorama kaum zu sehen) */
@@ -83,8 +71,8 @@ public final class GuiSkin {
             button(out, "slider", 200, 20, 1, field, l.line, l, false);
             button(out, "slider_highlighted", 200, 20, 1, field, l.lineActive, l, true);
             // Regler-Knopf 8×20
-            sprite(out, "slider_handle", 8, 20, g -> rounded(g, 0, 0, 8, 20, Math.min(l.radius, 2), l.cardHover, l.lineActive), "{\"left\":2,\"top\":2,\"right\":2,\"bottom\":3}");
-            sprite(out, "slider_handle_highlighted", 8, 20, g -> rounded(g, 0, 0, 8, 20, Math.min(l.radius, 2), Ui.mix(l.cardHover, 0xFFFFFFFF, 0.15f), l.select), "{\"left\":2,\"top\":2,\"right\":2,\"bottom\":3}");
+            sprite(out, "slider_handle", 8, 20, g -> rounded(g, 0.5f, 0, 7, 20, 3, 0xFFE9E5F2, 0x80B56CFF), "{\"left\":3,\"top\":3,\"right\":3,\"bottom\":3}");
+            sprite(out, "slider_handle_highlighted", 8, 20, g -> rounded(g, 0.5f, 0, 7, 20, 3, 0xFFFFFFFF, l.lineActive), "{\"left\":3,\"top\":3,\"right\":3,\"bottom\":3}");
             // Häkchen 20×20 (ohne Neun-Teile)
             checkbox(out, "checkbox", false, false, field, l);
             checkbox(out, "checkbox_highlighted", false, true, field, l);
@@ -140,14 +128,17 @@ public final class GuiSkin {
             rounded(g, 0, 0, w, h, l.radius, fill, line);
             // Neon: Leuchtkante unten, Lunar-Stile: feine helle Kante oben
             if (l.glow) fillRect(g, 3, h - 1.5f, w - 6, 1, active ? l.lineActive : Ui.withAlpha(l.select, 0x90));
-            else if (active && (Ui.square() || Ui.sidebar())) fillRect(g, 1, h - 1.5f, w - 2, 1f, l.select);
+            else fillRect(g, l.radius, 1, w - 2 * l.radius, 0.5f, active ? 0x30FFFFFF : 0x14FFFFFF); // Lichtkante oben
         }, String.valueOf(Math.max(border, (int) Math.ceil(l.radius))));
     }
 
     private static void tab(Map<String, byte[]> out, String name, int fill, int line, boolean selected, Look l) throws IOException {
         sprite(out, name, 130, 24, g -> {
             rounded(g, 0, 0, 130, 24 + l.radius + 1, l.radius, fill, line); // unten über den Rand hinaus = offen
-            if (selected) fillRect(g, 2, 22, 126, 2, l.select);
+            if (selected) {
+                g.setPaint(new java.awt.GradientPaint(8, 0, color(0xFF9B5CFF), 122, 0, color(0xFFEC5FBF)));
+                g.fill(new RoundRectangle2D.Float(8, 21.5f, 114, 2, 2, 2));
+            }
         }, "{\"left\":" + edge(l) + ",\"top\":" + edge(l) + ",\"right\":" + edge(l) + ",\"bottom\":2}");
     }
 
@@ -158,9 +149,19 @@ public final class GuiSkin {
 
     private static void checkbox(Map<String, byte[]> out, String name, boolean on, boolean hover, int field, Look l) throws IOException {
         sprite(out, name, 20, 20, g -> {
-            rounded(g, 0.5f, 0.5f, 19, 19, Math.min(l.radius, 3), on ? l.select : field, hover ? l.lineActive : l.line);
             if (on) {
-                g.setColor(color(Ui.gold() ? 0xFF1A1608 : 0xFFFFFFFF));
+                // Akzent-Verlauf wie die Schalter
+                g.setPaint(new java.awt.GradientPaint(0, 0, color(0xFF9B5CFF), 20, 20, color(0xFFEC5FBF)));
+                g.fill(new RoundRectangle2D.Float(0.5f, 0.5f, 19, 19, 6, 6));
+                if (hover) {
+                    g.setColor(color(0x40FFFFFF));
+                    g.draw(new RoundRectangle2D.Float(0.5f, 0.5f, 19, 19, 6, 6));
+                }
+            } else {
+                rounded(g, 0.5f, 0.5f, 19, 19, 3, field, hover ? l.lineActive : l.line);
+            }
+            if (on) {
+                g.setColor(color(0xFFFFFFFF));
                 g.setStroke(new BasicStroke(2.2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
                 Path2D check = new Path2D.Float();
                 check.moveTo(5.5, 10.5);

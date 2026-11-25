@@ -38,7 +38,7 @@ public class XoScreen extends PanelScreen {
 
     @Override
     protected String title() {
-        return "X UND O";
+        return "X und O";
     }
 
     @Override

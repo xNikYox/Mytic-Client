@@ -27,7 +27,7 @@ public class Connect4Screen extends GameScreen {
 
     @Override
     protected String title() {
-        return "VIER GEWINNT";
+        return "Vier gewinnt";
     }
 
     @Override

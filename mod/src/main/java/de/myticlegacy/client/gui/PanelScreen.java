@@ -4,6 +4,7 @@ import com.mojang.blaze3d.platform.InputConstants;
 import de.myticlegacy.client.MyticClient;
 import de.myticlegacy.client.compat.Compat;
 import de.myticlegacy.client.compat.Gfx;
+
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 
@@ -47,35 +48,37 @@ public abstract class PanelScreen extends MyticScreen {
         String mode = MyticClient.theme.menuBackground.get();
         if (mode.equals("Unschärfe")) super.renderBackground(g, mouseX, mouseY, delta);
         else if (mode.equals("Abdunkeln") || minecraft.level == null) g.fill(0, 0, width, height, 0x99000000);
+        g.fill(0, 0, width, height, 0x61070510); // Schleier wie die neuen Bildschirme
+    }
+
+    /** Design-Faktor in Panel-Einheiten (Kopfzeile 34 Einheiten = 88 Design-Pixel) */
+    protected static float dv() {
+        return HEADER / 88f;
     }
 
     @Override
     protected final void draw(GuiGraphics g, int mouseX, int mouseY, float delta) {
-        float open = Math.min(1f, (System.currentTimeMillis() - openedAt) / 180f);
-        float ease = 1f - (1f - open) * (1f - open) * (1f - open);
+        float open = Math.min(1f, (System.currentTimeMillis() - openedAt) / 350f);
+        float ease = de.myticlegacy.client.gui.ui.Motion.ease(open);
+        float d = dv();
         Gfx.push(g);
-        Gfx.translate(g, 0, (1 - ease) * 10);
-        Ui.rect(g, px - 3, py + 3, pw + 6, ph + 3, 10, 0x50000000);
-        boolean lunar = Ui.lunar();
-        if (lunar) {
-            Ui.lunarPanel(g, px, py, pw, ph, 6);
-        } else {
-            Ui.neonPanel(g, px, py, pw, ph, 8, 1f);
-            g.fillGradient(px + 4, py + 2, px + pw - 4, py + HEADER, Ui.withAlpha(Ui.accent(), 42), Ui.withAlpha(Ui.accent(), 0));
-        }
+        Gfx.translate(g, 0, (1 - ease) * 8 * d);
+        // Fenster im Mytic-Design: weicher Schatten, Glas, Rahmen, Lichtkante
+        de.myticlegacy.client.gui.ui.Draw.shadow(g, px, py + 30 * d, pw, ph, 28 * d, 80 * d, -30 * d, 0xA6000000);
+        de.myticlegacy.client.gui.ui.Draw.glass(g, px, py, pw, ph, 28 * d, minecraft.level == null ? 0xE6120E1C : 0xD8120E1C, 0x24FFFFFF);
         boolean backHover = Ui.inside(mouseX, mouseY, px + 10, py + 9, 16, 16);
-        Ui.rect(g, px + 10, py + 9, 16, 16, lunar ? 4 : 8, lunar ? (backHover ? Ui.L_CARD_HOVER : Ui.L_CARD) : (backHover ? Ui.SURFACE_HOVER : Ui.SURFACE));
-        Ui.centered(g, "‹", px + 18, py + 13, Ui.TEXT, false);
+        de.myticlegacy.client.gui.ui.Widgets.iconButton(g, "panel:back", px + 10, py + 9, 16, d, "chevL", 16 * 0.5f, true, null, backHover, false);
         String title = title();
-        if (lunar) Ui.text(g, title, px + 34, py + 13, 0xFFFFFFFF, true);
-        else Ui.glowText(g, title, px + 34, py + 13, Ui.accent(), 1f);
-        Ui.rect(g, px + 10, py + HEADER, pw - 20, 1, 0, lunar ? Ui.L_LINE : Ui.LINE);
-        Ui.rect(g, px + 10, py + ph - FOOTER, pw - 20, 1, 0, lunar ? Ui.L_LINE : Ui.LINE);
-        drawContent(g, mouseX, mouseY, px + 34 + font.width(title) + 16);
+        String shown = title; // Titel in Inter (statt Großbuchstaben in Pixelschrift)
+        de.myticlegacy.client.gui.ui.Type.middle(g, shown, px + 34, py + 17, 21 * d, de.myticlegacy.client.gui.ui.Tokens.SEMIBOLD, de.myticlegacy.client.gui.ui.Tokens.TEXT);
+        float titleW = de.myticlegacy.client.gui.ui.Type.width(g, shown, 21 * d, de.myticlegacy.client.gui.ui.Tokens.SEMIBOLD);
+        de.myticlegacy.client.gui.ui.Draw.rect(g, px, py + HEADER, pw, 1f / de.myticlegacy.client.gui.ui.Draw.k(g), 0, 0x17FFFFFF);
+        de.myticlegacy.client.gui.ui.Draw.rect(g, px, py + ph - FOOTER, pw, 1f / de.myticlegacy.client.gui.ui.Draw.k(g), 0, 0x17FFFFFF);
+        drawContent(g, mouseX, mouseY, px + 34 + Math.round(titleW) + 12);
         Gfx.pop(g);
     }
 
-    /** Überschrift oben links (Großbuchstaben). */
+    /** Überschrift oben links. */
     protected abstract String title();
 
     /** Inhalt zeichnen; headerX = erste freie Stelle in der Kopfzeile rechts vom Titel. */

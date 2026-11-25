@@ -22,7 +22,7 @@ public class ScreenshotsScreen extends PanelScreen {
 
     @Override
     protected String title() {
-        return "SCREENSHOTS";
+        return "Screenshots";
     }
 
     private int cx() {

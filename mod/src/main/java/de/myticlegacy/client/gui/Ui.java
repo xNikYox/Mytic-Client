@@ -12,15 +12,15 @@ import java.util.Map;
 
 /** Zeichen-Helfer für das Mytic-Design: abgerundete Flächen, Farben, weiche Übergänge. */
 public final class Ui {
-    // Flächen-Farben: nicht final, Deckkraft und Stil (Design → Menü-Deckkraft / Menü-Stil) werden in refreshPalette() eingerechnet
-    public static int PANEL = 0xF20A0716;
-    public static int SURFACE = 0xFF130D24;
-    public static int SURFACE_HOVER = 0xFF1F1638;
-    public static final int LINE = 0xFF2C2050;
-    public static final int TEXT = 0xFFF1EEF9;
-    public static final int MUTED = 0xFF9A93B4;
-    public static final int GREEN = 0xFF5BE38A;
-    public static final int RED = 0xFFFF5C72;
+    // Flächen-Farben des Mytic-Designs „Dunkles Glas“ (deckend, damit outline() mit Rand + Innenfläche funktioniert)
+    public static final int PANEL = 0xF0120E1C;
+    public static final int SURFACE = 0xFF1B1726;
+    public static final int SURFACE_HOVER = 0xFF252036;
+    public static final int LINE = 0xFF2B2639;
+    public static final int TEXT = de.myticlegacy.client.gui.ui.Tokens.TEXT;
+    public static final int MUTED = de.myticlegacy.client.gui.ui.Tokens.MUTED;
+    public static final int GREEN = de.myticlegacy.client.gui.ui.Tokens.OK;
+    public static final int RED = de.myticlegacy.client.gui.ui.Tokens.BAD;
 
     private static final Map<Object, Float> ANIMATIONS = new HashMap<>();
     private static long lastFrame = System.nanoTime();
@@ -78,11 +78,9 @@ public final class Ui {
                 | (Math.round(ag + (bg - ag) * t) << 8) | Math.round(ab + (bb - ab) * t);
     }
 
-    /** Rechteck mit abgerundeten Ecken (Radius in GUI-Pixeln); im Menü-Stil „Eckig“ immer mit scharfen Ecken. */
+    /** Rechteck mit abgerundeten Ecken (Radius in GUI-Pixeln). */
     public static void rect(GuiGraphics g, int x, int y, int w, int h, int r, int color) {
         if (w <= 0 || h <= 0) return;
-        if (square()) r = 0;
-        else if (gold()) r = Math.min(r, 2);
         r = Math.min(r, Math.min(w, h) / 2);
         if (r <= 0) {
             g.fill(x, y, x + w, y + h, color);
@@ -195,188 +193,74 @@ public final class Ui {
         return mx >= x && my >= y && mx < x + w && my < y + h;
     }
 
-    /** Schalter wie bei Lunar: Pille mit Knopf, animiert. */
-    // ------------------------------------------------------------------ Lunar-Stil
+    // ------------------------------------------------------------------ Mytic-Design (früher wählbare Menü-Stile)
 
-    public static int L_PANEL = 0xF2141414;
-    public static int L_CARD = 0xFF222222;
-    public static int L_CARD_HOVER = 0xFF2C2C2C;
-    public static int L_LINE = 0x22FFFFFF;
-    public static int L_GREEN = 0xFF33B45A;
-    /** Auswahl-Farbe (aktive Kategorie) */
-    public static int L_SELECT = 0xFFFFFFFF;
-    private static String paletteKey = "";
-    public static final int L_RED = 0xFFD8434B;
+    // Namen aus der Zeit der Menü-Stile; alle zeigen jetzt das Mytic-Design „Dunkles Glas“
+    public static final int L_PANEL = PANEL;
+    public static final int L_CARD = SURFACE;
+    public static final int L_CARD_HOVER = SURFACE_HOVER;
+    public static final int L_LINE = de.myticlegacy.client.gui.ui.Tokens.LINE;
+    public static final int L_GREEN = de.myticlegacy.client.gui.ui.Tokens.ACC_1;
+    public static final int L_SELECT = de.myticlegacy.client.gui.ui.Tokens.ACC;
+    public static final int L_RED = de.myticlegacy.client.gui.ui.Tokens.BAD;
 
-    /** Menü im Lunar-Stil (Design → Menü-Stil, Standard) statt Neon. */
+    /** Immer das Mytic-Layout (die alten Menü-Stile gibt es nicht mehr) */
     public static boolean lunar() {
-        refreshPalette();
-        return MyticClient.theme == null || !MyticClient.theme.menuStyle.is("Neon"); // Glas nutzt das Lunar-Layout
+        return true;
     }
 
-    /** Menü-Stil „Eckig“ (Standard): dunkelgrau, keine runden Ecken – nutzt das Lunar-Layout */
     public static boolean square() {
-        return MyticClient.theme != null && MyticClient.theme.menuStyle.is("Eckig");
+        return false;
     }
 
-    /** Menü-Stil „Glas“: milchig durchsichtig, helle Kanten, Akzentfarbe statt Grün */
     public static boolean glass() {
-        return MyticClient.theme != null && MyticClient.theme.menuStyle.is("Glas");
+        return true;
     }
 
-    /** Menü-Stil „Gold“: fast schwarz mit Goldkanten, kaum Rundungen – nutzt das Lunar-Layout */
     public static boolean gold() {
-        return MyticClient.theme != null && MyticClient.theme.menuStyle.is("Gold");
+        return false;
     }
 
-    /** Menü-Stil „Seitenleiste“: Kategorien links als Icon-Leiste, große Karten mit Schalter oben rechts */
     public static boolean sidebar() {
-        return MyticClient.theme != null && MyticClient.theme.menuStyle.is("Seitenleiste");
+        return false;
     }
 
-    /** Eckenradius der Mod-Karten je Stil (Lunar weicher, Glas am rundesten) */
     public static int cardRadius() {
-        if (glass()) return 8;
-        if (sidebar()) return 6;
-        if (MyticClient.theme != null && MyticClient.theme.menuStyle.is("Lunar")) return 6;
-        return 4;
+        return 6;
     }
 
-    /** Farbe für ausgewählte Kategorien/Markierungen: Gold, Blau (Seitenleiste/Lunar) oder Schalter-Farbe */
     public static int selection() {
-        refreshPalette();
         return L_SELECT;
     }
 
-    /** Textfarbe im Lunar-Layout (Gold: cremeweiß) */
     public static int lText() {
-        return gold() ? 0xFFF5EFE1 : 0xFFFFFFFF;
+        return TEXT;
     }
 
-    /** Gedämpfte Textfarbe im Lunar-Layout */
     public static int lMuted() {
-        return gold() ? 0xFFA39A85 : sidebar() ? 0xFF8B93A7 : 0xFF9A9A9A;
+        return MUTED;
     }
 
-    private static int a(int rgb, float alpha) {
-        return (Math.round(Math.max(0, Math.min(1, alpha)) * 255) << 24) | (rgb & 0xFFFFFF);
-    }
-
-    /** Farben nach Stil und Deckkraft neu berechnen (nur wenn sich etwas geändert hat) */
+    /** Früher: Farben nach Menü-Stil berechnen – das Design ist jetzt fest */
     public static void refreshPalette() {
-        if (MyticClient.theme == null) return;
-        float op = (float) (MyticClient.theme.menuOpacity.get() / 100.0);
-        String style = MyticClient.theme.menuStyle.get();
-        int acc = accent();
-        int menuColor = MyticClient.theme.menuColor.get() | 0xFF000000;
-        int highlight = MyticClient.theme.menuHighlight.get() | 0xFF000000;
-        String key = style + op + acc + "/" + menuColor + "/" + highlight;
-        if (key.equals(paletteKey)) return;
-        paletteKey = key;
-        boolean customHighlight = highlight != (SimpleModules.Theme.HIGHLIGHT_DEFAULT | 0xFF000000);
-        if (style.equals("Glas")) {
-            // milchig, hellere Kanten
-            L_PANEL = a(0x0C0C14, 0.58f * op);
-            L_CARD = a(0xFFFFFF, 0.08f + 0.05f * op);
-            L_CARD_HOVER = a(0xFFFFFF, 0.15f + 0.07f * op);
-            L_LINE = 0x40FFFFFF;
-            L_GREEN = acc | 0xFF000000;
-            L_SELECT = 0xFFFFFFFF;
-        } else if (style.equals("Eckig")) {
-            // dunkles Grau mit klaren Kanten
-            L_PANEL = a(0x1B1B1D, 0.97f * op);
-            L_CARD = a(0x26272A, Math.min(1f, op + 0.15f));
-            L_CARD_HOVER = a(0x303135, Math.min(1f, op + 0.2f));
-            L_LINE = 0x1FFFFFFF;
-            L_GREEN = highlight;
-            L_SELECT = highlight;
-        } else if (style.equals("Gold")) {
-            // fast schwarz, Gold für Kanten, Schalter und Auswahl
-            int goldTone = customHighlight ? highlight : 0xFFD4AF37;
-            L_PANEL = a(0x0E0D0B, 0.97f * op);
-            L_CARD = a(0x17150F, Math.min(1f, op + 0.15f));
-            L_CARD_HOVER = a(0x201D14, Math.min(1f, op + 0.2f));
-            L_LINE = withAlpha(goldTone, 0x30);
-            L_GREEN = goldTone;
-            L_SELECT = goldTone;
-        } else if (style.equals("Seitenleiste")) {
-            // kühles Blaugrau, blaue Auswahl
-            int blue = customHighlight ? highlight : 0xFF3B82F6;
-            L_PANEL = a(0x11141C, 0.97f * op);
-            L_CARD = a(0x171C27, Math.min(1f, op + 0.15f));
-            L_CARD_HOVER = a(0x1E2433, Math.min(1f, op + 0.2f));
-            L_LINE = 0x14FFFFFF;
-            L_GREEN = blue;
-            L_SELECT = blue;
-        } else {
-            // Lunar Soft: weicher, blaue Auswahl, grüne Schalter
-            L_PANEL = a(0x141416, 0.93f * op);
-            L_CARD = a(0x222225, Math.min(1f, op + 0.15f));
-            L_CARD_HOVER = a(0x2C2C30, Math.min(1f, op + 0.2f));
-            L_LINE = 0x1CFFFFFF;
-            L_GREEN = customHighlight ? highlight : 0xFF3CCF7A;
-            L_SELECT = 0xFF4F9CF9;
-        }
-        // Eigene Menü-Farbe (Design → Menü-Farbe): abgedunkelt, damit weiße Schrift lesbar bleibt; Karten etwas heller
-        if (!style.equals("Glas") && !style.equals("Gold") && menuColor != SimpleModules.Theme.MENU_COLOR_DEFAULT) {
-            int panel = mix(0xFF111113, menuColor, 0.35f);
-            L_PANEL = a(panel, 0.97f * op);
-            L_CARD = a(mix(panel, 0xFFFFFFFF, 0.07f), Math.min(1f, op + 0.15f));
-            L_CARD_HOVER = a(mix(panel, 0xFFFFFFFF, 0.13f), Math.min(1f, op + 0.2f));
-        }
-        // Neon (Synthwave): tiefes Violett
-        PANEL = a(0x100924, 0.94f * op);
-        SURFACE = a(0x1A1033, Math.min(1f, op + 0.15f));
-        SURFACE_HOVER = a(0x26164A, Math.min(1f, op + 0.2f));
     }
 
-    /** Schlichtes Panel wie bei Lunar: dunkelgrau, feiner heller Rand, keine Leuchteffekte. */
+    /** Glas-Fläche wie die Fenster des neuen Designs (Radius r in GUI-Pixeln, etwas weicher gerundet) */
     public static void lunarPanel(GuiGraphics g, int x, int y, int w, int h, int r) {
-        if (glass()) {
-            glassPanel(g, x, y, w, h, r);
-            return;
-        }
-        rect(g, x - 2, y + 2, w + 4, h + 2, r + 2, 0x45000000);
-        rect(g, x, y, w, h, r, gold() ? withAlpha(L_GREEN, 0x60) : sidebar() ? 0x1EFFFFFF : 0x2EFFFFFF);
-        rect(g, x + 1, y + 1, w - 2, h - 2, Math.max(0, r - 1), L_PANEL);
-        // Gold: zweite, feine Innenkante wie ein Rahmen
-        if (gold()) {
-            int c = withAlpha(L_GREEN, 0x1C);
-            g.fill(x + 3, y + 3, x + w - 3, y + 4, c);
-            g.fill(x + 3, y + h - 4, x + w - 3, y + h - 3, c);
-            g.fill(x + 3, y + 4, x + 4, y + h - 4, c);
-            g.fill(x + w - 4, y + 4, x + w - 3, y + h - 4, c);
-        }
+        glassPanel(g, x, y, w, h, r);
     }
 
-    /** Glas-Panel: weicher Schatten, helle Kante (oben heller), milchige Fläche, Lichtreflex und Akzent-Schimmer */
     public static void glassPanel(GuiGraphics g, int x, int y, int w, int h, int r) {
-        rect(g, x - 3, y + 3, w + 6, h + 3, r + 3, 0x30000000);
-        rect(g, x, y, w, h, r, 0x40FFFFFF);
-        rect(g, x + 1, y + 1, w - 2, h - 2, Math.max(0, r - 1), L_PANEL);
-        g.fillGradient(x + r, y + 1, x + w - r, y + 2, 0x80FFFFFF, 0x80FFFFFF);          // Lichtkante oben
-        g.fillGradient(x + 1, y + 2, x + w - 1, y + Math.min(h - 2, 44), 0x16FFFFFF, 0x00FFFFFF); // Reflex
-        g.fillGradient(x + 1, y + h - 40, x + w - 1, y + h - 1, 0x00000000, withAlpha(accent(), 34)); // Akzent-Schimmer unten
+        float rr = Math.max(r, 4) * 1.6f;
+        de.myticlegacy.client.gui.ui.Draw.shadow(g, x, y + rr, w, h, rr, rr * 3, -rr, 0x8C000000);
+        de.myticlegacy.client.gui.ui.Draw.glass(g, x, y, w, h, rr, PANEL, 0x24FFFFFF);
     }
 
+    /** Schalter im neuen Design (Akzent-Verlauf, gleitender Knopf), 20 × 11 GUI-Pixel */
     public static void toggle(GuiGraphics g, Object key, int x, int y, boolean on) {
-        float t = animate(key, on, 14f);
-        if (lunar()) {
-            if (glass() && t > 0.01f) glow(g, x, y, 20, 10, 5, withAlpha(accent(), Math.round(120 * t)), 2, 0.6f);
-            rect(g, x, y, 20, 10, 5, mix(glass() ? 0x55FFFFFF : gold() ? 0xFF2A261A : sidebar() ? 0xFF2A3142 : 0xFF4A4A4A, L_GREEN, t));
-            rect(g, x + 1 + Math.round(10 * t), y + 1, 8, 8, 4, gold() ? mix(0xFF8A8270, 0xFF1A1608, t) : 0xFFFFFFFF);
-            return;
-        }
-        if (t > 0.01f) glow(g, x, y, 20, 10, 5, withAlpha(accent2(), Math.round(200 * t)), 3, 0.8f);
-        rect(g, x, y, 20, 10, 5, 0xFF2A2240);
-        if (t > 0.01f) {
-            int w = Math.max(10, Math.round(20 * t));
-            rect(g, x, y, w, 10, 5, alpha(accent(), t));
-            hGradient(g, x + 3, y + 1, w - 6, 8, alpha(accent(), t), alpha(accent2(), t));
-        }
-        int knob = x + 1 + Math.round(10 * t);
-        rect(g, knob, y + 1, 8, 8, 4, 0xFFFFFFFF);
+        de.myticlegacy.client.gui.ui.Widgets.toggle(g, "ui:" + key, x, y - 0.5f, 20f / 46f, on, false);
     }
+
     // ------------------------------------------------------------------ Neon-Design
 
     public static final int CYAN = 0xFF22E5FF;
