@@ -30,7 +30,11 @@ test("Konten nur mit gültigem Schlüssel, ohne Token in der Liste", async () =>
   assert.equal((await request(`${base}accounts`, { key, headers: { Origin: "https://evil.example" } })).status, 403);
   const list = await request(`${base}accounts`, { key });
   assert.equal(list.status, 200);
-  assert.deepEqual(list.json.accounts, [{ uuid: "u1", name: "Alpha" }, { uuid: "u2", name: "Beta" }]);
+  assert.deepEqual(list.json.accounts, [
+    { uuid: "u1", name: "Alpha", type: "microsoft", expiresAt: 0, needsLogin: false },
+    { uuid: "u2", name: "Beta", type: "microsoft", expiresAt: 0, needsLogin: false },
+  ]);
+  assert.deepEqual(list.json.features, []);
   assert.equal((await request(`${base}switch`, { method: "POST", key, body: JSON.stringify({ uuid: "nope" }) })).status, 404);
   const sw = await request(`${base}switch`, { method: "POST", key, body: JSON.stringify({ uuid: "u2" }) });
   assert.equal(sw.status, 200);
@@ -48,4 +52,36 @@ test("Schlüssel einer beendeten Instanz gilt nicht mehr, andere schon", async (
   assert.equal((await request(`${base}accounts`, { key: a })).status, 401);
   assert.equal((await request(`${base}accounts`, { key: b })).status, 200);
   bridge.revoke(b);
+});
+
+test("Neu anmelden, hinzufügen und entfernen über dieselbe Verbindung", async () => {
+  const calls = [];
+  const bridge = createBridge({
+    listAccounts: () => [...ACCOUNTS, { uuid: "u3", name: "Gamma", type: "microsoft", expiresAt: 5, needsLogin: true, accessToken: "geheim" }],
+    switchAccount: async () => ({}),
+    refreshAccount: async (uuid, key) => (calls.push(["refresh", uuid, key]), { name: "Beta", uuid, accessToken: "neu", relogin: false }),
+    addAccount: async (key) => (calls.push(["add", key]), { uuid: "u9", name: "Neu" }),
+    removeAccount: async (uuid) => {
+      calls.push(["remove", uuid]);
+      if (uuid === "u1") throw new Error("Mit diesem Konto wird gerade gespielt.");
+    },
+  });
+  const key = bridge.issueKey();
+  const base = await bridge.start();
+  const list = await request(`${base}accounts`, { key });
+  assert.deepEqual(list.json.features, ["refresh", "add", "remove"]);
+  assert.deepEqual(list.json.accounts[2], { uuid: "u3", name: "Gamma", type: "microsoft", expiresAt: 5, needsLogin: true }); // kein Token
+  const r = await request(`${base}refresh`, { method: "POST", key, body: JSON.stringify({ uuid: "u2" }) });
+  assert.equal(r.status, 200);
+  assert.equal(r.json.accessToken, "neu");
+  assert.equal((await request(`${base}refresh`, { method: "POST", key, body: JSON.stringify({ uuid: "x" }) })).status, 404);
+  const a = await request(`${base}add`, { method: "POST", key });
+  assert.deepEqual(a.json, { uuid: "u9", name: "Neu" });
+  assert.equal((await request(`${base}remove`, { method: "POST", key, body: JSON.stringify({ uuid: "u2" }) })).json.ok, true);
+  const busy = await request(`${base}remove`, { method: "POST", key, body: JSON.stringify({ uuid: "u1" }) });
+  assert.equal(busy.status, 502);
+  assert.match(busy.json.error, /gespielt/);
+  assert.equal((await request(`${base}add`, { method: "GET", key })).status, 404);
+  assert.deepEqual(calls.map((c) => c[0]), ["refresh", "add", "remove", "remove"]);
+  bridge.revoke(key);
 });

@@ -1132,22 +1132,109 @@ ipc.handle("skins:rename", async (e, id, name) => {
 });
 
 /** Kontowechsel im Hauptmenü des Spiels: Konten aus dem Launcher, frischer Token nur für die anfragende Instanz */
-const bridge = createBridge({
-  listAccounts: () => publicAccounts().list,
-  switchAccount: async (uuid, key) => {
-    const account = await accountWithToken(uuid);
-    let friendsToken = null;
-    if (friends.configured) {
-      try {
-        friendsToken = await friends.login(account);
-      } catch (error) {
-        emit("log", `[Freunde] Nach Kontowechsel nicht verfügbar: ${error.message}`);
-      }
+/** Sitzungsdaten fürs Spiel (Kontowechsel/Neu-Anmeldung im Spiel), inklusive Freunde-Anmeldung */
+async function gameSession(account, key) {
+  let friendsToken = null;
+  if (friends.configured) {
+    try {
+      friendsToken = await friends.login(account);
+    } catch (error) {
+      emit("log", `[Freunde] Nach Kontowechsel nicht verfügbar: ${error.message}`);
     }
-    for (const g of games.values()) if (g.bridgeKey === key) g.account = account.name;
-    emit("log", `[Launcher] Konto im Spiel gewechselt: ${account.name}`);
-    return { name: account.name, uuid: account.uuid, accessToken: account.accessToken || "0", xuid: account.xuid || "", clientId: account.clientId || "",
-      type: account.type === "microsoft" ? "msa" : "legacy", friendsToken };
+  }
+  for (const g of games.values()) if (g.bridgeKey === key) g.account = account.name;
+  return { name: account.name, uuid: account.uuid, accessToken: account.accessToken || "0", xuid: account.xuid || "", clientId: account.clientId || "",
+    type: account.type === "microsoft" ? "msa" : "legacy", friendsToken };
+}
+
+/** Launcher-Fenster nach vorn holen (für die Microsoft-Anmeldung, die das Spiel anstößt) */
+function bringToFront() {
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+}
+
+/** Microsoft-Anmeldung im Launcher-Fenster: neues bzw. erneuertes Konto mit Refresh-Token speichern */
+async function interactiveMicrosoftLogin() {
+  const clientId = settings().clientId;
+  if (!clientId) throw new Error("Für den Microsoft-Login fehlt die Client-ID (Einstellungen).");
+  bringToFront();
+  const { code, verifier } = await microsoftCode(clientId);
+  const tokens = await auth.exchangeCode(clientId, code, verifier);
+  const account = await auth.minecraftLogin(tokens.access_token);
+  return { account, refreshToken: tokens.refresh_token };
+}
+
+/** Anmeldung eines Kontos auf jeden Fall erneuern: erst mit dem Refresh-Token, ist der abgelaufen, neu bei Microsoft */
+async function refreshAccountToken(uuid) {
+  const entry = accounts().list.find((a) => a.uuid === uuid);
+  if (!entry) throw new Error("Konto nicht im Launcher");
+  if (entry.type !== "microsoft") throw new Error("Offline-Konten haben keine Anmeldung, die man erneuern könnte.");
+  const clientId = settings().clientId;
+  if (!clientId) throw new Error("Für Microsoft-Konten fehlt die Client-ID (Einstellungen).");
+  const refreshToken = tokenOf(entry, "refreshToken");
+  if (refreshToken) {
+    try {
+      const tokens = await auth.refreshMicrosoft(clientId, refreshToken);
+      const account = await auth.minecraftLogin(tokens.access_token);
+      await saveAccount(account, tokens.refresh_token || refreshToken, { select: false });
+      return { account, relogin: false };
+    } catch (error) {
+      // nur bei abgelaufener/widerrufener Anmeldung neu einloggen; Netzwerkfehler usw. gehen ans Spiel zurück
+      if (!/AADSTS|invalid_grant|expired|revoked/i.test(error.message)) throw error;
+      emit("log", `[Launcher] Anmeldung von ${entry.name} abgelaufen – neue Anmeldung nötig`);
+    }
+  }
+  const { account, refreshToken: fresh } = await interactiveMicrosoftLogin();
+  if (account.uuid !== entry.uuid) throw new Error(`Angemeldet als ${account.name} – bitte mit ${entry.name} anmelden.`);
+  await saveAccount(account, fresh, { select: false });
+  return { account, relogin: true };
+}
+
+/** Konten für das Spiel: ohne Tokens, mit Ablauf der Minecraft-Anmeldung und ob neu angemeldet werden muss */
+function bridgeAccounts() {
+  const store = accounts();
+  return store.list.filter((a) => OFFLINE_ALLOWED || a.type === "microsoft").map((a) => ({
+    uuid: a.uuid, name: a.name, type: a.type, expiresAt: a.expiresAt || 0,
+    needsLogin: a.type === "microsoft" && !tokenOf(a, "refreshToken"),
+  }));
+}
+
+const bridge = createBridge({
+  listAccounts: () => bridgeAccounts(),
+  switchAccount: async (uuid, key) => {
+    const session = await gameSession(await accountWithToken(uuid), key);
+    emit("log", `[Launcher] Konto im Spiel gewechselt: ${session.name}`);
+    return session;
+  },
+  refreshAccount: async (uuid, key) => {
+    const { account, relogin } = await refreshAccountToken(uuid);
+    const session = await gameSession(account, key);
+    emit("log", `[Launcher] Anmeldung im Spiel erneuert: ${session.name}${relogin ? " (neu angemeldet)" : ""}`);
+    emit("accounts", publicAccounts());
+    return { ...session, relogin, expiresAt: account.expiresAt || 0 };
+  },
+  addAccount: async () => {
+    const { account, refreshToken } = await interactiveMicrosoftLogin();
+    await saveAccount(account, refreshToken, { select: false });
+    emit("log", `[Launcher] Konto im Spiel hinzugefügt: ${account.name}`);
+    emit("accounts", publicAccounts());
+    return { uuid: account.uuid, name: account.name };
+  },
+  removeAccount: async (uuid, key) => {
+    for (const g of games.values()) {
+      if (g.bridgeKey === key && accounts().list.some((a) => a.uuid === uuid && a.name === g.account)) throw new Error("Mit diesem Konto wird gerade gespielt.");
+    }
+    const store = accounts();
+    const removed = store.list.find((a) => a.uuid === uuid);
+    store.list = store.list.filter((a) => a.uuid !== uuid);
+    sessionTokens.delete(uuid);
+    if (store.selected === uuid) store.selected = store.list[0] ? store.list[0].uuid : null;
+    await writeJson(ACCOUNTS_FILE, store);
+    emit("log", `[Launcher] Konto im Spiel entfernt: ${removed ? removed.name : uuid}`);
+    emit("accounts", publicAccounts());
+    return { ok: true };
   },
   log: (line) => emit("log", line),
 });

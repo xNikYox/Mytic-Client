@@ -557,6 +557,11 @@ api.onProgress(({ label, done, total }) => {
 });
 api.onStatus((text) => ($("status").textContent = text));
 api.onLog(appendLog);
+// Konten, die im Spiel hinzugefügt, erneuert oder entfernt wurden
+api.onAccounts((accounts) => {
+  state.accounts = accounts;
+  renderAccounts();
+});
 api.onGame(({ running: isRunning, count, code, ended, name }) => {
   const wasRunning = running;
   setRunning(isRunning, count);

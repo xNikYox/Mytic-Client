@@ -38,8 +38,15 @@ import java.util.function.Consumer;
  * Minecraft-Versionen von 1.21 bis 26.x.
  */
 public final class Accounts {
-    public record Account(String uuid, String name) {
+    /** Konto aus dem Launcher; type „microsoft“ oder „offline“, expiresAt = Ablauf der Minecraft-Anmeldung (ms, 0 = unbekannt) */
+    public record Account(String uuid, String name, String type, long expiresAt, boolean needsLogin) {
+        public boolean offline() {
+            return "offline".equals(type);
+        }
     }
+
+    /** Was der Launcher kann (ältere Launcher: nur Liste und Wechsel) */
+    private static volatile java.util.Set<String> features = java.util.Collections.emptySet();
 
     private static final String URL = launcherUrl();
     private static final String KEY = System.getenv("MYTIC_LAUNCHER_KEY") == null ? "" : System.getenv("MYTIC_LAUNCHER_KEY").trim();
@@ -72,12 +79,17 @@ public final class Accounts {
         }
         Thread t = new Thread(() -> {
             try {
-                JsonArray arr = request("GET", "accounts", null).getAsJsonArray("accounts");
+                JsonObject res = request("GET", "accounts", null, 30000);
+                JsonArray arr = res.getAsJsonArray("accounts");
                 List<Account> list = new ArrayList<>();
                 for (JsonElement e : arr) {
                     JsonObject o = e.getAsJsonObject();
-                    list.add(new Account(o.get("uuid").getAsString(), o.get("name").getAsString()));
+                    list.add(new Account(o.get("uuid").getAsString(), o.get("name").getAsString(), str(o, "type").isEmpty() ? "microsoft" : str(o, "type"),
+                            o.has("expiresAt") ? o.get("expiresAt").getAsLong() : 0, o.has("needsLogin") && o.get("needsLogin").getAsBoolean()));
                 }
+                java.util.Set<String> f = new java.util.HashSet<>();
+                if (res.has("features")) for (JsonElement e : res.getAsJsonArray("features")) f.add(e.getAsString());
+                features = f;
                 Minecraft.getInstance().execute(() -> done.accept(list));
             } catch (Exception e) {
                 Minecraft.getInstance().execute(() -> error.accept(message(e)));
@@ -87,8 +99,31 @@ public final class Accounts {
         t.start();
     }
 
+    /** Kann der Launcher die Anmeldung erzwungen erneuern bzw. Konten hinzufügen/entfernen? */
+    public static boolean supports(String feature) {
+        return features.contains(feature);
+    }
+
     /** Zu einem Konto wechseln: Token vom Launcher holen, dann auf dem Spiel-Thread umstellen */
     public static void switchTo(Account account, Runnable done, Consumer<String> error) {
+        session(account, "switch", r -> done.run(), error);
+    }
+
+    /**
+     * Neu einloggen: Der Launcher erneuert die Anmeldung des Kontos auf jeden Fall (Refresh-Token; ist der abgelaufen,
+     * öffnet er die Microsoft-Anmeldung) und gibt die neue Sitzung zurück, die dann wie beim Wechsel übernommen wird.
+     * Ältere Launcher ohne „refresh“: normaler Wechsel (der Launcher erneuert dabei abgelaufene Tokens).
+     * done bekommt true, wenn eine neue Microsoft-Anmeldung nötig war.
+     */
+    public static void refresh(Account account, Consumer<Boolean> done, Consumer<String> error) {
+        if (account.offline()) {
+            error.accept("Offline-Konten haben keine Anmeldung zum Erneuern");
+            return;
+        }
+        session(account, supports("refresh") ? "refresh" : "switch", r -> done.accept(r.has("relogin") && r.get("relogin").getAsBoolean()), error);
+    }
+
+    private static void session(Account account, String path, Consumer<JsonObject> done, Consumer<String> error) {
         if (busy) return;
         if (Minecraft.getInstance().level != null) {
             error.accept("Erst die Welt bzw. den Server verlassen");
@@ -99,16 +134,17 @@ public final class Accounts {
             try {
                 JsonObject body = new JsonObject();
                 body.addProperty("uuid", account.uuid());
-                JsonObject r = request("POST", "switch", body);
+                // Neu-Anmeldung kann auf die Microsoft-Anmeldung im Launcher warten
+                JsonObject r = request("POST", path, body, path.equals("refresh") ? 300000 : 30000);
                 String token = r.get("accessToken").getAsString();
                 // Dienste mit dem neuen Token schon hier anlegen (Netzwerk), nicht auf dem Spiel-Thread
                 UserApiService api = createApi(token);
                 Minecraft.getInstance().execute(() -> {
                     try {
                         apply(r, api);
-                        done.run();
+                        done.accept(r);
                     } catch (Exception e) {
-                        error.accept("Wechsel fehlgeschlagen: " + message(e));
+                        error.accept("Übernehmen fehlgeschlagen: " + message(e));
                     } finally {
                         busy = false;
                     }
@@ -117,21 +153,62 @@ public final class Accounts {
                 busy = false;
                 Minecraft.getInstance().execute(() -> error.accept(message(e)));
             }
-        }, "Mytic Account Switch");
+        }, "Mytic Account " + path);
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /** Konto hinzufügen: Der Launcher öffnet die Microsoft-Anmeldung; done bekommt den Namen des neuen Kontos */
+    public static void add(Consumer<String> done, Consumer<String> error) {
+        if (busy) return;
+        busy = true;
+        background("add", () -> request("POST", "add", new JsonObject(), 300000), r -> done.accept(str(r, "name")), error);
+    }
+
+    /** Konto aus dem Launcher entfernen */
+    public static void remove(Account account, Runnable done, Consumer<String> error) {
+        if (busy) return;
+        busy = true;
+        JsonObject body = new JsonObject();
+        body.addProperty("uuid", account.uuid());
+        background("remove", () -> request("POST", "remove", body, 30000), r -> done.run(), error);
+    }
+
+    private interface Call {
+        JsonObject run() throws Exception;
+    }
+
+    private static void background(String name, Call call, Consumer<JsonObject> done, Consumer<String> error) {
+        Thread t = new Thread(() -> {
+            try {
+                JsonObject r = call.run();
+                Minecraft.getInstance().execute(() -> {
+                    busy = false;
+                    done.accept(r);
+                });
+            } catch (Exception e) {
+                Minecraft.getInstance().execute(() -> {
+                    busy = false;
+                    error.accept(message(e));
+                });
+            }
+        }, "Mytic Account " + name);
         t.setDaemon(true);
         t.start();
     }
 
     private static String message(Exception e) {
         if (e instanceof java.net.ConnectException) return "Launcher nicht erreichbar – ist er noch geöffnet?";
+        if (e instanceof java.net.SocketTimeoutException) return "Zeit abgelaufen – keine Antwort vom Launcher";
+        if ("not found".equals(e.getMessage())) return "Dafür bitte den Mytic Launcher aktualisieren";
         return e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
     }
 
-    private static JsonObject request(String method, String path, JsonObject body) throws Exception {
+    private static JsonObject request(String method, String path, JsonObject body, int readTimeout) throws Exception {
         HttpURLConnection c = (HttpURLConnection) new URI(URL + path).toURL().openConnection(java.net.Proxy.NO_PROXY);
         c.setRequestMethod(method);
         c.setConnectTimeout(3000);
-        c.setReadTimeout(30000);
+        c.setReadTimeout(readTimeout);
         c.setRequestProperty("Authorization", "Bearer " + KEY);
         if (body != null) {
             c.setDoOutput(true);

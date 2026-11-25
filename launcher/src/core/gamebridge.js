@@ -7,10 +7,16 @@ const crypto = require("node:crypto");
 const MAX_BODY = 2048;
 
 /**
- * listAccounts(): [{ uuid, name }]
+ * listAccounts(): [{ uuid, name, type, expiresAt, needsLogin }] (nie Tokens)
  * switchAccount(uuid, key): Konto mit frischem Token { name, uuid, accessToken, xuid, clientId, type, friendsToken }
+ * refreshAccount(uuid, key): wie switchAccount, aber die Anmeldung wird in jedem Fall erneuert (Refresh-Token, sonst
+ *   Microsoft-Login im Launcher); zusätzlich { relogin: true }, wenn neu angemeldet werden musste
+ * addAccount(key): Microsoft-Login im Launcher, liefert { uuid, name }
+ * removeAccount(uuid, key): Konto aus dem Launcher entfernen
  */
-function createBridge({ listAccounts, switchAccount, log = () => {} }) {
+const FEATURES = ["refresh", "add", "remove"];
+
+function createBridge({ listAccounts, switchAccount, refreshAccount, addAccount, removeAccount, log = () => {} }) {
   const keys = new Set();
   let server = null;
   let port = 0;
@@ -39,29 +45,41 @@ function createBridge({ listAccounts, switchAccount, log = () => {} }) {
     const key = validKey(req.headers.authorization);
     if (!key) return send(res, 401, { error: "unauthorized" });
     if (req.method === "GET" && req.url === "/accounts") {
-      return send(res, 200, { accounts: listAccounts().map(({ uuid, name }) => ({ uuid, name })) });
+      const accounts = listAccounts().map(({ uuid, name, type, expiresAt, needsLogin }) => ({
+        uuid, name, type: type || "microsoft", expiresAt: Number(expiresAt) || 0, needsLogin: Boolean(needsLogin),
+      }));
+      return send(res, 200, { accounts, features: FEATURES.filter((f) => ({ refresh: refreshAccount, add: addAccount, remove: removeAccount })[f]) });
     }
-    if (req.method === "POST" && req.url === "/switch") {
-      let raw = "";
-      for await (const chunk of req) {
-        raw += chunk;
-        if (raw.length > MAX_BODY) return send(res, 413, { error: "too large" });
-      }
-      let uuid;
+    if (req.method !== "POST") return send(res, 404, { error: "not found" });
+    const actions = { "/switch": switchAccount, "/refresh": refreshAccount, "/remove": removeAccount };
+    if (req.url === "/add" && addAccount) {
       try {
-        uuid = String(JSON.parse(raw).uuid || "");
-      } catch {
-        return send(res, 400, { error: "bad json" });
-      }
-      if (!listAccounts().some((a) => a.uuid === uuid)) return send(res, 404, { error: "Konto nicht im Launcher" });
-      try {
-        return send(res, 200, await switchAccount(uuid, key));
+        return send(res, 200, await addAccount(key));
       } catch (error) {
-        log(`[Kontowechsel] ${error.message}`);
+        log(`[Konto hinzufügen] ${error.message}`);
         return send(res, 502, { error: error.message });
       }
     }
-    return send(res, 404, { error: "not found" });
+    const action = actions[req.url];
+    if (!action) return send(res, 404, { error: "not found" });
+    let raw = "";
+    for await (const chunk of req) {
+      raw += chunk;
+      if (raw.length > MAX_BODY) return send(res, 413, { error: "too large" });
+    }
+    let uuid;
+    try {
+      uuid = String(JSON.parse(raw).uuid || "");
+    } catch {
+      return send(res, 400, { error: "bad json" });
+    }
+    if (!listAccounts().some((a) => a.uuid === uuid)) return send(res, 404, { error: "Konto nicht im Launcher" });
+    try {
+      return send(res, 200, (await action(uuid, key)) || { ok: true });
+    } catch (error) {
+      log(`[Konto ${req.url.slice(1)}] ${error.message}`);
+      return send(res, 502, { error: error.message });
+    }
   }
 
   /** Startet den Server (einmal) und gibt die Adresse zurück */
@@ -70,7 +88,7 @@ function createBridge({ listAccounts, switchAccount, log = () => {} }) {
     if (starting) return starting;
     starting = new Promise((resolve, reject) => {
       server = http.createServer((req, res) => handle(req, res).catch(() => send(res, 500, { error: "internal" })));
-      server.requestTimeout = 30000;
+      server.requestTimeout = 30000; // nur für das Empfangen der Anfrage; Antworten (Microsoft-Login) dürfen länger dauern
       server.once("error", (error) => {
         server = null;
         starting = null;

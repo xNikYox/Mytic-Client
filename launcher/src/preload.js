@@ -41,6 +41,7 @@ contextBridge.exposeInMainWorld("mytic", {
   deleteProfile: (id) => ipcRenderer.invoke("profiles:delete", id),
   setProfilePerf: (slug, on) => ipcRenderer.invoke("profiles:perf", slug, on),
   onUpdate: on("update"),
+  onAccounts: on("accounts"),
   onUpdateProgress: on("update-progress"),
   onUpdated: on("updated"),
   onInstalledNow: on("installed-now"),
