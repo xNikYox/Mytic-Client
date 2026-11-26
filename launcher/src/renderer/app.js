@@ -595,7 +595,11 @@ $("launch").addEventListener("click", async () => {
   }
 });
 
-$("stop-game").addEventListener("click", () => api.stop());
+let stoppedByUser = 0;
+$("stop-game").addEventListener("click", () => {
+  stoppedByUser = Date.now();
+  api.stop();
+});
 $("copy-log").addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText(logLines.map((l) => l.text).join("\n"));
@@ -624,9 +628,9 @@ api.onGame(({ running: isRunning, count, code, ended, name }) => {
   if (isRunning) $("status").textContent = runningText();
   else $("status").textContent = code === 0 ? "Bereit" : `Beendet (Code ${code}) – Details in der Konsole`;
   if (isRunning && ended && code !== 0 && name) toast(`Minecraft von ${name} wurde beendet (Code ${code}).`, true);
-  // Absturz: normalerweise erscheint das Auto-Fix-Fenster – nur falls nicht, kurzer Hinweis
-  if (!isRunning && code !== 0) setTimeout(() => {
-    if ($("crash").hidden) toast("Minecraft wurde unerwartet beendet. Sieh dir die Konsole an.", true);
+  // Absturz: normalerweise erscheint das Auto-Fix-Fenster – sonst Diagnose anbieten
+  if (!isRunning && code !== 0 && code != null && Date.now() - stoppedByUser > 15000) setTimeout(() => {
+    if ($("crash").hidden) offerDiagBundle(code);
   }, 2000);
 });
 
@@ -1670,6 +1674,92 @@ $("diag-run").addEventListener("click", async () => {
   }
 });
 $("diag-close").addEventListener("click", () => ($("diag").hidden = true));
+
+// ---------------------------------------------------------------------------------------------- Diagnose-Paket
+
+const DIAG_LEVEL = { error: "Fehler", warn: "Warnung", info: "Hinweis" };
+const fmtMs = (v) => (v == null || v < 0 ? "–" : v >= 10000 ? `${Math.round(v / 1000)} s` : v >= 1000 ? `${(v / 1000).toFixed(1).replace(".", ",")} s` : `${v} ms`);
+
+function showDiagBundle({ title, sub, result, offer }) {
+  $("diagbundle-title").textContent = title;
+  $("diagbundle-sub").textContent = sub || "";
+  $("diagbundle-create").hidden = !offer;
+  $("diagbundle-copy").hidden = !result;
+  const stats = $("diagbundle-stats");
+  const list = $("diagbundle-list");
+  stats.replaceChildren();
+  list.replaceChildren();
+  if (result) {
+    const o = result.overview;
+    const stat = (value, label) => {
+      const box = el("div", "diag-stat");
+      box.append(el("b", null, String(value ?? "–")), label);
+      stats.append(box);
+    };
+    stat(`MC ${o.mcVersion || "?"}`, `Profil „${o.profile || "?"}“`);
+    stat(o.myticMod || "–", "Mytic-Mod");
+    stat(`${(o.memoryMb / 1024).toFixed(1).replace(".", ",")} / ${(o.totalMb / 1024).toFixed(0)} GB`, "RAM Minecraft / PC");
+    stat(o.java || "–", "Java");
+    stat(o.mods, "Mods aktiv");
+    stat(o.packs, "Texturpakete");
+    stat(fmtMs(o.titleMs), "Start → Hauptmenü");
+    if (o.lastJoin) stat(fmtMs(o.lastJoin.totalMs), "letzter Join");
+    if (o.gpu) stats.append(el("small", "sub", `${o.cpu || ""} · ${o.gpu}`));
+    if (!result.problems.length) {
+      const row = el("div", "diag-item ok");
+      const text = el("div");
+      text.append(el("b", null, "Keine Probleme erkannt"), el("small", null, "Das Paket enthält trotzdem alle Logs – bei Problemen den Ordner öffnen und die ZIP an den Support schicken."));
+      row.append(el("i"), text);
+      list.append(row);
+    }
+    for (const p of result.problems) {
+      const row = el("div", `diag-item ${p.level}`);
+      const text = el("div");
+      text.append(el("b", null, `${DIAG_LEVEL[p.level]}: ${p.title}`), el("small", null, p.detail));
+      row.append(el("i"), text);
+      list.append(row);
+    }
+  } else if (offer) {
+    list.append(el("p", "sub", "Die Diagnose sammelt Logs, Absturzberichte, Mod-Liste und Systeminfos in eine ZIP im Launcher-Ordner und sucht nach typischen Ursachen. Tokens, E-Mails, private IPs und dein Windows-Benutzername werden geschwärzt. Es wird nichts hochgeladen."));
+  }
+  $("diagbundle").hidden = false;
+}
+
+function offerDiagBundle(code) {
+  showDiagBundle({ title: "Minecraft wurde unerwartet beendet", sub: `Exit-Code ${code}. Eine Diagnose hilft, die Ursache zu finden.`, offer: true });
+}
+
+async function runDiagBundle(button) {
+  const buttons = [button, $("diagbundle-create"), $("diagbundle-run"), $("crash-diag")].filter(Boolean);
+  for (const b of buttons) b.disabled = true;
+  const label = button ? button.textContent : "";
+  if (button) button.textContent = "Sammle …";
+  try {
+    const result = await api.diagBundle();
+    $("crash").hidden = true;
+    showDiagBundle({ title: "Diagnose erstellt", sub: `${result.name} – liegt im Launcher-Ordner unter diagnose. Nichts wurde hochgeladen.`, result });
+  } catch (error) {
+    toast(errorText(error), true);
+  } finally {
+    for (const b of buttons) b.disabled = false;
+    if (button) button.textContent = label;
+  }
+}
+
+$("diagbundle-run").addEventListener("click", (e) => runDiagBundle(e.currentTarget));
+$("diagbundle-create").addEventListener("click", (e) => runDiagBundle(e.currentTarget));
+$("crash-diag").addEventListener("click", (e) => runDiagBundle(e.currentTarget));
+$("diagbundle-folder").addEventListener("click", () => api.diagBundleOpen());
+$("diagbundle-open").addEventListener("click", () => api.diagBundleOpen());
+$("diagbundle-close").addEventListener("click", () => ($("diagbundle").hidden = true));
+$("diagbundle-copy").addEventListener("click", async () => {
+  try {
+    await api.diagBundleCopy();
+    toast("Zusammenfassung kopiert – zum Einfügen in Discord oder eine Nachricht.");
+  } catch (error) {
+    toast(errorText(error), true);
+  }
+});
 
 // ---------------------------------------------------------------------------------------------- Mod-Scanner
 

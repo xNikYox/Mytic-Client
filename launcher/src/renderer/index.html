@@ -355,6 +355,13 @@
           <div class="row"><div><b>Reparieren</b><small>Alle Dateien beim nächsten Start prüfen</small></div>
             <button class="ghost" id="verify">Prüfen</button></div>
         </section>
+        <section class="glass group">
+          <h3>Hilfe</h3>
+          <div class="row"><div><b>Diagnose erstellen</b><small>Sammelt Logs, Absturzberichte, Mod-Liste, Texturpakete, Einstellungen und Systeminfos in eine ZIP im Launcher-Ordner und sucht nach typischen Problemen. Tokens, E-Mails, private IPs und dein Windows-Benutzername werden geschwärzt. Es wird nichts hochgeladen.</small></div>
+            <button class="ghost" id="diagbundle-run">Diagnose erstellen</button></div>
+          <div class="row"><div><b>Diagnose-Messung im Spiel</b><small>Ruckelt es? Im Spiel <code>/myticdiagnose</code> eingeben (oder eine Taste unter Steuerung → Mytic Client belegen): 60 Sekunden wird gemessen, welche Mod wie viel Zeit kostet. Der Bericht landet im Diagnose-Ordner und kommt mit ins Paket.</small></div>
+            <button class="ghost" id="diagbundle-folder">Ordner öffnen</button></div>
+        </section>
       </div>
     </section>
 
@@ -411,10 +418,34 @@
       <div class="pop-head"><b id="crash-title">Minecraft konnte nicht starten</b><small id="crash-reason"></small></div>
       <div class="crash-body" id="crash-body"></div>
       <div class="import-foot">
-        <button class="ghost" id="crash-log" type="button">Log ansehen</button>
+        <span class="crash-actions">
+          <button class="ghost" id="crash-log" type="button">Log ansehen</button>
+          <button class="ghost" id="crash-diag" type="button">Diagnose erstellen</button>
+        </span>
         <span class="crash-actions">
           <button class="ghost" id="crash-close" type="button">Schließen</button>
           <button class="mr-btn install" id="crash-fix" type="button">Auto-Fix</button>
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Diagnose-Paket -->
+  <div class="popover modal" id="diagbundle" hidden>
+    <div class="popover-card glass crash-card diagbundle-card" role="dialog" aria-label="Diagnose">
+      <div class="pop-head"><b id="diagbundle-title">Diagnose</b><small id="diagbundle-sub"></small></div>
+      <div class="crash-body">
+        <div class="diag-stats" id="diagbundle-stats"></div>
+        <div class="diag-list" id="diagbundle-list"></div>
+      </div>
+      <div class="import-foot">
+        <span class="crash-actions">
+          <button class="ghost" id="diagbundle-open" type="button">Ordner öffnen</button>
+          <button class="ghost" id="diagbundle-copy" type="button">Kopieren als Text-Zusammenfassung</button>
+        </span>
+        <span class="crash-actions">
+          <button class="ghost" id="diagbundle-close" type="button">Schließen</button>
+          <button class="mr-btn install" id="diagbundle-create" type="button" hidden>Diagnose erstellen</button>
         </span>
       </div>
     </div>

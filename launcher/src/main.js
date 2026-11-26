@@ -13,7 +13,7 @@ const os = require("node:os");
 const crypto = require("node:crypto");
 const { fileURLToPath } = require("node:url");
 const { dirs: makeDirs } = require("./core/paths");
-const { Installer, buildCommand, launch, MANAGED_MODS, MC_VERSION, defaultMemoryMb, availableVersions, bundledMytic, loaderFor, FORGE_VERSIONS, gameDirFor } = require("./core/minecraft");
+const { Installer, buildCommand, launch, MANAGED_MODS, MC_VERSION, defaultMemoryMb, availableVersions, bundledMytic, loaderFor, FORGE_VERSIONS, gameDirFor, memoryArgs } = require("./core/minecraft");
 const auth = require("./core/auth");
 const updater = require("./core/updater");
 const { ModBrowser } = require("./core/modrinth");
@@ -25,6 +25,8 @@ const { CloudSync } = require("./core/cloudsync");
 const { GameStatusHub } = require("./core/gamestatus");
 const { createSkins, checkSkinPng } = require("./core/skins");
 const diagnose = require("./core/diagnose");
+const diagbundle = require("./core/diagbundle");
+const { versionIn } = require("./core/modupdates");
 const modscan = require("./core/modscan");
 const { spawn } = require("node:child_process");
 
@@ -44,6 +46,10 @@ function readJsonSync(file) {
   }
 }
 const SETTINGS_FILE = path.join(DIRS.base, "settings.json");
+/** Diagnose-Pakete und Berichte der Diagnose-Messung (die Mod schreibt über -Dmytic.diagnose.dir hierher) */
+const DIAGNOSE_DIR = path.join(DIRS.base, "diagnose");
+const LAST_LAUNCH_FILE = path.join(DIAGNOSE_DIR, "last-launch.json");
+const launcherLog = new diagbundle.LauncherLog(DIRS.logs);
 const ACCOUNTS_FILE = path.join(DIRS.base, "accounts.json");
 const GAME_CONFIG = path.join(DIRS.game, "config", "myticclient.json");
 const BUNDLED_MODS = app.isPackaged ? path.join(process.resourcesPath, "resources", "mods") : path.join(__dirname, "..", "resources", "mods");
@@ -377,6 +383,12 @@ function gameModules() {
 // ---------------------------------------------------------------------------------------------- Fenster
 
 function emit(channel, payload) {
+  // Launcher-Meldungen für das Diagnose-Paket mitschreiben (Spiel-Log steht schon in latest.log)
+  if (channel === "log") launcherLog.append(payload);
+  send(channel, payload);
+}
+
+function send(channel, payload) {
   if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
 }
 
@@ -1051,6 +1063,7 @@ async function runDiagnose() {
   let live = null;
   try {
     live = JSON.parse(await fsp.readFile(path.join(gameDir, "logs", "mytic-diagnose.json"), "utf8"));
+    if (typeof live.playSeconds !== "number") live = null; // 1.8.9: nur Zeiten, keine Live-Messung
   } catch {
     // noch keine Live-Messung (ältere Mod oder noch nicht gespielt)
   }
@@ -1108,6 +1121,114 @@ ipc.handle("diagnose:fix", async (e, fix) => {
   }
   emit("log", `[Diagnose] Angewendet: ${fix.label || fix.kind}`);
   return runDiagnose();
+});
+
+// ---------------------------------------------------------------------------------------------- Diagnose-Paket
+
+/** Letzten Spielstart merken (Vorbereitung, Exit-Code) – für das Diagnose-Paket */
+function recordLaunch(info) {
+  writeJson(LAST_LAUNCH_FILE, info).catch(() => {});
+}
+
+function withTimeout(promise, ms, fallback = null) {
+  return Promise.race([promise.catch(() => fallback), new Promise((resolve) => setTimeout(() => resolve(fallback), ms))]);
+}
+
+/** Grafikkarte aus Chromium (ohne Netz), höchstens 3 s warten */
+async function gpuName() {
+  const info = await withTimeout(app.getGPUInfo("complete"), 3000);
+  if (!info) return null;
+  const aux = info.auxAttributes || {};
+  const active = (info.gpuDevice || []).find((d) => d.active) || (info.gpuDevice || [])[0] || {};
+  return aux.glRenderer || active.deviceString || (active.vendorId ? `Vendor 0x${active.vendorId.toString(16)} Device 0x${(active.deviceId || 0).toString(16)}` : null);
+}
+
+let lastBundle = null;
+
+async function createDiagnoseBundle() {
+  const current = await ensureProfiles();
+  const profile = profiles.active(current);
+  const mcVersion = profile.mcVersion || MC_VERSION;
+  const loader = loaderFor(mcVersion);
+  const modsDir = profiles.modsDir(DIRS.base, profile.id);
+  const memoryMb = Math.max(1024, Number(current.memoryMb) || 4096);
+  const javaMajor = loader === "forge" ? 8 : /^2\d\./.test(mcVersion) ? 25 : 21;
+  const cpus = os.cpus();
+  const localCosmetics = cosmetics.local();
+  const latestCosmetics = await withTimeout(cosmetics.latest(), 4000); // nur lesen (GitHub), nichts hochladen
+  const newestMytic = [versionIn(BUNDLED_MODS, mcVersion), versionIn(path.join(DIRS.base, "mytic-mods"), mcVersion)].filter(Boolean)
+    .sort((a, b) => updater.compareVersions(a, b)).pop() || null;
+  const userName = (() => {
+    try {
+      return os.userInfo().username;
+    } catch {
+      return process.env.USERNAME || process.env.USER || "";
+    }
+  })();
+  const result = await diagbundle.collect({
+    outDir: DIAGNOSE_DIR,
+    redact: { userNames: [userName].filter(Boolean), homeDirs: [os.homedir()] },
+    gameDir: gameDirFor(DIRS, mcVersion),
+    modsDir,
+    managedFiles: readJson(path.join(modsDir, ".mytic-managed.json"), []).map((f) => f.file).filter(Boolean),
+    userState: readJson(path.join(modsDir, ".mytic-user.json"), {}),
+    launcherLogs: (await launcherLog.flush().catch(() => {}), launcherLog.files()),
+    configFiles: [
+      { name: "myticclient.json", file: GAME_CONFIG },
+      { name: "mytic-styles.json", file: path.join(DIRS.game, "config", "mytic-styles.json") },
+      { name: "launcher-settings.json", file: SETTINGS_FILE }, // accounts.json (Konten) kommt nie mit
+    ],
+    extraDirs: [DIAGNOSE_DIR],
+    hsErrDirs: [DIRS.base],
+    system: {
+      os: `${os.type()} ${os.release()}${typeof os.version === "function" ? ` (${os.version()})` : ""} ${os.arch()}`,
+      cpu: cpus[0] ? cpus[0].model.trim() : null,
+      cpuCores: cpus.length,
+      totalMb: Math.floor(os.totalmem() / 1048576),
+      freeMb: Math.floor(os.freemem() / 1048576),
+      gpu: await gpuName(),
+      launcher: app.getVersion(),
+      electron: process.versions.electron,
+      loader,
+      perfMods: Object.fromEntries(MANAGED_MODS.filter((m) => (m.loaders || ["fabric"]).includes(loader)).map((m) => [m.slug, (profile.perf || {})[m.slug] !== undefined ? Boolean(profile.perf[m.slug]) : Boolean(m.default || m.required)])),
+      gamesRunning: games.size,
+    },
+    settings: current,
+    jvmArgs: [...memoryArgs({ memory: memoryMb, javaMajor, userArgs: current.jvmArgs }), ...String(current.jvmArgs || "").split(/\s+/).filter(Boolean)].join(" "),
+    profile: { name: profile.name, mcVersion, loader },
+    lastLaunch: readJson(LAST_LAUNCH_FILE, null),
+    cosmetics: { local: localCosmetics ? localCosmetics.version : null, latest: latestCosmetics ? latestCosmetics.version : null },
+    newestMytic,
+    totalMb: Math.floor(os.totalmem() / 1048576),
+  });
+  lastBundle = result;
+  emit("log", `[Diagnose] Paket erstellt: ${result.name} (${result.problems.length} Hinweise)`);
+  const r = result.report;
+  return {
+    name: result.name, folder: result.folder, problems: result.problems, entries: result.entries,
+    overview: {
+      os: r.system.os, cpu: r.system.cpu, gpu: r.system.gpu, totalMb: r.system.totalMb, memoryMb: r.system.memoryMb, java: r.system.java,
+      mcVersion: r.system.mcVersion, profile: r.system.profile, myticMod: r.system.myticMod, launcher: r.system.launcher,
+      mods: r.mods.filter((m) => m.enabled).length, packs: r.packs.length, titleMs: r.timings ? r.timings.gameStartToTitleMs : null,
+      lastJoin: r.timings && r.timings.joins && r.timings.joins.length ? r.timings.joins[r.timings.joins.length - 1] : null,
+      crashes: r.crashReports.length, profiles: r.profiles.length,
+    },
+  };
+}
+
+ipc.handle("diagbundle:create", () => createDiagnoseBundle());
+ipc.handle("diagbundle:open", async () => {
+  if (lastBundle && fs.existsSync(lastBundle.file)) shell.showItemInFolder(lastBundle.file);
+  else {
+    await fsp.mkdir(DIAGNOSE_DIR, { recursive: true });
+    await shell.openPath(DIAGNOSE_DIR);
+  }
+  return true;
+});
+ipc.handle("diagbundle:copy", () => {
+  if (!lastBundle) throw new Error("Zuerst eine Diagnose erstellen.");
+  clipboard.writeText(lastBundle.text);
+  return true;
 });
 
 // ---------------------------------------------------------------------------------------------- Skins
@@ -1310,6 +1431,7 @@ const bridge = createBridge({
 ipc.handle("game:launch", async () => {
   if (busy) throw new Error("Ein Start wird gerade vorbereitet – kurz warten.");
   busy = true;
+  const clickedAt = Date.now();
   try {
     const current = await ensureProfiles();
     const profile = profiles.active(current);
@@ -1363,7 +1485,7 @@ ipc.handle("game:launch", async () => {
     // Status für Discord: die Mod schreibt Server/Version in diese Datei (statt Abfragen beim Friends-Server)
     const gameId = nextGameId++;
     const statusFile = gameStatus.fileFor(gameId);
-    const extraJvm = [...friendsInGame.jvm, `-Dmytic.status.file=${statusFile}`, ...(cosmeticsPack ? [`-Dmytic.cosmetics=${cosmeticsPack}`] : []), `-Dmytic.launcherTheme=${current.launcherTheme || "sunset"}`, `-Dmytic.profile=${statsProfile}`, ...(syncOn ? ["-Dmytic.sync=launcher"] : [])];
+    const extraJvm = [...friendsInGame.jvm, `-Dmytic.status.file=${statusFile}`, ...(cosmeticsPack ? [`-Dmytic.cosmetics=${cosmeticsPack}`] : []), `-Dmytic.launcherTheme=${current.launcherTheme || "sunset"}`, `-Dmytic.profile=${statsProfile}`, ...(syncOn ? ["-Dmytic.sync=launcher"] : []), `-Dmytic.diagnose.dir=${DIAGNOSE_DIR}`];
     // weitere Instanz: Speicher erst bei Bedarf belegen; reicht der Arbeitsspeicher kaum, Hinweis in der Konsole
     const sharedMemory = games.size > 0;
     const memoryMb = Math.max(1024, Number(current.memoryMb) || 4096);
@@ -1378,6 +1500,7 @@ ipc.handle("game:launch", async () => {
     let crashReport = null;
     let reported = false;
     const startedAt = Date.now();
+    const launchInfo = { at: startedAt, clickedAt, prepareMs: startedAt - clickedAt, profile: profile.name, mcVersion: profile.mcVersion, loader: loaderFor(profile.mcVersion || MC_VERSION), exitCode: null };
     const report = (code) => {
       if (reported) return;
       reported = true;
@@ -1400,7 +1523,7 @@ ipc.handle("game:launch", async () => {
       child = launch(command, DIRS, {
         env: { ...friendsInGame.env, ...bridgeEnv },
         onLog: (line) => {
-          emit("log", line);
+          send("log", line); // Spiel-Log: steht in latest.log, nicht ins Launcher-Log
           recent.push(line);
           if (recent.length > 800) recent.shift();
           const m = /Crash report saved to:\s*(?:#@!@#\s*)?(.+?\.txt)/.exec(line);
@@ -1420,6 +1543,7 @@ ipc.handle("game:launch", async () => {
           }
           if (!games.size) discordGame = null;
           updateDiscord();
+          recordLaunch({ ...launchInfo, exitCode: code, endedAt: Date.now(), durationMs: Date.now() - startedAt });
           emit("game", { running: games.size > 0, count: games.size, code, ended: true, name: account.name });
           report(code);
           // Fenster erst zeigen, wenn das letzte Spiel zu ist (oder bei einem Absturz)
@@ -1434,6 +1558,7 @@ ipc.handle("game:launch", async () => {
       throw error;
     }
     games.set(gameId, { child, profileId: profile.id, mcVersion: profile.mcVersion, account: account.name, bridgeKey });
+    recordLaunch(launchInfo);
     if (syncOn) cloudSync.watch(); // lokal auf Änderungen schauen, gesammelt hochladen
     emit("game", { running: true, count: games.size, name: account.name });
     // Start für die Statistik melden – nebenbei, darf den Start nie aufhalten oder scheitern lassen
@@ -1478,6 +1603,7 @@ app.whenReady().then(async () => {
   discord.setEnabled(settings().discordPresence !== false);
 });
 app.on("before-quit", () => {
+  launcherLog.flush().catch(() => {});
   discord.close();
   gameStatus.close();
 });
