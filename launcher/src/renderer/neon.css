@@ -390,3 +390,11 @@ html[data-scene="moon"] .sun { display: none; }
 /* helle SPIELEN-Knöpfe brauchen dunkle Schrift */
 html[data-theme="mono"] .launch, html[data-theme="ice"] .launch { color: #111318; text-shadow: none; }
 html[data-theme="mono"] .launch-icon, html[data-theme="ice"] .launch-icon { fill: #111318; filter: none; }
+
+/* Diagnose-Paket */
+.diagbundle-card { width: min(720px, calc(100vw - 120px)); }
+.diagbundle-card .import-foot { flex-wrap: wrap; gap: 8px; }
+.diagbundle-card .diag-item { grid-template-columns: 10px minmax(0, 1fr); }
+.diagbundle-card .diag-item small { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; line-height: 1.4; }
+.diagbundle-card .diag-stats { margin-bottom: 4px; }
+.group small code { font-family: "Cascadia Mono", Consolas, monospace; color: var(--text); }

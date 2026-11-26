@@ -8,7 +8,7 @@
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node --test test/core.test.js test/signing.test.js test/gamebridge.test.js test/skins.test.js test/diagnose.test.js test/modscan.test.js test/gamestatus.test.js test/cloudsync.test.js test/join.test.js",
+    "test": "node --test test/core.test.js test/signing.test.js test/gamebridge.test.js test/skins.test.js test/diagnose.test.js test/modscan.test.js test/gamestatus.test.js test/cloudsync.test.js test/join.test.js test/diagbundle.test.js",
     "dist:win": "electron-builder --win portable zip --x64",
     "postdist:win": "node scripts/sign.js --release",
     "sign": "node scripts/sign.js",

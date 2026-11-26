@@ -241,6 +241,7 @@ public final class MyticClient {
         invsee.register(); // InvSee-Übersicht: /invsee erkennen, Taste I wiederholt das letzte /invsee
         clipKey = Compat.registerKey("key.myticclient.clip", org.lwjgl.input.Keyboard.KEY_F8);
         emoteKey = Compat.registerKey("key.myticclient.emotes", org.lwjgl.input.Keyboard.KEY_G);
+        de.myticlegacy.client.diag.Diagnose189.register(); // Zeiten für die Diagnose, /myticdiagnose (Diagnose-Messung)
         for (int i = 0; i < AutoTextModule.SLOTS; i++) autoTextKeys[i] = Compat.registerKey("key.myticclient.autotext" + (i + 1), 0);
 
         CombatTracker.register();
@@ -362,6 +363,7 @@ public final class MyticClient {
             clips.frame(mc);
             return;
         }
+        de.myticlegacy.client.diag.Diagnose189.frame();
         ClickCounter.poll();
         zoom.frame();
         freelook.frameStart(mc);
@@ -438,6 +440,7 @@ public final class MyticClient {
             boolean ctrl = org.lwjgl.input.Keyboard.isKeyDown(org.lwjgl.input.Keyboard.KEY_LCONTROL) || org.lwjgl.input.Keyboard.isKeyDown(org.lwjgl.input.Keyboard.KEY_RCONTROL);
             if (Compat.screen(mc) == null) Compat.setScreen(ctrl ? new ModMenuScreen(null) : new HubScreen());
         }
+        de.myticlegacy.client.diag.Diagnose189.tick(mc);
         tickFriends(mc);
         emotes.tick(mc);
         invsee.tick(mc);

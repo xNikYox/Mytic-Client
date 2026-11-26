@@ -13,3 +13,4 @@ key.myticclient.invsee_repeat=Repeat last /invsee (InvSee Summary)
 key.myticclient.invsee_config=InvSee Summary: settings
 key.myticclient.clip=Save clip (last seconds)
 key.myticclient.emotes=Open emote wheel
+key.myticclient.diagnose=Diagnostic measurement (60 s)
