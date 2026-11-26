@@ -33,7 +33,10 @@ import java.util.Locale;
 public class CosmeticsScreen extends DesignScreen {
     private static final float W = 1600, H = 880, STAGE = 620, HEAD = 88, SUB = 72, FOOT = 92;
     private static final String NAME_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_";
-    private static final String[] BASE_TABS = {"Umhänge", "MiniMe", "Flügel", "Schilde", "Auren", "Nametag"};
+    private static final String[] BASE_TABS = {"Umhänge", "MiniMe", "Flügel", "Schilde", "Auren", "Kopf & Hals", "Nametag"};
+    private static final String ACC_TAB = "Kopf & Hals";
+    /** Plätze im Reiter „Kopf & Hals“: Platz im Katalog, Beschriftung */
+    private static final String[][] ACC_SLOTS = {{"kopf", "Kopf"}, {"hals", "Hals"}};
     /** &-Farbcodes in Minecraft-Reihenfolge und ihre Farben */
     private static final String COLOR_CODES = "0123456789abcdef";
     private static final int[] COLORS = {0xFF000000, 0xFF0000AA, 0xFF00AA00, 0xFF00AAAA, 0xFFAA0000, 0xFFAA00AA, 0xFFFFAA00, 0xFFAAAAAA,
@@ -47,6 +50,8 @@ public class CosmeticsScreen extends DesignScreen {
     private static int tab;
     /** Stelle, deren MiniMe gerade bearbeitet wird (Index in MiniMeCore.POSITIONS) */
     private static int slot;
+    /** Platz im Reiter „Kopf & Hals“ (Index in ACC_SLOTS) */
+    private static int accSlot;
     private final Kit.Field search = new Kit.Field(24);
     private final Kit.Field mini = new Kit.Field(16);
     private final Kit.Field tag = new Kit.Field(CosmeticsCore.NAMETAG_RAW);
@@ -108,7 +113,7 @@ public class CosmeticsScreen extends DesignScreen {
     }
 
     private boolean gridTab() {
-        return isTab("Umhänge") || isTab("Flügel") || isTab("Schilde") || isTab("Auren");
+        return isTab("Umhänge") || isTab("Flügel") || isTab("Schilde") || isTab("Auren") || isTab(ACC_TAB);
     }
 
     private static String icon(String tabName) {
@@ -118,21 +123,25 @@ public class CosmeticsScreen extends DesignScreen {
         if (tabName.equals("Schilde")) return "shield";
         if (tabName.equals("Auren")) return "sparkle";
         if (tabName.equals("Nametag")) return "tag";
+        if (tabName.equals(ACC_TAB)) return "hat";
         return "lock";
     }
 
     /** Art der Cosmetics im aktuellen Reiter (für die Freischaltung) */
     private String kindOfTab() {
-        return isTab("Flügel") ? "wings" : isTab("Schilde") ? "shield" : isTab("Auren") ? "aura" : "cape";
+        return isTab("Flügel") ? "wings" : isTab("Schilde") ? "shield" : isTab("Auren") ? "aura" : isTab(ACC_TAB) ? "acc" : "cape";
     }
 
     /** Einträge des Raster-Reiters als {id, name}; id null = „Keiner“ */
     private List<String[]> items() {
         List<String[]> out = new ArrayList<String[]>();
-        out.add(new String[]{null, isTab("Flügel") || isTab("Auren") ? "Keine" : "Keiner"});
+        out.add(new String[]{null, isTab("Flügel") || isTab("Auren") ? "Keine" : isTab(ACC_TAB) ? "Keins" : "Keiner"});
         if (isTab("Umhänge")) for (CosmeticsCore.Cape c : CosmeticsCore.capes()) out.add(new String[]{c.id, c.name});
         else if (isTab("Schilde")) for (String[] s : CosmeticsCore.shields()) out.add(new String[]{s[0], s[1]});
         else if (isTab("Auren")) for (CosmeticsCore.Aura a : CosmeticsCore.auras()) out.add(new String[]{a.id, a.name});
+        else if (isTab(ACC_TAB)) {
+            for (CosmeticsCore.Acc a : CosmeticsCore.accessories()) if (a.slot.equals(ACC_SLOTS[accSlot][0])) out.add(new String[]{a.id, a.name});
+        }
         else for (String[] w : CosmeticsCore.wings()) out.add(new String[]{w[0], w[1]});
         return out;
     }
@@ -141,6 +150,7 @@ public class CosmeticsScreen extends DesignScreen {
         if (isTab("Flügel")) return CosmeticsCore.selectedWings();
         if (isTab("Schilde")) return CosmeticsCore.selectedShield();
         if (isTab("Auren")) return CosmeticsCore.selectedAura();
+        if (isTab(ACC_TAB)) return CosmeticsCore.selectedAcc(ACC_SLOTS[accSlot][0]);
         return CosmeticsCore.selected();
     }
 
@@ -148,6 +158,7 @@ public class CosmeticsScreen extends DesignScreen {
         if (isTab("Flügel")) CosmeticsCore.selectWings(id);
         else if (isTab("Schilde")) CosmeticsCore.selectShield(id);
         else if (isTab("Auren")) CosmeticsCore.selectAura(id);
+        else if (isTab(ACC_TAB)) CosmeticsCore.selectAcc(ACC_SLOTS[accSlot][0], id);
         else CosmeticsCore.select(id);
     }
 
@@ -156,6 +167,7 @@ public class CosmeticsScreen extends DesignScreen {
         CosmeticsCore.selectWings(null);
         if (java.util.Arrays.asList(BASE_TABS).contains("Schilde")) CosmeticsCore.selectShield(null);
         CosmeticsCore.selectAura(null);
+        for (String[] s : ACC_SLOTS) if (CosmeticsCore.selectedAcc(s[0]) != null) CosmeticsCore.selectAcc(s[0], null);
         Toasts.ok("Alles abgelegt");
     }
 
@@ -291,7 +303,13 @@ public class CosmeticsScreen extends DesignScreen {
 
     private void drawTabs(float x, float y, float w) {
         String[] icons = new String[TABS.length];
-        for (int i = 0; i < TABS.length; i++) icons[i] = icon(TABS[i]);
+        // Breite wie in Kit.seg; passen nicht alle Reiter mit Symbol hinein, ohne Symbole
+        float total = 6 * d;
+        for (int i = 0; i < TABS.length; i++) {
+            icons[i] = icon(TABS[i]);
+            total += 54 * d + kit.width(TABS[i], 14.5f, Tokens.SEMIBOLD);
+        }
+        if (total > w - 64 * d) icons = null;
         kit.seg("tabs", x + 32 * d, y + (SUB * d - 44 * d) / 2f, TABS, icons, null, tab, i -> {
             tab = i;
             kit.focus(null);
@@ -322,6 +340,10 @@ public class CosmeticsScreen extends DesignScreen {
         }
         CosmeticsCore.Aura aura = CosmeticsCore.aura(CosmeticsCore.selectedAura());
         if (aura != null) chips.add(new String[]{"sparkle", aura.name});
+        for (String[] s : ACC_SLOTS) {
+            CosmeticsCore.Acc acc = CosmeticsCore.acc(CosmeticsCore.selectedAcc(s[0]));
+            if (acc != null) chips.add(new String[]{"hat", acc.name});
+        }
         if (MiniMeCore.any()) chips.add(new String[]{"mini", "MiniMe"});
         if (CosmeticsCore.ownNametag() != null) chips.add(new String[]{"tag", "Nametag"});
         float limit = right - 12 * d;
@@ -354,6 +376,8 @@ public class CosmeticsScreen extends DesignScreen {
             drawNametag(x, y, w, h);
         } else if (!CosmeticsCore.available()) {
             empty(x, y, w, h, "sparkle", "Cosmetics nur über den Mytic Launcher", "Der Launcher lädt das Cosmetics-Paket beim Spielstart herunter.");
+        } else if (isTab(ACC_TAB)) {
+            drawAcc(x, y, w, h);
         } else {
             drawGrid(x, y, w, h);
         }
@@ -390,6 +414,32 @@ public class CosmeticsScreen extends DesignScreen {
         }
         kit.unclip();
         kit.scrollbar("grid", scroll, gx + gw + 16 * d, top, viewH);
+    }
+
+    /** Reiter „Kopf & Hals“: Platz wählen, Helm-Schalter, darunter das Raster des Platzes. */
+    private void drawAcc(float x, float y, float w, float h) {
+        float lx = x + 32 * d, top = y + 8 * d;
+        String[] labels = new String[ACC_SLOTS.length];
+        String[] counts = new String[labels.length];
+        for (int i = 0; i < labels.length; i++) {
+            labels[i] = ACC_SLOTS[i][1];
+            counts[i] = CosmeticsCore.selectedAcc(ACC_SLOTS[i][0]) != null ? "1" : null;
+        }
+        kit.seg("accslot", lx, top, labels, null, counts, accSlot, i -> {
+            accSlot = i;
+            scroll.reset();
+        });
+        float right = x + w - 32 * d;
+        kit.toggle("acchelm", right - 46 * d, top + 9 * d, MyticClient.config().accHideHelmet, () -> {
+            MyticClient.config().accHideHelmet = !MyticClient.config().accHideHelmet;
+            MyticClient.config().save();
+        });
+        kit.textRight("Kopf-Accessoire unter Helm ausblenden", right - 58 * d, top + 22 * d, 14, Tokens.MEDIUM, Tokens.MUTED);
+        if (items().size() <= 1) {
+            empty(x, y + 56 * d, w, h - 56 * d, "hat", "Noch keine Accessoires im Cosmetics-Paket", "Der Launcher lädt das neue Paket beim nächsten Spielstart.");
+            return;
+        }
+        drawGrid(x, y + 56 * d, w, h - 56 * d);
     }
 
     private void drawItem(final String[] e, float x, float y, float w, float h, String sel) {
@@ -446,6 +496,9 @@ public class CosmeticsScreen extends DesignScreen {
             Cosmetics.drawShieldPreview(g, id, Math.round(cx - pw / 2f), Math.round(y + 12 * d), pw, ph, animated);
         } else if (isTab("Auren")) {
             drawAuraPreview(CosmeticsCore.aura(id), x, y, w, h, animated);
+        } else if (isTab(ACC_TAB)) {
+            int s = Math.round(h - 12 * d);
+            Cosmetics.drawAccPreview(g, id, Math.round(cx - s / 2f), Math.round(y + 6 * d), s, s);
         } else {
             int ww = Math.round(Math.min(w - 16 * d, (h - 20 * d) * 5f / 3f)), wh = ww * 3 / 5;
             Cosmetics.drawWingPreview(g, id, Math.round(cx - ww / 2f), Math.round(y + (h - wh) / 2f), ww, wh);
@@ -641,8 +694,40 @@ public class CosmeticsScreen extends DesignScreen {
             Type.pixel(kit.g, FORMATS[i][0], bx + (bw - tw) / 2f, oy + 16 * d + (bh - 7f * sc / k) / 2f, sc, 0, Tokens.TEXT);
             bx += bw + 8 * d;
         }
+        // Vorlagen (aus dem Cosmetics-Paket): setzen den Text ins Feld
+        java.util.List<String[]> presets = CosmeticsCore.nametagPresets();
+        float py = oy + 76 * d;
+        if (!presets.isEmpty()) {
+            kit.caption("Vorlagen", lx + 2 * d, py);
+            float px = lx, row = 0;
+            for (int i = 0; i < presets.size(); i++) {
+                final String raw = presets.get(i)[2];
+                String shownPreset = CosmeticsCore.formatNametag(raw);
+                if (shownPreset == null) continue;
+                int sc = Type.pixelScale(kit.g, 11 * d);
+                float k = Draw.k(kit.g);
+                float tw = font.width(shownPreset) * sc / k, bw = tw + 24 * d, bh = 36 * d;
+                if (px + bw > lx + lw && px > lx) {
+                    // zweite Zeile, mehr nicht
+                    if (row >= 1) break;
+                    row++;
+                    px = lx;
+                    py += bh + 8 * d;
+                }
+                boolean on = raw.equals(tag.text);
+                boolean hv = kit.hit("preset:" + i, px, py + 16 * d, bw, bh, () -> {
+                    tag.text = raw;
+                    kit.focus(null);
+                });
+                Draw.glass(kit.g, px, py + 16 * d, bw, bh, 10 * d, on ? 0x299B5CFF : hv ? Tokens.SURFACE_HOVER : Tokens.SURFACE,
+                        on ? Tokens.ACC_LINE : hv ? Tokens.LINE_STRONG : Tokens.LINE);
+                Type.pixel(kit.g, shownPreset, px + 12 * d, py + 16 * d + (bh - 7f * sc / k) / 2f, sc, 0, 0xFFFFFFFF);
+                px += bw + 8 * d;
+            }
+            py += 66 * d;
+        }
         // Übernehmen / Entfernen
-        float ay = oy + 76 * d, bh = 38 * d;
+        float ay = py, bh = 38 * d;
         float w0 = kit.button("tag:ok", lx, ay, bh, "Übernehmen", "check", Widgets.PRIMARY, () -> {
             CosmeticsCore.selectNametag(tag.text);
             kit.focus(null);
@@ -695,7 +780,7 @@ public class CosmeticsScreen extends DesignScreen {
         chips.add(new String[]{"admin", "Admin"});
         chips.add(new String[]{"minime", "MiniMe"});
         chips.add(new String[]{"nametag", "Nametag"});
-        String[][] kinds = {{"cape", "Umhänge"}, {"wings", "Flügel"}, {"shield", "Schilde"}, {"aura", "Auren"}};
+        String[][] kinds = {{"cape", "Umhänge"}, {"wings", "Flügel"}, {"shield", "Schilde"}, {"aura", "Auren"}, {"acc", ACC_TAB}};
         for (String[] k : kinds) {
             if (k[0].equals("shield") && !java.util.Arrays.asList(BASE_TABS).contains("Schilde")) continue;
             chips.add(new String[]{null, k[1]});
@@ -704,6 +789,7 @@ public class CosmeticsScreen extends DesignScreen {
             if (k[0].equals("wings")) for (String[] e : CosmeticsCore.wings()) chips.add(new String[]{"wings:" + e[0], e[1]});
             if (k[0].equals("shield")) for (String[] e : CosmeticsCore.shields()) chips.add(new String[]{"shield:" + e[0], e[1]});
             if (k[0].equals("aura")) for (CosmeticsCore.Aura a : CosmeticsCore.auras()) chips.add(new String[]{"aura:" + a.id, a.name});
+            if (k[0].equals("acc")) for (CosmeticsCore.Acc a : CosmeticsCore.accessories()) chips.add(new String[]{"acc:" + a.id, a.name});
         }
         // Lage berechnen
         float ch = 34 * d, gap = 8 * d;
