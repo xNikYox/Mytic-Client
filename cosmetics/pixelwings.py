@@ -1,4 +1,4 @@
-"""Pixel-Flügel (Stil: gestufte Federreihen mit goldener Vorderkante), 10 Farben, mit animierter Leucht-Ebene.
+"""Pixel-Flügel (Stil: gestufte Federreihen mit goldener Vorderkante), 14 Farben, mit animierter Leucht-Ebene.
 
 Ein Flügel wird auf einem 48x40-Raster gezeichnet (Ansatz am Körper rechts, Sichel-Spitze oben), die Textur enthält ihn auf
 beiden Seiten (96x40) und wird ohne Glätten auf 768x320 vergrößert (Modell 24x20 Pixel je Flügel, 16-fach).
@@ -20,6 +20,7 @@ def hexrgb(h):
 GOLD = ("#d4500e", "#f28a22", "#ffc75a", "#ffeaa8")
 SILVER = ("#6a7282", "#a9b3c4", "#dfe6f0", "#ffffff")
 ROSEGOLD = ("#c04a3a", "#ec8a72", "#ffc4ae", "#fff0e6")
+ICING = ("#cbbfb2", "#e9e1d8", "#fbf8f4", "#ffffff")  # Zuckerguss
 
 # Feder-Hauptfarbe, Schatten, Zweitfarbe (Linie unten an jeder Feder), zwei Querstreifen, Kante, Glanzfarbe, Extras.
 # rows: eigene Hauptfarben je Federreihe (von oben nach unten), sonst überall main.
@@ -37,6 +38,22 @@ PALETTES = {
     "polarlicht": dict(name="Polarlicht", main="#2cc6a0", shade="#1c9a80", second="#b4fff0", band1="#1c5c90", band2="#283a8c", edge=SILVER, glint="#d0fff4", sparkles=5, aurora=True,
                        rows=["#a0f8cc", "#62e8b4", "#2cc6a0", "#22a8b0", "#2486c4", "#3666d8", "#4a52d6"]),
     "sternennacht": dict(name="Sternennacht", main="#1c1c4e", shade="#121236", second="#2e2e7c", band1="#4c4cac", band2="#6c6cd4", edge=SILVER, glint="#b0d8ff", sparkles=18),
+    # Winterzauber 2026 (lights=True: bunte Lämpchen, die in der Leucht-Ebene nacheinander blinken)
+    # Tannengrün mit goldener Kante; fx: bunte Lämpchen auf den Federspitzen blinken der Reihe nach
+    "lichterkette": dict(name="Lichterkette", main="#1f6b3a", shade="#15502b", second="#2f8a4c", band1="#c8283a", band2="#e8c25a", edge=GOLD,
+                         glint="#fff2c0", sparkles=3, lights=True,
+                         rows=["#2f8a4c", "#27803f", "#1f6b3a", "#1b6034", "#18562f", "#154c2a", "#124226"]),
+    # Rot-weiß gestreifte Federreihen, Silberkante, grüne Minzlinie
+    "zuckerstange": dict(name="Zuckerstange", main="#fbf7f2", shade="#e8dcd4", second="#2e9e4f", band1="#2e9e4f", band2="#1f7a3c", edge=SILVER,
+                         glint="#ffffff", sparkles=6,
+                         rows=["#fbf7f2", "#d61f35", "#fbf7f2", "#d61f35", "#fbf7f2", "#d61f35", "#fbf7f2"]),
+    # Lebkuchenbraun mit Zuckerguss-Streifen und Zuckerguss-Kante
+    "lebkuchen": dict(name="Lebkuchen", main="#a5632c", shade="#82481c", second="#c98a4e", band1="#fbf8f4", band2="#fbf8f4", edge=ICING,
+                      glint="#fff1c8", sparkles=7),
+    # Eisblau-weiß mit Silberkante, viele Frost-Funken
+    "schneeflocke": dict(name="Schneeflocke", main="#e9f6ff", shade="#c7e2f6", second="#9fd0f2", band1="#7fb8e8", band2="#5a96d6", edge=SILVER,
+                         glint="#ffffff", sparkles=14,
+                         rows=["#ffffff", "#f1f9ff", "#e2f2ff", "#d2eafc", "#c2e2fa", "#b0d8f6", "#9ecdf2"]),
 }
 
 ROWS = 7
@@ -258,12 +275,53 @@ def render_feather(pal):
     return half
 
 
+# ------------------------------------------------------------------ Lichterkette (Winterzauber)
+LIGHT_COLS = [(255, 59, 78), (255, 210, 63), (63, 182, 255), (91, 255, 122), (255, 122, 217)]
+
+
+def lights(info):
+    """Lämpchen: je Federreihe die äußerste Spitze und zwei Punkte auf dem roten Band."""
+    pts = []
+    for row in range(ROWS):
+        cells = [(x, y) for y in range(H) for x in range(W) if info[y][x] and info[y][x][0] == "feather" and info[y][x][1] == row and 0.3 < info[y][x][2] < 0.6]
+        if not cells: continue
+        cells.sort()
+        for k in (0.04, 0.4, 0.75):
+            pts.append(cells[min(len(cells) - 1, int(k * len(cells)))])
+    return pts
+
+
+def lights_fx(base, pts, f):
+    p = f / FRAMES
+    out = [list(r) for r in base]
+    def add(x, y, col, a):
+        if 0 <= x < W and 0 <= y < H and a > 0:
+            o = out[y][x]
+            out[y][x] = tuple(min(255, int(o[i] + col[i] * a)) for i in range(3))
+    for i, (x, y) in enumerate(pts):
+        col = LIGHT_COLS[i % len(LIGHT_COLS)]
+        on = 0.5 + 0.5 * math.sin(2 * math.pi * (p * 2 + i * 0.29))
+        add(x, y, col, 0.35 + 0.65 * on)
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            add(x + dx, y + dy, col, 0.35 * on)
+    return out
+
+
+def light_base(img, pts):
+    """Lämpchen auch im Grundbild (aus = dunklere Farbe), damit sie ohne Leuchten sichtbar sind."""
+    for i, (x, y) in enumerate(pts):
+        c = LIGHT_COLS[i % len(LIGHT_COLS)]
+        img[y][x] = tuple(int(v * 0.7) for v in c) + (255,)
+
+
 def main():
     out = sys.argv[1]
     tmp = os.path.join(out, "tmp-pixel")
     os.makedirs(tmp, exist_ok=True)
     for wid, pal in PALETTES.items():
         img, info = render_base(pal)
+        pts = lights(info) if pal.get("lights") else []
+        light_base(img, pts)
         rows = [[c if c is not None else (0, 0, 0, 0) for c in row] for row in img]
         pam = os.path.join(tmp, f"{wid}.pam")
         write_pam(pam, rows)
@@ -281,6 +339,7 @@ def main():
         sp = sparkle_points(info, pal["sparkles"], wid)
         for f in range(FRAMES):
             fx = render_fx(pal, info, f, sp)
+            if pts: fx = lights_fx(fx, pts, f)
             # Deckkraft = Helligkeit
             rows = [[c + (max(c),) for c in row] for row in fx]
             pam = os.path.join(tmp, f"{wid}_fx_{f}.pam")

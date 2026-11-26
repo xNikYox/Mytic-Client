@@ -68,6 +68,22 @@ export const CATALOG = {
   [
    "gold",
    "Königsgold"
+  ],
+  [
+   "schneegestoeber",
+   "Schneegestöber"
+  ],
+  [
+   "lebkuchen",
+   "Lebkuchenmann"
+  ],
+  [
+   "zuckerstange",
+   "Zuckerstange"
+  ],
+  [
+   "tannenzauber",
+   "Tannenzauber"
   ]
  ],
  "wings": [
@@ -130,6 +146,22 @@ export const CATALOG = {
   [
    "sternennacht",
    "Sternennacht"
+  ],
+  [
+   "lichterkette",
+   "Lichterkette"
+  ],
+  [
+   "zuckerstange",
+   "Zuckerstange"
+  ],
+  [
+   "lebkuchen",
+   "Lebkuchen"
+  ],
+  [
+   "schneeflocke",
+   "Schneeflocke"
   ]
  ],
  "shield": [
@@ -204,6 +236,10 @@ export const CATALOG = {
   [
    "gold",
    "Königsgold"
+  ],
+  [
+   "geschenk",
+   "Geschenk"
   ]
  ],
  "aura": [
@@ -290,6 +326,64 @@ export const CATALOG = {
   [
    "regenbogen",
    "Regenbogen"
+  ],
+  [
+   "plaetzchen",
+   "Weihnachtsplätzchen"
+  ],
+  [
+   "christbaumkugeln",
+   "Christbaumkugeln"
+  ],
+  [
+   "schneegestoeber",
+   "Schneegestöber"
+  ],
+  [
+   "tannenduft",
+   "Tannenduft"
   ]
+ ],
+ "acc": [
+  [
+   "weihnachtsmuetze",
+   "Weihnachtsmütze"
+  ],
+  [
+   "rentiergeweih",
+   "Rentiergeweih"
+  ],
+  [
+   "rentiergeweih_nase",
+   "Rentiergeweih + rote Nase"
+  ],
+  [
+   "schal",
+   "Winterschal"
+  ]
+ ],
+ "sets": [
+  {
+   "name": "Winterzauber 2026",
+   "items": [
+    "cape:schneegestoeber",
+    "cape:lebkuchen",
+    "cape:zuckerstange",
+    "cape:tannenzauber",
+    "wings:lichterkette",
+    "wings:zuckerstange",
+    "wings:lebkuchen",
+    "wings:schneeflocke",
+    "shield:geschenk",
+    "aura:plaetzchen",
+    "aura:christbaumkugeln",
+    "aura:schneegestoeber",
+    "aura:tannenduft",
+    "acc:weihnachtsmuetze",
+    "acc:rentiergeweih",
+    "acc:rentiergeweih_nase",
+    "acc:schal"
+   ]
+  }
  ]
 };

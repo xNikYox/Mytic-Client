@@ -438,7 +438,53 @@ class Synth(Design):
         return stars(t, 20, 555, size=0.9, skip=lambda x, y: y > FH * 0.5), border_comets(t, [hx('#22e5ff'), hx('#ff2bd6')], 2, 40, 2.5)
     def edge(self, t): return hx('#ff2bd6'), hx('#1a0030')
 
-DESIGNS = [Void(), Death(), Neon(), Dragon(), Galaxy(), Lava(), Frost(), Storm(), Crystal(), Skull(), Code(), Synth()]
+# Winterzauber 2026 ------------------------------------------------ Geschenk (Geschenkpapier, Band mit Schleife, Anhänger)
+RIB_X, RIB_Y = FW / 2, FH * 0.42
+class Gift(Design):
+    name = "geschenk"
+    def bg(self, x, y, t):
+        c = lerp(hx('#b5122a'), hx('#e0263c'), 0.5 + 0.5 * math.sin((x - y) / 9))
+        # Muster: kleine goldene Sterne auf dem Papier
+        gx, gy = (x + 9) % 24 - 12, (y + (12 if int((x + 9) // 24) % 2 else 0)) % 24 - 12
+        if abs(gx) + abs(gy) < 2.6 or (abs(gx) < 0.8 and abs(gy) < 4) or (abs(gy) < 0.8 and abs(gx) < 4): c = lerp(c, hx('#ffd96a'), 0.7)
+        # Schleifenband
+        for d in (abs(x - RIB_X), abs(y - RIB_Y)):
+            if d < 11:
+                c = lerp(hx('#e8b23a'), hx('#fff0a8'), 1 - d / 11)
+                if d > 9: c = hx('#a8761a')
+        band = math.exp(-(((x * 0.7 + y) - ((t * 1.3) % 1.3 * 460 - 80)) / 22) ** 2)
+        return add(c, (255, 240, 220), 0.22 * band)
+    def draws(self, t):
+        d, g = [], []
+        bx, by = RIB_X, RIB_Y
+        wob = 1 + 0.06 * math.sin(TAU * t)
+        gold, dark, light = hx('#f2c24a'), hx('#a8761a'), hx('#fff3b0')
+        for s in (-1, 1):
+            x1, x2 = bx + s * 40 * wob, bx + s * 36 * wob
+            d += ["-fill", rgba(dark), "-draw", f"polygon {bx},{by} {x1:.1f},{by - 30} {x1 + s * 6:.1f},{by + 6} ",
+                  "-fill", rgba(gold), "-draw", f"polygon {bx},{by} {x2:.1f},{by - 26} {x2 + s * 4:.1f},{by + 2}",
+                  "-fill", rgba(light, 0.7), "-draw", f"polygon {bx},{by} {bx + s * 26 * wob:.1f},{by - 20} {bx + s * 22 * wob:.1f},{by - 12}",
+                  "-fill", rgba(gold), "-draw", f"polygon {bx},{by} {bx + s * 16:.1f},{by + 40} {bx + s * 8:.1f},{by + 36} {bx + s * 2:.1f},{by + 44}"]
+        d += ["-fill", rgba(dark), "-draw", f"circle {bx},{by} {bx + 9},{by}", "-fill", rgba(gold), "-draw", f"circle {bx},{by} {bx + 7},{by}",
+              "-fill", rgba(light), "-draw", f"circle {bx - 2},{by - 2} {bx},{by - 2}"]
+        g += ["-fill", rgba(hx('#ffd96a'), 0.7), "-draw", f"circle {bx},{by} {bx + 26},{by}"]
+        # Anhänger
+        tx, ty = bx + 22, by + 58 + 3 * math.sin(TAU * t)
+        d += ["-stroke", rgba(light), "-strokewidth", "1.2", "-draw", f"line {bx + 6},{by + 6} {tx},{ty - 10}", "-stroke", "none",
+              "-fill", rgba(hx('#fbf3e0')), "-draw", f"roundrectangle {tx - 26},{ty - 10} {tx + 26},{ty + 12} 4,4",
+              "-fill", rgba(hx('#b5122a')), "-font", SANS, "-pointsize", "11", "-gravity", "NorthWest", "-annotate", f"+{tx - 21:.0f}+{ty - 7:.0f}", "MYTIC"]
+        for i in range(10):
+            x, y = 10 + rnd(i + 40) * (FW - 20), 10 + rnd(i + 60) * (FH - 20)
+            a = max(0, math.sin(TAU * (t * 2 + rnd(i + 80)))) ** 6
+            if a > 0.05:
+                r = 5 * a
+                d += ["-stroke", rgba((255, 255, 255), a), "-strokewidth", "1", "-draw", f"line {x - r:.1f},{y:.1f} {x + r:.1f},{y:.1f}", "-draw", f"line {x:.1f},{y - r:.1f} {x:.1f},{y + r:.1f}", "-stroke", "none"]
+        # Rahmen
+        d += ["-fill", "none", "-stroke", rgba(hx('#e8b23a'), 0.9), "-strokewidth", "3", "-draw", f"rectangle 4,4 {FW - 4},{FH - 4}", "-stroke", "none"]
+        return d, g
+    def edge(self, t): return hx('#e8b23a'), hx('#7a0a18')
+
+DESIGNS = [Void(), Death(), Neon(), Dragon(), Galaxy(), Lava(), Frost(), Storm(), Crystal(), Skull(), Code(), Synth(), Gift()]
 import newdesigns
 DESIGNS += newdesigns.install(sys.modules[__name__])
 

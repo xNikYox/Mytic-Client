@@ -175,6 +175,46 @@ def sprite(shape, fill, rim=None, glow=None, glow_size=4.0, core=None):
     return px
 
 
+# ------------------------------------------------------------------ Winterzauber 2026: neue Formen
+
+def gingerman(s):
+    return union(shift(circle(3.2 * s), 0, -6 * s), lines([(0, -3 * s, 0, 3 * s)], 3 * s), lines([(-6 * s, -1.5 * s, 6 * s, -1.5 * s)], 1.6 * s),
+             lines([(-1 * s, 3 * s, -4 * s, 8.5 * s), (1 * s, 3 * s, 4 * s, 8.5 * s)], 1.7 * s))
+
+def candycane(s):
+    hook = lambda x, y: max(abs(math.hypot(x - 2.5 * s, y + 5 * s) - 2.5 * s) - 1.3 * s, y + 5 * s)
+    return shift(union(lines([(0, -5 * s, 0, 8 * s), (5 * s, -5 * s, 5 * s, -2.5 * s)], 1.3 * s), hook), -2.5 * s, 0)
+
+def bauble(r):
+    return union(circle(r), shift(lambda x, y: max(abs(x) - r * 0.3, abs(y) - r * 0.18), 0, -r * 1.05))
+
+def bell(s):
+    def f(x, y):
+        # Glocke: oben schmal, unten breit, mit Rand
+        if y < -6 * s: return math.hypot(x, y + 6 * s) - 1.8 * s
+        half = 2.8 * s + 3.6 * s * ((y + 6 * s) / (12 * s)) ** 1.6
+        return max(abs(x) - half, y - 5 * s, -y - 6 * s)
+    return union(f, shift(circle(1.4 * s), 0, 6.4 * s))
+
+def treeshape(s):
+    def tri(top, bot, half):
+        return lambda x, y: max(abs(x) - half * (y - top) / (bot - top) if bot > top else 99, top - y, y - bot)
+    return union(tri(-10 * s, -2 * s, 5 * s), tri(-6 * s, 3 * s, 7 * s), tri(-2 * s, 8 * s, 9 * s), lambda x, y: max(abs(x) - 1.3 * s, abs(y - 9.5 * s) - 1.5 * s))
+
+def stripes(sprite_px, col, period=5, width=2.2):
+    """Rote Schrägstreifen auf eine Form legen (Zuckerstange)."""
+    out = []
+    for j, row in enumerate(sprite_px):
+        r2 = []
+        for i, p in enumerate(row):
+            if p[3] > 200 and ((i + j) % period) < width:
+                r2.append(col + (p[3],))
+            else:
+                r2.append(p)
+        out.append(r2)
+    return out
+
+
 AURAS = {
     "schwarzweiss": [sprite(circle(4.5), "#0b0b0b", rim="#ffffff", glow="#ffffff", glow_size=2.5),
                      sprite(star(4, 9, 2.2), "#ffffff", glow="#ffffff", glow_size=3),
@@ -231,6 +271,24 @@ AURAS = {
     "federn": [sprite(feather(11), "#ffffff", rim="#aab4cc", glow="#e8eef8", glow_size=1.5),
                sprite(feather(9), "#f0f4ff", rim="#aab4cc", glow="#e8eef8", glow_size=1.5)],
     "regenbogen": [sprite(circle(3.5), c, glow=c, glow_size=5, core="#ffffff") for c in ("#ff4f6d", "#ffd23f", "#4fff8a", "#4fa8ff")],
+    # Winterzauber 2026
+    # Orbit: Plätzchen kreisen um die Figur
+    "plaetzchen": [sprite(gingerman(1.25), "#b8702f", rim="#fbf8f4", glow="#ffb060", glow_size=1.5),
+                   sprite(star(5, 11, 5, 0.3), "#d8a04c", rim="#fbf8f4", glow="#ffd27a", glow_size=1.5),
+                   stripes(sprite(candycane(1.15), "#fbf7f2", glow="#ff9aa6", glow_size=1.5), (214, 31, 53)),
+                   sprite(bell(1.1), "#ffd23f", rim="#b8860b", glow="#ffe48a", glow_size=2)],
+    # Halo: Christbaumkugeln schweben im Kreis über dem Kopf
+    "christbaumkugeln": [sprite(bauble(7.5), c2, rim=r2, glow=c2, glow_size=2.5, core="#ffffff") for c2, r2 in
+                         (("#e8283a", "#7a0a14"), ("#ffcf3a", "#8a6a10"), ("#2fae4e", "#0f4a20"), ("#3f8bff", "#122e7a"))],
+    # Fall: großes Schneegestöber mit 4 verschiedenen Flocken
+    "schneegestoeber": [sprite(snowflake(11), "#ffffff", glow="#bfe4ff", glow_size=3),
+                        sprite(union(snowflake(10), ring(4, 0.8)), "#f4fbff", glow="#9fd0ff", glow_size=2.5),
+                        sprite(star(6, 8, 2.5), "#ffffff", glow="#cfe8ff", glow_size=2.5),
+                        sprite(circle(2), "#ffffff", glow="#e0f0ff", glow_size=3)],
+    # Rise: kleine Tannenbäumchen und Goldsterne steigen auf
+    "tannenduft": [sprite(treeshape(1.2), "#2fae4e", rim="#145c2c", glow="#7aff9a", glow_size=2),
+                   sprite(star(5, 10, 4), "#ffd23f", glow="#ffb000", glow_size=3, core="#ffffff"),
+                   sprite(circle(2.4), "#ff3b4e", glow="#ff3b4e", glow_size=4, core="#ffffff")],
 }
 
 

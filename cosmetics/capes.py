@@ -452,6 +452,8 @@ class Skull(Design):
 DESIGNS = [Moon(), Aurora(), Inferno(), Deep(), Code(), Synth(), Storm(), Sakura(), Ice(), Galaxy(), Skull()]
 import newdesigns
 DESIGNS += newdesigns.install(sys.modules[__name__])
+import xmascapes  # Winterzauber 2026
+DESIGNS += xmascapes.DESIGNS
 
 for dsg in DESIGNS:
     if ONLY and dsg.name not in ONLY: continue

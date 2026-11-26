@@ -20,19 +20,24 @@ CAPES = [
     ("coderegen", "Code-Regen"), ("synthwave", "Synthwave"), ("gewitter", "Gewitter"),
     ("kirschbluete", "Kirschblüte"), ("eiskristall", "Eiskristall"), ("galaxie", "Galaxie"), ("totenkopf", "Totenkopf"),
     ("ozean", "Ozean"), ("netherportal", "Netherportal"), ("feuerwerk", "Feuerwerk"), ("regenbogen", "Regenbogen"), ("herzen", "Herzen"), ("gold", "Königsgold"),
+    # Winterzauber 2026 (xmascapes.py)
+    ("schneegestoeber", "Schneegestöber"), ("lebkuchen", "Lebkuchenmann"), ("zuckerstange", "Zuckerstange"), ("tannenzauber", "Tannenzauber"),
 ]
 
 WINGS = [("engel", "Engel"), ("inferno", "Inferno"), ("eis", "Eis"), ("neon", "Mytic Neon"), ("smaragd", "Smaragd")]
 # Pixel-Flügel aus pixelwings.py (bringen ihre Menü-Bilder selbst mit)
 PIXEL_WINGS = [("rabe", "Rabe"), ("taube", "Taube"), ("elster", "Elster"), ("phoenix", "Phönix"), ("saphir", "Saphir"),
                ("amethyst", "Amethyst"), ("kirsche", "Kirschblüte"), ("sonne", "Sonnengold"), ("polarlicht", "Polarlicht"),
-               ("sternennacht", "Sternennacht")]
+               ("sternennacht", "Sternennacht"),
+               # Winterzauber 2026
+               ("lichterkette", "Lichterkette"), ("zuckerstange", "Zuckerstange"), ("lebkuchen", "Lebkuchen"), ("schneeflocke", "Schneeflocke")]
 
 # Schilde aus shields.py (24 Bilder, gezeichnet 12-fach, ausgeliefert 6-fach = 384x384 im 64x64-Format des Minecraft-Schilds)
 SHIELDS = [("void", "Void"), ("death", "Death"), ("mytic", "Mytic Neon"), ("drache", "Drachenschuppen"), ("galaxie", "Galaxie"),
            ("lava", "Lava"), ("frost", "Frost"), ("gewitter", "Gewitter"), ("kristall", "Kristall"), ("totenkopf", "Totenkopf"),
            ("code", "Code-Regen"), ("synthwave", "Synthwave"), ("ozean", "Ozean"), ("netherportal", "Netherportal"),
-           ("feuerwerk", "Feuerwerk"), ("regenbogen", "Regenbogen"), ("herzen", "Herzen"), ("gold", "Königsgold")]
+           ("feuerwerk", "Feuerwerk"), ("regenbogen", "Regenbogen"), ("herzen", "Herzen"), ("gold", "Königsgold"),
+           ("geschenk", "Geschenk")]  # Winterzauber 2026
 SHIELD_FRAMES = os.path.join(BUILD, "shields")
 
 # Auren: eigene Partikel-Sprites aus aurasprites.py. pattern: orbit, halo, feet, rise, fall, spiral, sparkle;
@@ -59,7 +64,29 @@ AURAS = [
     ("schatten", "Schatten", "feet", 5, 0.2, ["#2a0a3a", "#8a3cff"]),
     ("federn", "Federn", "fall", 2, 0.22, ["#ffffff", "#c8d0e0"]),
     ("regenbogen", "Regenbogen", "halo", 6, 0.14, ["#ff4f6d", "#ffd23f", "#4fff8a", "#4fa8ff"]),
+    # Winterzauber 2026
+    ("plaetzchen", "Weihnachtsplätzchen", "orbit", 2.5, 0.22, ["#b8702f", "#fbf8f4", "#d61f35"]),
+    ("christbaumkugeln", "Christbaumkugeln", "halo", 4, 0.17, ["#e8283a", "#ffcf3a", "#2fae4e", "#3f8bff"]),
+    ("schneegestoeber", "Schneegestöber", "fall", 6, 0.2, ["#ffffff", "#bfe4ff"]),
+    ("tannenduft", "Tannenduft", "rise", 3.5, 0.2, ["#2fae4e", "#ffd23f", "#ff3b4e"]),
 ]
+
+# Accessoires „Kopf & Hals“ (accessories.py: Box-Modelle + Textur acc/<id>.png + Menü-Bild acc/<id>_icon.png); slot: kopf oder hals.
+# Mods ab 2.58 – ältere Mods ignorieren den Abschnitt "accessories".
+ACCESSORIES = ["weihnachtsmuetze", "rentiergeweih", "rentiergeweih_nase", "schal"]
+ACC_OUT = os.path.join(BUILD, "acc")
+
+# Nametag-Vorlagen (Knöpfe im Cosmetics-Menü, Mods ab 2.58; brauchen die Freischaltung "nametag")
+NAMETAG_PRESETS = [("frohefest", "Frohes Fest", "&c❄ &fFrohes &aFest &c❄"),
+                   ("weihnachten", "Frohe Weihnachten", "&4&l✦ &cFrohe &fWeihnachten &4&l✦"),
+                   ("wichtel", "Wichtel", "&a★ &2Mytic-&aWichtel &a★"),
+                   ("schnee", "Schneeflocke", "&b❄ &f&oLet it snow &b❄")]
+
+# Sets für die Admin-Seite (ein Klick markiert alle Teile)
+SETS = [("Winterzauber 2026", ["cape:schneegestoeber", "cape:lebkuchen", "cape:zuckerstange", "cape:tannenzauber",
+                               "wings:lichterkette", "wings:zuckerstange", "wings:lebkuchen", "wings:schneeflocke", "shield:geschenk",
+                               "aura:plaetzchen", "aura:christbaumkugeln", "aura:schneegestoeber", "aura:tannenduft"]
+                              + ["acc:" + a for a in ["weihnachtsmuetze", "rentiergeweih", "rentiergeweih_nase", "schal"]])]
 
 
 def main():
@@ -72,7 +99,13 @@ def main():
                         + [{"id": i, "name": n, "fxFrames": 16, "fxMs": 90, "w": 24, "h": 20} for i, n in PIXEL_WINGS],
                "shields": [{"id": i, "name": n, "frames": 24, "frameMs": 70} for i, n in SHIELDS],
                "auras": [{"id": i, "name": n, "pattern": pt, "rate": r, "size": sz, "colors": cs,
-                          "sprites": len(aurasprites.AURAS[i])} for i, n, pt, r, sz, cs in AURAS]}
+                          "sprites": len(aurasprites.AURAS[i])} for i, n, pt, r, sz, cs in AURAS],
+               "nametagPresets": [{"id": i, "name": n, "text": t} for i, n, t in NAMETAG_PRESETS]}
+    subprocess.run([sys.executable, os.path.join(HERE, "accessories.py"), ACC_OUT], check=True)
+    acc_meta = json.load(open(os.path.join(ACC_OUT, "accessories.json"), encoding="utf-8"))
+    catalog["accessories"] = [{"id": a, "name": acc_meta[a]["name"], "slot": acc_meta[a]["slot"], "texture": acc_meta[a]["texture"],
+                               "boxes": [{k: b[k] for k in ("from", "size", "uv", "tex", "mirror", "emissive")} for b in acc_meta[a]["boxes"]]}
+                              for a in ACCESSORIES]
     subprocess.run([sys.executable, os.path.join(HERE, "wings.py"), os.path.join(BUILD, "wings")], check=True)
     subprocess.run([sys.executable, os.path.join(HERE, "pixelwings.py"), os.path.join(BUILD, "wings")], check=True)
     subprocess.run([sys.executable, os.path.join(HERE, "aurasprites.py"), os.path.join(BUILD, "auras")], check=True)
@@ -167,10 +200,15 @@ def main():
             for f in range(16):
                 for name in (f"{wid}_fx_{f}.png", f"{wid}_icon_fx_{f}.png"):
                     z.write(os.path.join(BUILD, "wings", name), f"assets/myticclient/textures/wings/{name}")
+        for aid in ACCESSORIES:
+            for name in (f"{aid}.png", f"{aid}_icon.png"):
+                z.write(os.path.join(ACC_OUT, name), f"assets/myticclient/textures/acc/{name}")
     print(f"{jar} ({os.path.getsize(jar) // 1024} KB)")
     # Katalog für die Admin-Seite des Friends-Servers (danach Server neu deployen)
     server_catalog = {"cape": [[i, n] for i, n in CAPES], "wings": [[i, n] for i, n in WINGS + PIXEL_WINGS],
-                      "shield": [[i, n] for i, n in SHIELDS], "aura": [[a[0], a[1]] for a in AURAS]}
+                      "shield": [[i, n] for i, n in SHIELDS], "aura": [[a[0], a[1]] for a in AURAS],
+                      "acc": [[c["id"], c["name"]] for c in catalog["accessories"]],
+                      "sets": [{"name": n, "items": items} for n, items in SETS]}
     with open(os.path.join(HERE, "..", "friends-server", "src", "catalog.js"), "w", encoding="utf-8") as fh:
         fh.write("// Cosmetics-Katalog (IDs und Namen) für die Admin-Seite – wird von cosmetics/build.py geschrieben.\n")
         fh.write("export const CATALOG = " + json.dumps(server_catalog, ensure_ascii=False, indent=1) + ";\n")
