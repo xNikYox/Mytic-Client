@@ -42,7 +42,7 @@ veröffentlichen, dann Mods/Launcher.
 | Partien ohne laufende Partie (Einladungen kommen jetzt mit dem Lebenszeichen) | 720 | 0 |
 | Spielzeit (`api/stats/play`) | 60 | 0 (im Lebenszeichen) |
 | Freischaltungen (`api/cosmetics/owned`) | 20 | 0 (im Lebenszeichen) |
-| Cosmetics anderer Spieler (gesammelt, 3 bzw. 6 min statt 2 min) | ~30 | ~10 |
+| Cosmetics anderer Spieler (gesammelt; mit `cos1` alle 10 bzw. 15 min + sofort bei gemeldeter Änderung, sonst 3 bzw. 6 min) | ~30 | ~6 (ältere Server: ~10) |
 | **Summe** | **≈ 1 070** (1.8.9: ≈ 290) | **≈ 70** (mit Freund im Spiel ≈ 130) |
 
 Dazu kommen Anfragen nur bei Bedarf (laufende Partie ~40/min, Fenster öffnen, Aktionen) und 60/h für einen offenen
@@ -51,6 +51,21 @@ bei einem verpassten Lebenszeichen.
 
 **Kapazität:** 100 000 / ≈ 70 ≈ **1 400 Spielstunden pro Tag**, z. B. rund 700 Nutzer mit je 2 Stunden
 (vorher ≈ 90 Spielstunden, also ≈ 45 Nutzer).
+
+## Cosmetics anderer Spieler (`cos1`)
+
+Damit andere eine neue Auswahl (z. B. die Weihnachtsmütze) nach höchstens einem Lebenszeichen (≤ 60 s) sehen statt
+nach 3–6 Minuten, ohne öfter abzufragen:
+
+- `POST /api/cosmetics` und `POST /api/admin/grants` setzen `users.cos_at` (nur bei echter Änderung; die Mod schickt
+  ihre Auswahl bei jedem Spielstart).
+- Das Lebenszeichen der Mod schickt `cosSince` (Stand aus dem letzten Lebenszeichen, anfangs 0) und bekommt
+  `cos: { since, changed: [uuid, …] }` (höchstens 200, Stand älter als 1 h = Neustart ohne Liste); `caps` enthält `"cos1"`.
+  Die Mod fragt dann nur geänderte Spieler in ihrer Nähe neu ab (`api/cosmetics/lookup`) und alle anderen nur noch
+  alle 10 (mit Cosmetics) bzw. 15 Minuten (ohne).
+- `POST /api/cosmetics/lookup` nimmt zusätzlich `names: { uuid: Name }` für Spieler mit Offline-UUID (Version 3,
+  Server im Offline-Modus): Passt die UUID zum Namen, gilt das Microsoft-Konto mit diesem Namen; die Antwort steht
+  unter der angefragten UUID, `aliases: { angefragt: Konto }` ordnet Änderungsmeldungen zu.
 
 ## Einstellungs-Sync (`GET`/`PUT /api/sync`)
 

@@ -160,4 +160,7 @@ export const MIGRATIONS = [
   "ALTER TABLE games ADD COLUMN state TEXT",
   // Accessoires „Kopf & Hals“ (Mods ab 2.58): je Platz eine ID als JSON, z. B. {"kopf":"weihnachtsmuetze","hals":"schal"}
   "ALTER TABLE users ADD COLUMN acc TEXT",
+  // Zeitpunkt der letzten Cosmetics-Änderung (Auswahl oder Freischaltungen) – das Lebenszeichen meldet Änderungen (cos1)
+  "ALTER TABLE users ADD COLUMN cos_at INTEGER NOT NULL DEFAULT 0",
+  "CREATE INDEX IF NOT EXISTS users_cos_at ON users (cos_at)",
 ];

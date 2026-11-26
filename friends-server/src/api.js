@@ -16,8 +16,13 @@ export const ONLINE_MS = 150 * 1000;
  * Was POST /api/presence kann (steht in jeder Freundesliste): "presence2" = Spielzeit (play), Einladungen (games),
  * Freischaltungen (owned) und versteckter Status (hidden) – ältere Server ignorieren diese Felder, die Mod fragt dann einzeln.
  * "sync1" = GET/PUT /api/sync gibt es, und das Lebenszeichen bringt den Stand des Einstellungs-Syncs mit (sync).
+ * "cos1" = Lebenszeichen mit cosSince bringt mit, wessen Cosmetics sich seitdem geändert haben (cos) – die Mod fragt
+ * dann nur diese Spieler neu ab statt alle paar Minuten alle.
  */
-const CAPS = ["presence2", "sync1"];
+const CAPS = ["presence2", "sync1", "cos1"];
+/** Cosmetics-Änderungen je Lebenszeichen höchstens so viele; ältere Stände als COS_WINDOW_MS gelten als Neustart. */
+const COS_CHANGES_MAX = 200;
+const COS_WINDOW_MS = 60 * 60 * 1000;
 const CHALLENGE_MS = 2 * 60 * 1000;
 const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
 const HEAD_MS = 24 * 60 * 60 * 1000;
@@ -315,6 +320,24 @@ export function createApi(db, options = {}) {
 
   async function grantsOf(uuid) {
     return new Set((await db.all("SELECT item FROM grants WHERE uuid = ?", [uuid])).map((r) => r.item));
+  }
+
+  /** Cosmetics von uuid haben sich geändert (Auswahl oder Freischaltungen) – andere Clients fragen dann neu ab. */
+  async function cosTouched(uuid) {
+    await db.run("UPDATE users SET cos_at = ? WHERE uuid = ?", [now(), uuid]);
+  }
+
+  /**
+   * Änderungen seit since (Serverzeit aus dem letzten Lebenszeichen): { since: neuer Stand, changed: [uuid, …] }.
+   * Ohne gültigen oder mit zu altem Stand nur den neuen Stand (der Client fragt dann ohnehin regelmäßig ab).
+   * Der neue Stand liegt 1 s zurück, damit gleichzeitig geschriebene Änderungen nicht verloren gehen (doppelt schadet nicht).
+   */
+  async function cosChanges(since) {
+    const t = now();
+    if (typeof since !== "number" || !Number.isFinite(since) || since <= 0 || since < t - COS_WINDOW_MS || since > t) return { since: t - 1000, changed: [] };
+    const rows = await db.all("SELECT uuid, cos_at FROM users WHERE cos_at > ? ORDER BY cos_at LIMIT ?", [since, COS_CHANGES_MAX]);
+    const next = rows.length >= COS_CHANGES_MAX ? rows[rows.length - 1].cos_at - 1 : t - 1000;
+    return { since: Math.max(since, next), changed: [...new Set(rows.map((r) => r.uuid))] };
   }
 
   /** Gewähltes entfernen, das jemand nicht (mehr) freigeschaltet hat. */
@@ -1244,6 +1267,8 @@ export function createApi(db, options = {}) {
         result.games = { invites };
         const items = await grantsOf(me.uuid);
         result.owned = { items: [...items].sort(), admin: owns(items, "admin") };
+        // Wessen Cosmetics haben sich seit dem letzten Lebenszeichen geändert? (Mods ab 2.58.1 schicken cosSince)
+        if ("cosSince" in data) result.cos = await cosChanges(data.cosSince);
       }
       // Stand des Einstellungs-Syncs: so merken Launcher und Mod ohne eigene Abfrage, ob ein anderer PC hochgeladen hat
       const sync = await db.get("SELECT version, hash, updated FROM sync_blobs WHERE uuid = ?", [me.uuid]);
@@ -1263,6 +1288,8 @@ export function createApi(db, options = {}) {
       const me = await auth(request);
       const data = await body(request);
       const items = await grantsOf(me.uuid);
+      const COS_COLUMNS = "cape, minime, minime_pos, minime_set, wings, shield, aura, nametag, acc";
+      const before = await db.get(`SELECT ${COS_COLUMNS} FROM users WHERE uuid = ?`, [me.uuid]);
       // nicht freigeschaltete Teile gelten als "keins"
       for (const [field, kind] of [["cape", "cape"], ["wings", "wings"], ["shield", "shield"], ["aura", "aura"]]) {
         if (typeof data[field] === "string" && !owns(items, kind, data[field])) data[field] = null;
@@ -1326,7 +1353,9 @@ export function createApi(db, options = {}) {
         await db.run("UPDATE users SET wings = ? WHERE uuid = ?", [wings, me.uuid]);
       }
       if (acc) await db.run("UPDATE users SET acc = ? WHERE uuid = ?", [Object.keys(acc).length ? JSON.stringify(acc) : null, me.uuid]);
-      const row = await db.get("SELECT cape, minime, minime_pos, minime_set, wings, shield, aura, nametag, acc FROM users WHERE uuid = ?", [me.uuid]);
+      const row = await db.get(`SELECT ${COS_COLUMNS} FROM users WHERE uuid = ?`, [me.uuid]);
+      // nur echte Änderungen melden (die Mod schickt ihre Auswahl auch bei jedem Spielstart)
+      if (JSON.stringify(row) !== JSON.stringify(before)) await cosTouched(me.uuid);
       return { cape: row.cape || null, minime: row.minime || null, minimePos: row.minime_pos || null, minimes: miniMeSet(row), wings: row.wings || null, shield: row.shield || null, aura: row.aura || null, nametag: row.nametag || null, acc: accSet(row), owned: [...items].sort() };
     },
 
@@ -1366,6 +1395,7 @@ export function createApi(db, options = {}) {
       await db.run("DELETE FROM grants WHERE uuid = ?", [id]);
       for (const item of list) await db.run("INSERT INTO grants (uuid, item) VALUES (?, ?)", [id, item]);
       await dropUnowned(id);
+      await cosTouched(id); // Freischaltungen ändern, was andere sehen
       return grantView(id);
     },
 
@@ -1381,11 +1411,35 @@ export function createApi(db, options = {}) {
       return { users: [...map.values()] };
     },
 
-    /** Cosmetics anderer Spieler (z. B. alle auf dem Server), höchstens 100 auf einmal. */
+    /**
+     * Cosmetics anderer Spieler (z. B. alle auf dem Server), höchstens 100 auf einmal. names: { uuid: Name } für
+     * Spieler mit Offline-UUID (Version 3, Server im Offline-Modus bzw. Proxy ohne echte UUIDs) – die werden über den
+     * Namen dem Microsoft-Konto zugeordnet; die Antwort steht trotzdem unter der angefragten UUID.
+     */
     "POST /api/cosmetics/lookup": async (request) => {
       await auth(request);
-      const { uuids } = await body(request);
-      const list = (Array.isArray(uuids) ? uuids : []).map((u) => String(u).replace(/-/g, "").toLowerCase()).filter((u) => UUID.test(u)).slice(0, 100);
+      const { uuids, names } = await body(request);
+      const asked = (Array.isArray(uuids) ? uuids : []).map((u) => String(u).replace(/-/g, "").toLowerCase()).filter((u) => UUID.test(u)).slice(0, 100);
+      // angefragte UUID → UUID des Kontos (meist dieselbe)
+      const real = new Map(asked.map((u) => [u, u]));
+      if (names && typeof names === "object" && !Array.isArray(names)) {
+        const byName = new Map();
+        for (const [key, value] of Object.entries(names)) {
+          const u = String(key).replace(/-/g, "").toLowerCase();
+          if (real.has(u) && u[12] === "3" && typeof value === "string" && NAME.test(value) && u === (await offlineUuid(value))) byName.set(value.toLowerCase(), u);
+        }
+        if (byName.size) {
+          const keys = [...byName.keys()];
+          const found = await db.all(`SELECT uuid, name_lower FROM users WHERE offline = 0 AND name_lower IN (${keys.map(() => "?").join(",")}) ORDER BY last_seen`, keys);
+          for (const r of found) real.set(byName.get(r.name_lower), r.uuid);
+        }
+      }
+      const back = new Map();
+      for (const [u, r] of real) {
+        if (!back.has(r)) back.set(r, []);
+        back.get(r).push(u);
+      }
+      const list = [...back.keys()];
       const capes = {};
       const minimes = {};
       const minimePos = {};
@@ -1403,27 +1457,35 @@ export function createApi(db, options = {}) {
           if (!grantMap.has(g.uuid)) grantMap.set(g.uuid, new Set());
           grantMap.get(g.uuid).add(g.item);
         }
-        for (const row of rows) {
-          const items = grantMap.get(row.uuid) || new Set();
-          if (row.cape && !owns(items, "cape", row.cape)) row.cape = null;
-          if (row.wings && !owns(items, "wings", row.wings)) row.wings = null;
-          if (row.shield && !owns(items, "shield", row.shield)) row.shield = null;
-          if (row.aura && !owns(items, "aura", row.aura)) row.aura = null;
-          if (!owns(items, "minime")) row.minime = row.minime_set = row.minime_pos = null;
-          if (!owns(items, "nametag")) row.nametag = null;
-          if (row.cape) capes[row.uuid] = row.cape;
-          if (row.minime) minimes[row.uuid] = row.minime;
-          if (row.minime && row.minime_pos) minimePos[row.uuid] = row.minime_pos;
-          if (row.minime) minimeSets[row.uuid] = miniMeSet(row);
-          if (row.wings) wings[row.uuid] = row.wings;
-          if (row.shield) shields[row.uuid] = row.shield;
-          if (row.aura) auras[row.uuid] = row.aura;
-          if (row.nametag) nametags[row.uuid] = row.nametag;
-          const worn = row.acc ? ownedAcc(items, accSet(row)) : {};
-          if (Object.keys(worn).length) acc[row.uuid] = worn;
+        for (const found of rows) {
+          for (const uuid of back.get(found.uuid) || []) {
+            const row = { ...found, uuid };
+            const items = grantMap.get(found.uuid) || new Set();
+            if (row.cape && !owns(items, "cape", row.cape)) row.cape = null;
+            if (row.wings && !owns(items, "wings", row.wings)) row.wings = null;
+            if (row.shield && !owns(items, "shield", row.shield)) row.shield = null;
+            if (row.aura && !owns(items, "aura", row.aura)) row.aura = null;
+            if (!owns(items, "minime")) row.minime = row.minime_set = row.minime_pos = null;
+            if (!owns(items, "nametag")) row.nametag = null;
+            if (row.cape) capes[row.uuid] = row.cape;
+            if (row.minime) minimes[row.uuid] = row.minime;
+            if (row.minime && row.minime_pos) minimePos[row.uuid] = row.minime_pos;
+            if (row.minime) minimeSets[row.uuid] = miniMeSet(row);
+            if (row.wings) wings[row.uuid] = row.wings;
+            if (row.shield) shields[row.uuid] = row.shield;
+            if (row.aura) auras[row.uuid] = row.aura;
+            if (row.nametag) nametags[row.uuid] = row.nametag;
+            const worn = row.acc ? ownedAcc(items, accSet(row)) : {};
+            if (Object.keys(worn).length) acc[row.uuid] = worn;
+          }
         }
       }
-      return { capes, minimes, minimePos, minimeSets, wings, shields, auras, nametags, acc };
+      const result = { capes, minimes, minimePos, minimeSets, wings, shields, auras, nametags, acc };
+      // über den Namen zugeordnet: angefragte UUID → Konto (damit Änderungsmeldungen im Lebenszeichen zuzuordnen sind)
+      const aliases = {};
+      for (const [u, r] of real) if (u !== r) aliases[u] = r;
+      if (Object.keys(aliases).length) result.aliases = aliases;
+      return result;
     },
 
     "POST /api/friends/request": async (request) => {

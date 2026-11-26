@@ -197,7 +197,7 @@ test("Lebenszeichen der Mod: Spielzeit, Einladungen, Freischaltungen und verstec
   await s.call("POST", "/api/friends/accept", { uuid: ALICE }, b);
   // Launcher: nur Freundesliste (mit caps), keine Extras
   let res = await s.call("POST", "/api/presence", { place: "launcher" }, a);
-  assert.deepEqual(res.data.caps, ["presence2", "sync1"]);
+  assert.deepEqual(res.data.caps, ["presence2", "sync1", "cos1"]);
   assert.equal(res.data.games, undefined);
   assert.equal(res.data.owned, undefined);
   // Mod: Spielzeit mitschicken, Einladungen und Freischaltungen zurück
@@ -584,4 +584,64 @@ test("Node: X-Forwarded-For nur mit TRUST_PROXY", () => {
   const req = { headers: { "x-forwarded-for": "9.9.9.9, 7.7.7.7" }, socket: { remoteAddress: "127.0.0.1" } };
   assert.equal(clientIp(req, false), "127.0.0.1");
   assert.equal(clientIp(req, true), "7.7.7.7");
+});
+
+test("Cosmetics-Änderungen kommen mit dem Lebenszeichen (cos1), nur echte Änderungen zählen", async () => {
+  const s = setup();
+  const a = await s.login("Alice");
+  const b = await s.login("Bob");
+  // erstes Lebenszeichen: nur der Stand, keine Liste
+  let beat = await s.call("POST", "/api/presence", { place: "game", cosSince: 0 }, b);
+  assert.ok(beat.data.caps.includes("cos1"));
+  assert.deepEqual(beat.data.cos.changed, []);
+  let since = beat.data.cos.since;
+  // ohne cosSince (ältere Mods, Launcher) kein Feld
+  assert.equal((await s.call("POST", "/api/presence", { place: "game" }, b)).data.cos, undefined);
+  s.tick(5000);
+  // Freischaltung (Admin) und Auswahl melden die Änderung
+  await s.grant(ALICE, ["acc:weihnachtsmuetze"]);
+  s.tick(5000);
+  beat = await s.call("POST", "/api/presence", { place: "game", cosSince: since }, b);
+  assert.deepEqual(beat.data.cos.changed, [ALICE]);
+  since = beat.data.cos.since;
+  s.tick(5000);
+  await s.call("POST", "/api/cosmetics", { cape: null, acc: { kopf: "weihnachtsmuetze" } }, a);
+  s.tick(5000);
+  beat = await s.call("POST", "/api/presence", { place: "game", cosSince: since }, b);
+  assert.deepEqual(beat.data.cos.changed, [ALICE]);
+  since = beat.data.cos.since;
+  // dieselbe Auswahl noch einmal (Spielstart): keine Änderung
+  s.tick(5000);
+  await s.call("POST", "/api/cosmetics", { cape: null, acc: { kopf: "weihnachtsmuetze" } }, a);
+  s.tick(5000);
+  beat = await s.call("POST", "/api/presence", { place: "game", cosSince: since }, b);
+  assert.deepEqual(beat.data.cos.changed, []);
+  // viel zu alter oder kaputter Stand: neu beginnen statt alles zu lesen
+  beat = await s.call("POST", "/api/presence", { place: "game", cosSince: 1 }, b);
+  assert.deepEqual(beat.data.cos.changed, []);
+  assert.ok(beat.data.cos.since > s.clock() - 2000);
+  beat = await s.call("POST", "/api/presence", { place: "game", cosSince: "x" }, b);
+  assert.deepEqual(beat.data.cos.changed, []);
+  // Launcher bekommt nichts davon
+  assert.equal((await s.call("POST", "/api/presence", { place: "launcher", cosSince: since }, b)).data.cos, undefined);
+});
+
+test("Cosmetics-Lookup: Offline-UUID (Server im Offline-Modus) über den Namen zum Konto", async () => {
+  const s = setup();
+  const a = await s.login("Alice");
+  const b = await s.login("Bob");
+  await s.grant(ALICE, ["acc:*", "cape:galaxie"]);
+  await s.call("POST", "/api/cosmetics", { cape: "galaxie", acc: { kopf: "weihnachtsmuetze" } }, a);
+  const off = await offlineUuid("Alice");
+  // ohne Namen: unbekannt
+  let look = await s.call("POST", "/api/cosmetics/lookup", { uuids: [off] }, b);
+  assert.deepEqual(look.data.acc, {});
+  // mit Namen: unter der angefragten UUID
+  look = await s.call("POST", "/api/cosmetics/lookup", { uuids: [off, ALICE], names: { [off]: "Alice" } }, b);
+  assert.deepEqual(look.data.acc, { [off]: { kopf: "weihnachtsmuetze" }, [ALICE]: { kopf: "weihnachtsmuetze" } });
+  assert.deepEqual(look.data.capes, { [off]: "galaxie", [ALICE]: "galaxie" });
+  assert.deepEqual(look.data.aliases, { [off]: ALICE });
+  // Name passt nicht zur Offline-UUID oder echte UUID mit Namen: nichts umgeleitet
+  look = await s.call("POST", "/api/cosmetics/lookup", { uuids: [off, BOB], names: { [off]: "Bob", [BOB]: "Alice" } }, b);
+  assert.deepEqual(look.data.acc, {});
 });
