@@ -13,6 +13,7 @@ const os = require("node:os");
 const crypto = require("node:crypto");
 const { fileURLToPath } = require("node:url");
 const { dirs: makeDirs } = require("./core/paths");
+const { joinable } = require("./core/join");
 const { Installer, buildCommand, launch, MANAGED_MODS, MC_VERSION, defaultMemoryMb, availableVersions, bundledMytic, loaderFor, FORGE_VERSIONS, gameDirFor } = require("./core/minecraft");
 const auth = require("./core/auth");
 const updater = require("./core/updater");
@@ -1307,8 +1308,11 @@ const bridge = createBridge({
   log: (line) => emit("log", line),
 });
 
-ipc.handle("game:launch", async () => {
+ipc.handle("game:launch", async (_event, options = {}) => {
   if (busy) throw new Error("Ein Start wird gerade vorbereitet – kurz warten.");
+  // „Freunden beitreten“: nur für diesen Start direkt auf den Server des Freundes (Schnellverbindung bleibt unverändert)
+  const joinServer = options && typeof options.server === "string" ? options.server.trim() : null;
+  if (joinServer !== null && !joinable(joinServer)) throw new Error("Diesem Server kann man nicht beitreten");
   busy = true;
   try {
     const current = await ensureProfiles();
@@ -1370,7 +1374,9 @@ ipc.handle("game:launch", async () => {
     if (sharedMemory && (games.size + 1) * memoryMb > (os.totalmem() / 1048576) * 0.85) {
       emit("log", `[Launcher] Hinweis: ${games.size + 1} Spiele mit je bis zu ${memoryMb} MB – der Arbeitsspeicher wird knapp. Weniger Speicher pro Spiel einstellen hilft.`);
     }
-    const command = buildCommand(install, DIRS, account, { ...current, modsDir: profileMods, extraJvm, addMods: cosmeticsPack ? [cosmeticsPack] : [], sharedMemory });
+    const command = buildCommand(install, DIRS, account, { ...current, ...(joinServer ? { server: joinServer } : {}), modsDir: profileMods, extraJvm,
+      addMods: cosmeticsPack ? [cosmeticsPack] : [], sharedMemory });
+    if (joinServer) emit("log", `[Launcher] Direkt auf ${joinServer} (Freund beitreten)`);
     emit("status", "Minecraft startet …");
     emit("log", `[Launcher] Starte Minecraft ${profile.mcVersion} (Fabric) als ${account.name} – Profil „${profile.name}“`);
     // letzte Log-Zeilen für den Auto-Fix merken

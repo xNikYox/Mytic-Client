@@ -205,6 +205,8 @@ select option { background: #15101f; }
 .ghost:hover:not(:disabled) { border-color: rgba(var(--c2l-rgb), .5); background: rgba(var(--c2-rgb), .12); }
 .ghost:disabled { opacity: .45; cursor: default; }
 .ghost.danger:hover:not(:disabled) { border-color: rgba(255, 92, 114, .55); background: rgba(255, 92, 114, .12); }
+/* „Beitreten“ in der Freundesliste: Akzent statt grau */
+.ghost.accent { border-color: rgba(var(--c2l-rgb), .55); background: rgba(var(--c2-rgb), .16); }
 
 /* Mods */
 .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }

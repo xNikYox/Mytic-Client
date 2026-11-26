@@ -15,7 +15,7 @@ contextBridge.exposeInMainWorld("mytic", {
   addOffline: (name) => ipcRenderer.invoke("account:offline", name),
   selectAccount: (uuid) => ipcRenderer.invoke("account:select", uuid),
   removeAccount: (uuid) => ipcRenderer.invoke("account:remove", uuid),
-  launch: () => ipcRenderer.invoke("game:launch"),
+  launch: (options) => ipcRenderer.invoke("game:launch", options || {}),
   stop: () => ipcRenderer.invoke("game:stop"),
   openGameDir: () => ipcRenderer.invoke("open:gameDir"),
   openUrl: (url) => ipcRenderer.invoke("open:url", url),
