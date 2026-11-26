@@ -272,14 +272,14 @@ test("Cosmetics: MiniMe wählen, Umhang bleibt; alte Mods ohne Felder löschen n
   await s.call("POST", "/api/cosmetics", { cape: "inferno" }, a);
   // Mods bis 2.18: ein MiniMe mit Position
   let res = await s.call("POST", "/api/cosmetics", { minime: "Technoblade" }, a);
-  assert.deepEqual(res.data, { cape: "inferno", minime: "Technoblade", minimePos: null, minimes: { shoulder: "Technoblade" }, wings: null, shield: null, aura: null, nametag: null, owned: ["*"] });
+  assert.deepEqual(res.data, { cape: "inferno", minime: "Technoblade", minimePos: null, minimes: { shoulder: "Technoblade" }, wings: null, shield: null, aura: null, nametag: null, acc: {}, owned: ["*"] });
   res = await s.call("POST", "/api/cosmetics", { cape: null, minime: "x y" }, a);
-  assert.deepEqual(res.data, { cape: null, minime: null, minimePos: null, minimes: {}, wings: null, shield: null, aura: null, nametag: null, owned: ["*"] });
+  assert.deepEqual(res.data, { cape: null, minime: null, minimePos: null, minimes: {}, wings: null, shield: null, aura: null, nametag: null, acc: {}, owned: ["*"] });
   await s.call("POST", "/api/cosmetics", { cape: "galaxie", minime: "Dream" }, a);
   res = await s.call("POST", "/api/cosmetics", {}, a);
-  assert.deepEqual(res.data, { cape: null, minime: "Dream", minimePos: null, minimes: { shoulder: "Dream" }, wings: null, shield: null, aura: null, nametag: null, owned: ["*"] });
+  assert.deepEqual(res.data, { cape: null, minime: "Dream", minimePos: null, minimes: { shoulder: "Dream" }, wings: null, shield: null, aura: null, nametag: null, acc: {}, owned: ["*"] });
   res = await s.call("POST", "/api/cosmetics", { wings: "neon", minimePos: "head" }, a);
-  assert.deepEqual(res.data, { cape: null, minime: "Dream", minimePos: "head", minimes: { head: "Dream" }, wings: "neon", shield: null, aura: null, nametag: null, owned: ["*"] });
+  assert.deepEqual(res.data, { cape: null, minime: "Dream", minimePos: "head", minimes: { head: "Dream" }, wings: "neon", shield: null, aura: null, nametag: null, acc: {}, owned: ["*"] });
   res = await s.call("POST", "/api/cosmetics", { minimePos: "bauch" }, a);
   assert.equal(res.data.minimePos, null);
 
@@ -291,7 +291,7 @@ test("Cosmetics: MiniMe wählen, Umhang bleibt; alte Mods ohne Felder löschen n
   let look = await s.call("POST", "/api/cosmetics/lookup", { uuids: [ALICE] }, b);
   assert.deepEqual(look.data, {
     capes: {}, minimes: { [ALICE]: "Dream" }, minimePos: { [ALICE]: "head" },
-    minimeSets: { [ALICE]: { head: "Dream", leg: "Technoblade" } }, wings: { [ALICE]: "neon" }, shields: {}, auras: {}, nametags: {},
+    minimeSets: { [ALICE]: { head: "Dream", leg: "Technoblade" } }, wings: { [ALICE]: "neon" }, shields: {}, auras: {}, nametags: {}, acc: {},
   });
   res = await s.call("POST", "/api/cosmetics", { shield: "death" }, a);
   assert.equal(res.data.shield, "death");
@@ -366,6 +366,88 @@ test("Cosmetics gesperrt: nur Freigeschaltetes, Admin über Passwort oder Admin-
   const page = await s.api(new Request("http://x/proxy/8766/admin"));
   assert.equal(page.status, 200);
   assert.match(await page.text(), /Mytic Admin/);
+});
+
+test("Accessoires (Kopf & Hals): je Platz eins, nur Freigeschaltetes, Lookup und Entziehen", async () => {
+  const s = setup();
+  const a = await s.login("Alice");
+  const b = await s.login("Bob");
+  // ohne Freischaltung: nichts
+  let res = await s.call("POST", "/api/cosmetics", { acc: { kopf: "weihnachtsmuetze", hals: "schal" } }, a);
+  assert.deepEqual(res.data.acc, {});
+  // einzelne Teile und ganze Art; unbekannte Plätze, kaputte IDs und Arrays fallen weg
+  await s.grant(ALICE, ["acc:weihnachtsmuetze", "acc:schal", "acc:BÖSE", "acc:*x"]);
+  assert.deepEqual((await s.call("POST", "/api/cosmetics/owned", {}, a)).data.items, ["acc:schal", "acc:weihnachtsmuetze"]);
+  res = await s.call("POST", "/api/cosmetics", { acc: { kopf: "weihnachtsmuetze", hals: "schal", bauch: "schal", ruecken: "../x" } }, a);
+  assert.deepEqual(res.data.acc, { kopf: "weihnachtsmuetze", hals: "schal" });
+  // nicht freigeschaltetes Geweih gilt als „keins“, der Schal bleibt
+  res = await s.call("POST", "/api/cosmetics", { acc: { kopf: "rentiergeweih", hals: "schal" } }, a);
+  assert.deepEqual(res.data.acc, { hals: "schal" });
+  res = await s.call("POST", "/api/cosmetics", { acc: ["schal"] }, a);
+  assert.deepEqual(res.data.acc, {});
+  // Felder ohne acc lassen die Accessoires stehen (z. B. ältere Mods)
+  await s.call("POST", "/api/cosmetics", { acc: { kopf: "weihnachtsmuetze", hals: "schal" } }, a);
+  res = await s.call("POST", "/api/cosmetics", { cape: null, wings: null }, a);
+  assert.deepEqual(res.data.acc, { kopf: "weihnachtsmuetze", hals: "schal" });
+  // „acc“ allein ändert den Umhang nicht
+  await s.grant(ALICE, ["acc:*", "cape:galaxie"]);
+  await s.call("POST", "/api/cosmetics", { cape: "galaxie" }, a);
+  res = await s.call("POST", "/api/cosmetics", { acc: { kopf: "rentiergeweih_nase", hals: "schal" } }, a);
+  assert.equal(res.data.cape, "galaxie");
+  assert.deepEqual(res.data.acc, { kopf: "rentiergeweih_nase", hals: "schal" });
+  // andere sehen sie
+  let look = await s.call("POST", "/api/cosmetics/lookup", { uuids: [ALICE, BOB] }, b);
+  assert.deepEqual(look.data.acc, { [ALICE]: { kopf: "rentiergeweih_nase", hals: "schal" } });
+  // nur noch der Schal freigeschaltet: das Geweih verschwindet sofort (dropUnowned) und im Lookup
+  await s.grant(ALICE, ["acc:schal"]);
+  look = await s.call("POST", "/api/cosmetics/lookup", { uuids: [ALICE] }, b);
+  assert.deepEqual(look.data.acc[ALICE], { hals: "schal" });
+  assert.equal(look.data.capes[ALICE], undefined);
+  assert.equal((await s.db.get("SELECT acc FROM users WHERE uuid = ?", [ALICE])).acc, JSON.stringify({ hals: "schal" }));
+  // alles entzogen: Spalte leer, Spieler fällt aus dem Lookup
+  await s.grant(ALICE, []);
+  assert.equal((await s.db.get("SELECT acc FROM users WHERE uuid = ?", [ALICE])).acc, null);
+  look = await s.call("POST", "/api/cosmetics/lookup", { uuids: [ALICE] }, b);
+  assert.deepEqual(look.data.acc, {});
+  // „*“ schaltet auch Accessoires frei
+  await s.grant(ALICE, ["*"]);
+  res = await s.call("POST", "/api/cosmetics", { acc: { kopf: "rentiergeweih" } }, a);
+  assert.deepEqual(res.data.acc, { kopf: "rentiergeweih" });
+  // Katalog für die Admin-Seite enthält die Accessoires und das Set
+  const cat = (await s.call("GET", "/api/admin/catalog", null, null, ADMIN_KEY)).data.catalog;
+  assert.deepEqual(cat.acc.map((x) => x[0]), ["weihnachtsmuetze", "rentiergeweih", "rentiergeweih_nase", "schal"]);
+  const set = cat.sets.find((x) => x.name === "Winterzauber 2026");
+  assert.equal(set.items.length, 17);
+  const known = new Set(["cape", "wings", "shield", "aura", "acc"].flatMap((k) => cat[k].map((x) => `${k}:${x[0]}`)));
+  for (const item of set.items) assert.ok(known.has(item), `${item} im Katalog`);
+  // die Admin-Seite kennt die neue Art
+  const page = await (await s.api(new Request("http://x/proxy/8766/admin"))).text();
+  assert.match(page, /acc: "Kopf & Hals"/);
+});
+
+test("Datenbank von vor 2.58 (ohne users.acc) wird beim Start ergänzt, Daten bleiben", async () => {
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const { DatabaseSync } = await import("node:sqlite");
+  const { SCHEMA } = await import("../src/schema.js");
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "mytic-friends-")), "old.db");
+  // alte Datenbank: Schema ohne acc und mit den Spalten der älteren Migrationen
+  const old = new DatabaseSync(file);
+  old.exec(SCHEMA);
+  for (const col of ["cape", "minime", "wings", "minime_pos", "minime_set", "shield", "aura", "nametag"]) old.exec(`ALTER TABLE users ADD COLUMN ${col} TEXT`);
+  old.exec("INSERT INTO users (uuid, name, name_lower, cape) VALUES ('" + ALICE + "', 'Alice', 'alice', 'galaxie')");
+  old.close();
+  for (let i = 0; i < 2; i++) { // zweimal öffnen: die Migration darf nicht stören, wenn die Spalte schon da ist
+    const db = openDb(file);
+    const cols = (await db.all("PRAGMA table_info(users)")).map((c) => c.name);
+    assert.ok(cols.includes("acc"));
+    const row = await db.get("SELECT cape, acc FROM users WHERE uuid = ?", [ALICE]);
+    assert.equal(row.cape, "galaxie");
+    assert.equal(row.acc, i === 0 ? null : JSON.stringify({ kopf: "schal" }));
+    if (i === 0) await db.run("UPDATE users SET acc = ? WHERE uuid = ?", [JSON.stringify({ kopf: "schal" }), ALICE]);
+    db.close();
+  }
 });
 
 test("Cloud-Einstellungen: sichern und auf anderem PC holen", async () => {

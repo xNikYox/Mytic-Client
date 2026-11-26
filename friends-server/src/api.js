@@ -145,14 +145,37 @@ const NAME = /^[A-Za-z0-9_]{3,16}$/;
 const MINIME_POS = ["shoulder", "head", "arm", "leg"];
 const UUID = /^[0-9a-f]{32}$/;
 /** Freischaltungen: alles (*), Admin, MiniMe, Nametag oder ein Teil bzw. eine ganze Art (cape:*). */
-const GRANT = /^(\*|admin|minime|nametag|(cape|wings|shield|aura):([a-z0-9_-]{1,32}|\*))$/;
+const GRANT = /^(\*|admin|minime|nametag|(cape|wings|shield|aura|acc):([a-z0-9_-]{1,32}|\*))$/;
 const ID = /^[a-z0-9_-]{1,32}$/;
 
-/** Darf jemand mit diesen Freischaltungen das haben? kind: cape, wings, shield, aura, minime, nametag. */
+/** Darf jemand mit diesen Freischaltungen das haben? kind: cape, wings, shield, aura, acc, minime, nametag. */
 function owns(items, kind, id) {
   if (items.has("*")) return true;
   if (kind === "minime" || kind === "nametag" || kind === "admin") return items.has(kind);
   return items.has(`${kind}:*`) || items.has(`${kind}:${id}`);
+}
+
+/** Plätze für Accessoires („Kopf & Hals“): je Platz höchstens eins. */
+const ACC_SLOTS = ["kopf", "hals"];
+
+/** Accessoires eines Nutzers je Platz ({ kopf: "weihnachtsmuetze", hals: "schal" }) aus der Spalte users.acc (JSON). */
+function accSet(row) {
+  if (!row || !row.acc) return {};
+  try {
+    const set = JSON.parse(row.acc);
+    const out = {};
+    for (const slot of ACC_SLOTS) if (set && typeof set[slot] === "string" && ID.test(set[slot])) out[slot] = set[slot];
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/** Nur freigeschaltete Accessoires behalten. */
+function ownedAcc(items, set) {
+  const out = {};
+  for (const slot of ACC_SLOTS) if (set[slot] && owns(items, "acc", set[slot])) out[slot] = set[slot];
+  return out;
 }
 
 /** MiniMes eines Nutzers je Stelle ({ shoulder: "Name", ... }), auch aus den alten Feldern (ein MiniMe + Position). */
@@ -297,8 +320,13 @@ export function createApi(db, options = {}) {
   /** Gewähltes entfernen, das jemand nicht (mehr) freigeschaltet hat. */
   async function dropUnowned(uuid) {
     const items = await grantsOf(uuid);
-    const row = await db.get("SELECT cape, wings, shield, aura FROM users WHERE uuid = ?", [uuid]);
+    const row = await db.get("SELECT cape, wings, shield, aura, acc FROM users WHERE uuid = ?", [uuid]);
     if (!row) return;
+    if (row.acc) {
+      const keep = ownedAcc(items, accSet(row));
+      const json = Object.keys(keep).length ? JSON.stringify(keep) : null;
+      if (json !== row.acc) await db.run("UPDATE users SET acc = ? WHERE uuid = ?", [json, uuid]);
+    }
     for (const [column, kind] of [["cape", "cape"], ["wings", "wings"], ["shield", "shield"], ["aura", "aura"]]) {
       if (row[column] && !owns(items, kind, row[column])) await db.run(`UPDATE users SET ${column} = NULL WHERE uuid = ?`, [uuid]);
     }
@@ -1230,7 +1258,7 @@ export function createApi(db, options = {}) {
       return { ok: true };
     },
 
-    /** Eigene Cosmetics wählen: Umhang, MiniMes je Stelle (Minecraft-Namen), Flügel; null = keins. Fehlende Felder bleiben. */
+    /** Eigene Cosmetics wählen: Umhang, MiniMes je Stelle (Minecraft-Namen), Flügel, Accessoires je Platz ({kopf, hals}); null = keins. Fehlende Felder bleiben. */
     "POST /api/cosmetics": async (request) => {
       const me = await auth(request);
       const data = await body(request);
@@ -1244,8 +1272,16 @@ export function createApi(db, options = {}) {
         if ("minime" in data) data.minime = null;
       }
       if (!owns(items, "nametag") && "nametag" in data) data.nametag = null;
+      // Accessoires je Platz; Unbekanntes und nicht Freigeschaltetes fällt weg (ältere Mods schicken das Feld nicht)
+      let acc;
+      if ("acc" in data) {
+        const given = data.acc && typeof data.acc === "object" && !Array.isArray(data.acc) ? data.acc : {};
+        const set = {};
+        for (const slot of ACC_SLOTS) if (typeof given[slot] === "string" && ID.test(given[slot])) set[slot] = given[slot];
+        acc = ownedAcc(items, set);
+      }
       // ältere Mods schicken nur "cape" (oder gar nichts für "kein Umhang")
-      if ("cape" in data || !("minime" in data || "wings" in data || "minimePos" in data || "minimes" in data || "shield" in data || "aura" in data || "nametag" in data)) {
+      if ("cape" in data || !("minime" in data || "wings" in data || "minimePos" in data || "minimes" in data || "shield" in data || "aura" in data || "nametag" in data || "acc" in data)) {
         const cape = typeof data.cape === "string" && /^[a-z0-9_-]{1,32}$/.test(data.cape) ? data.cape : null;
         await db.run("UPDATE users SET cape = ? WHERE uuid = ?", [cape, me.uuid]);
       }
@@ -1289,8 +1325,9 @@ export function createApi(db, options = {}) {
         const wings = typeof data.wings === "string" && /^[a-z0-9_-]{1,32}$/.test(data.wings) ? data.wings : null;
         await db.run("UPDATE users SET wings = ? WHERE uuid = ?", [wings, me.uuid]);
       }
-      const row = await db.get("SELECT cape, minime, minime_pos, minime_set, wings, shield, aura, nametag FROM users WHERE uuid = ?", [me.uuid]);
-      return { cape: row.cape || null, minime: row.minime || null, minimePos: row.minime_pos || null, minimes: miniMeSet(row), wings: row.wings || null, shield: row.shield || null, aura: row.aura || null, nametag: row.nametag || null, owned: [...items].sort() };
+      if (acc) await db.run("UPDATE users SET acc = ? WHERE uuid = ?", [Object.keys(acc).length ? JSON.stringify(acc) : null, me.uuid]);
+      const row = await db.get("SELECT cape, minime, minime_pos, minime_set, wings, shield, aura, nametag, acc FROM users WHERE uuid = ?", [me.uuid]);
+      return { cape: row.cape || null, minime: row.minime || null, minimePos: row.minime_pos || null, minimes: miniMeSet(row), wings: row.wings || null, shield: row.shield || null, aura: row.aura || null, nametag: row.nametag || null, acc: accSet(row), owned: [...items].sort() };
     },
 
     /** Eigene Freischaltungen (für das Cosmetics-Menü). */
@@ -1357,8 +1394,9 @@ export function createApi(db, options = {}) {
       const shields = {};
       const auras = {};
       const nametags = {};
+      const acc = {};
       if (list.length) {
-        const rows = await db.all(`SELECT uuid, cape, minime, minime_pos, minime_set, wings, shield, aura, nametag FROM users WHERE (cape IS NOT NULL OR minime IS NOT NULL OR wings IS NOT NULL OR shield IS NOT NULL OR aura IS NOT NULL OR nametag IS NOT NULL) AND uuid IN (${list.map(() => "?").join(",")})`, list);
+        const rows = await db.all(`SELECT uuid, cape, minime, minime_pos, minime_set, wings, shield, aura, nametag, acc FROM users WHERE (cape IS NOT NULL OR minime IS NOT NULL OR wings IS NOT NULL OR shield IS NOT NULL OR aura IS NOT NULL OR nametag IS NOT NULL OR acc IS NOT NULL) AND uuid IN (${list.map(() => "?").join(",")})`, list);
         const grantRows = await db.all(`SELECT uuid, item FROM grants WHERE uuid IN (${list.map(() => "?").join(",")})`, list);
         const grantMap = new Map();
         for (const g of grantRows) {
@@ -1381,9 +1419,11 @@ export function createApi(db, options = {}) {
           if (row.shield) shields[row.uuid] = row.shield;
           if (row.aura) auras[row.uuid] = row.aura;
           if (row.nametag) nametags[row.uuid] = row.nametag;
+          const worn = row.acc ? ownedAcc(items, accSet(row)) : {};
+          if (Object.keys(worn).length) acc[row.uuid] = worn;
         }
       }
-      return { capes, minimes, minimePos, minimeSets, wings, shields, auras, nametags };
+      return { capes, minimes, minimePos, minimeSets, wings, shields, auras, nametags, acc };
     },
 
     "POST /api/friends/request": async (request) => {

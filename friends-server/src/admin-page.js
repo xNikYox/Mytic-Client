@@ -55,6 +55,7 @@ a.pick { color: var(--cyan); cursor: pointer; text-decoration: underline; }
     <div id="editor" hidden>
       <div class="row"><strong id="who"></strong><span class="muted" id="uuid"></span></div>
       <div class="cat"><h3>Allgemein</h3><div class="items" id="general"></div></div>
+      <div class="cat" id="setsBox" hidden><h3>Sets <span class="muted">(markiert alle Teile eines Sets – danach Speichern)</span></h3><div class="items" id="sets"></div></div>
       <div id="cats"></div>
       <div class="row" style="margin-top:6px"><button id="saveBtn">Speichern</button><button class="ghost" id="noneBtn">Alles entfernen</button></div>
     </div>
@@ -67,8 +68,8 @@ a.pick { color: var(--cyan); cursor: pointer; text-decoration: underline; }
 </main>
 <script>
 (function () {
-  var NAMES = { cape: "Umhänge", wings: "Flügel", shield: "Schilde", aura: "Auren" };
-  var GENERAL = [["*", "Alles"], ["admin", "Admin"], ["minime", "MiniMe"], ["nametag", "Nametag"]];
+  var NAMES = { cape: "Umhänge", wings: "Flügel", shield: "Schilde", aura: "Auren", acc: "Kopf & Hals" };
+  var GENERAL = [["*", "Alles"], ["admin", "Admin"], ["minime", "MiniMe"], ["nametag", "Nametag (freier Text + Vorlagen)"]];
   var key = "", catalog = null, current = null;
   try { key = sessionStorage.getItem("mytic-admin-key") || ""; } catch (e) {}
   var $ = function (id) { return document.getElementById(id); };
@@ -105,8 +106,20 @@ a.pick { color: var(--cyan); cursor: pointer; text-decoration: underline; }
     $("uuid").textContent = user.uuid;
     var g = $("general"); g.innerHTML = "";
     GENERAL.forEach(function (x) { g.appendChild(chip(x[0], x[1], has.has(x[0]), x[0] === "*" ? "all" : "")); });
+    var sets = (catalog && catalog.sets) || [], sb = $("sets"); sb.innerHTML = "";
+    $("setsBox").hidden = !sets.length;
+    sets.forEach(function (set) {
+      var b = document.createElement("button"); b.type = "button"; b.className = "ghost";
+      b.textContent = set.name + " (" + set.items.length + ")";
+      b.onclick = function () {
+        var want = new Set(set.items);
+        document.querySelectorAll("#editor input[type=checkbox]").forEach(function (i) { if (want.has(i.value)) i.checked = true; });
+      };
+      sb.appendChild(b);
+    });
     var c = $("cats"); c.innerHTML = "";
     Object.keys(NAMES).forEach(function (kind) {
+      if (!catalog[kind]) return; // älterer Katalog ohne diese Art
       var box = document.createElement("div"); box.className = "cat";
       var h = document.createElement("h3"); h.textContent = NAMES[kind] + " (" + catalog[kind].length + ")";
       h.appendChild(chip(kind + ":*", "alle " + NAMES[kind], has.has(kind + ":*"), "all"));

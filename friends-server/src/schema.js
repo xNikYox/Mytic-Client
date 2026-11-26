@@ -158,4 +158,6 @@ export const MIGRATIONS = [
   "ALTER TABLE games ADD COLUMN rounds INTEGER",
   "ALTER TABLE games ADD COLUMN move_s INTEGER",
   "ALTER TABLE games ADD COLUMN state TEXT",
+  // Accessoires „Kopf & Hals“ (Mods ab 2.58): je Platz eine ID als JSON, z. B. {"kopf":"weihnachtsmuetze","hals":"schal"}
+  "ALTER TABLE users ADD COLUMN acc TEXT",
 ];
