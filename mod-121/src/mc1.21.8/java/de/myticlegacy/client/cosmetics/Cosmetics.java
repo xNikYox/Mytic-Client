@@ -45,12 +45,25 @@ public final class Cosmetics {
         return cape != null && "myticclient".equals(cape.getNamespace());
     }
 
+    /** eigener Zähler statt Spielzeit der Welt – die steht bei /tick freeze oder springt, wenn der Server sie setzt */
+    private static int ticks;
+
     /** Alle 2 Sekunden: Umhänge der Spieler in der Nähe beim Friends-Server nachfragen. */
     public static void tick(Minecraft mc) {
-        if (mc.level == null || mc.player == null || mc.level.getGameTime() % 40 != 0) return;
+        if (mc.level == null || mc.player == null || ++ticks % 40 != 0) return;
         List<String> nearby = new ArrayList<>();
-        for (Player p : mc.level.players()) if (p != mc.player) nearby.add(uuid(p));
-        CosmeticsCore.tick(nearby);
+        Map<String, String> names = null;
+        for (Player p : mc.level.players()) {
+            if (p == mc.player) continue;
+            String key = uuid(p);
+            nearby.add(key);
+            // Offline-UUID (Server im Offline-Modus): Name mitschicken, damit der Server das Konto findet
+            if (p.getUUID().version() == 3) {
+                if (names == null) names = new HashMap<>();
+                names.put(key, p.getScoreboardName());
+            }
+        }
+        CosmeticsCore.tick(nearby, names);
     }
 
     /**

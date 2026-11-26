@@ -140,11 +140,24 @@ public final class Cosmetics {
 
     /** Alle 2 Sekunden: Umhänge der Spieler in der Nähe beim Friends-Server nachfragen. */
     public static void tick(Minecraft mc) {
-        if (mc.theWorld == null || mc.thePlayer == null || mc.theWorld.getTotalWorldTime() % 40 != 0) return;
+        // eigener Zähler statt Spielzeit der Welt (die springt, wenn der Server sie setzt)
+        if (mc.theWorld == null || mc.thePlayer == null || ++ticks % 40 != 0) return;
         List<String> nearby = new ArrayList<String>();
-        for (EntityPlayer p : mc.theWorld.playerEntities) if (p != mc.thePlayer) nearby.add(uuid(p));
-        CosmeticsCore.tick(nearby);
+        Map<String, String> names = null;
+        for (EntityPlayer p : mc.theWorld.playerEntities) {
+            if (p == mc.thePlayer) continue;
+            String key = uuid(p);
+            nearby.add(key);
+            // Offline-UUID (Server im Offline-Modus): Name mitschicken, damit der Server das Konto findet
+            if (p.getUniqueID().version() == 3) {
+                if (names == null) names = new HashMap<String, String>();
+                names.put(key, p.getName());
+            }
+        }
+        CosmeticsCore.tick(nearby, names);
     }
+
+    private static int ticks;
 
     /** Erstes Bild eines Umhangs (für die Vorschau), im Hintergrund gelesen; null, solange es lädt. */
     private static ResourceLocation firstFrame(final CosmeticsCore.Cape cape) {

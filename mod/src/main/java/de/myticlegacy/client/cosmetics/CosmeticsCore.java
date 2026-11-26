@@ -52,6 +52,22 @@ public final class CosmeticsCore {
     private static final long REMOTE_MS = 3 * 60 * 1000;
     private static final long REMOTE_NONE_MS = 6 * 60 * 1000;
     private static final long BATCH_MS = 60 * 1000;
+    /**
+     * Meldet der Server Änderungen mit dem Lebenszeichen (cos1), werden geänderte Spieler sofort neu gefragt – dann
+     * reicht es, alle anderen selten zu prüfen (spart Anfragen).
+     */
+    private static final long REMOTE_FEED_MS = 10 * 60 * 1000;
+    private static final long REMOTE_FEED_NONE_MS = 15 * 60 * 1000;
+    /** Fehlgeschlagene Abfragen bzw. Meldungen: erneut nach 30 s, dann doppelt so lange (höchstens 5 bzw. 10 Minuten) */
+    private static final long RETRY_MS = 30 * 1000;
+    private static int lookupFails;
+    private static volatile int pushFails;
+    private static volatile boolean pushFailed;
+    private static volatile long pushRetryAt;
+    /** Spieler mit Offline-UUID, die der Server über den Namen einem Konto zugeordnet hat: Konto → angefragte UUID */
+    private static final Map<String, String> ALIAS = new ConcurrentHashMap<>();
+    /** schon gemeldete unbekannte IDs (Cosmetics-Paket zu alt) */
+    private static final java.util.Set<String> UNKNOWN = java.util.Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
     /** zuletzt übernommene Freischaltungen aus dem Lebenszeichen (Friends.ownedSeq) */
     private static int ownedSeq;
 
@@ -664,6 +680,7 @@ public final class CosmeticsCore {
     /** Eigene Auswahl an den Friends-Server melden, damit andere Mytic-Spieler sie sehen. */
     public static void push() {
         pushed = true;
+        pushFailed = false;
         final String id = MyticClient.config().cape;
         final Map<String, String> minis = MiniMeCore.selectedAll();
         final String wingsId = MyticClient.config().wings;
@@ -686,8 +703,14 @@ public final class CosmeticsCore {
                 for (Map.Entry<String, String> e : accSet.entrySet()) if (e.getValue() != null) acc.addProperty(e.getKey(), e.getValue());
                 body.add("acc", acc);
                 Friends.post("api/cosmetics", body);
+                pushFails = 0;
+                pushFailed = false;
             } catch (Exception e) {
-                MyticClient.LOG.warn("Cosmetics nicht gespeichert: " + e.getMessage());
+                // sonst sähen andere die neue Auswahl erst nach der nächsten Änderung bzw. dem nächsten Spielstart
+                MyticClient.LOG.warn("Cosmetics nicht gespeichert (neuer Versuch folgt): " + e.getMessage());
+                pushFails++;
+                pushRetryAt = System.currentTimeMillis() + backoff(pushFails, 10 * 60 * 1000);
+                pushFailed = true;
             }
         });
     }
@@ -721,10 +744,36 @@ public final class CosmeticsCore {
 
     /**
      * Regelmäßig aus dem Spiel-Thread: Umhänge der Spieler in der Nähe nachfragen (gesammelt, höchstens 100 auf
-     * einmal, je Spieler alle 3 Minuten, ohne Cosmetics alle 6).
+     * einmal, je Spieler alle 3 Minuten, ohne Cosmetics alle 6; meldet der Server Änderungen mit dem Lebenszeichen,
+     * geänderte sofort und alle anderen nur alle 10 bzw. 15 Minuten).
      */
     public static void tick(List<String> nearby) {
+        tick(nearby, null);
+    }
+
+    /** Wartezeit nach n Fehlschlägen in Folge: 30 s, 60 s, 120 s … höchstens max. */
+    private static long backoff(int fails, long max) {
+        return Math.min(max, RETRY_MS << Math.min(10, Math.max(0, fails - 1)));
+    }
+
+    /** Fehlt eine gemeldete ID im Cosmetics-Paket (Paket älter als das des Trägers)? Einmal ins Log. */
+    private static void checkKnown(String kind, String id, boolean known) {
+        if (id == null || id.isEmpty() || known || UNKNOWN.size() > 100 || !UNKNOWN.add(kind + ":" + id)) return;
+        MyticClient.LOG.warn("Cosmetics: " + kind + " \"" + id + "\" fehlt im Cosmetics-Paket (" + PACK + ") – Launcher neu starten, damit das Paket aktualisiert wird");
+    }
+
+    /**
+     * names: Spielername je UUID für Spieler mit Offline-UUID (Server im Offline-Modus) – der Server ordnet sie dann
+     * über den Namen dem Konto zu; null = keine.
+     */
+    public static void tick(List<String> nearby, final Map<String, String> names) {
         if (!Friends.available()) return;
+        // Wessen Cosmetics sich geändert haben, kommt mit dem Lebenszeichen: diese Spieler gleich neu fragen
+        for (String changed : Friends.takeCosChanged()) {
+            ASKED.remove(changed);
+            String alias = ALIAS.get(changed);
+            if (alias != null) ASKED.remove(alias);
+        }
         // Freischaltungen kommen mit dem Lebenszeichen der Freundesliste (neuere Server) – sonst alle 3 Minuten selbst fragen
         int seq = Friends.ownedSeq();
         if (seq != ownedSeq) {
@@ -741,15 +790,19 @@ public final class CosmeticsCore {
         } else if (seq == 0 && System.currentTimeMillis() - ownedAt > 3 * 60 * 1000) {
             refreshOwned();
         }
+        if (pushFailed && System.currentTimeMillis() >= pushRetryAt) push();
         if (!pushed && (MyticClient.config().cape != null || MiniMeCore.any() || MyticClient.config().wings != null || MyticClient.config().shield != null || MyticClient.config().aura != null || MyticClient.config().nametag != null
                 || (MyticClient.config().acc != null && !MyticClient.config().acc.isEmpty()))) push();
         if (lookupRunning) return;
         long now = System.currentTimeMillis();
+        final boolean feed = Friends.cosFeed();
+        final long remoteMs = feed ? REMOTE_FEED_MS : REMOTE_MS;
+        final long noneMs = feed ? REMOTE_FEED_NONE_MS : REMOTE_NONE_MS;
         // erst fragen, wenn einer fällig ist – dann alle, die in der nächsten Minute fällig würden, gleich mit (weniger Anfragen)
         boolean due = false;
         for (String uuid : nearby) {
             Long at = ASKED.get(uuid);
-            if (at == null || now - at > REMOTE_MS) {
+            if (at == null || now - at > remoteMs) {
                 due = true;
                 break;
             }
@@ -758,7 +811,7 @@ public final class CosmeticsCore {
         final List<String> ask = new ArrayList<>();
         for (String uuid : nearby) {
             Long at = ASKED.get(uuid);
-            if (at == null || now - at > REMOTE_MS - BATCH_MS) ask.add(uuid);
+            if (at == null || now - at > remoteMs - BATCH_MS) ask.add(uuid);
             if (ask.size() >= 100) break;
         }
         if (ask.isEmpty()) return;
@@ -770,7 +823,16 @@ public final class CosmeticsCore {
                 JsonArray array = new JsonArray();
                 for (String uuid : ask) array.add(new com.google.gson.JsonPrimitive(uuid));
                 body.add("uuids", array);
+                if (names != null) {
+                    JsonObject named = new JsonObject();
+                    for (String uuid : ask) if (names.containsKey(uuid)) named.addProperty(uuid, names.get(uuid));
+                    if (!named.entrySet().isEmpty()) body.add("names", named);
+                }
                 JsonObject answer = Friends.post("api/cosmetics/lookup", body);
+                if (answer.has("aliases") && answer.get("aliases").isJsonObject()) {
+                    if (ALIAS.size() > 4096) ALIAS.clear();
+                    for (Map.Entry<String, JsonElement> e : answer.getAsJsonObject("aliases").entrySet()) ALIAS.put(e.getValue().getAsString(), e.getKey());
+                }
                 Map<String, String> found = new HashMap<>();
                 for (Map.Entry<String, JsonElement> e : answer.getAsJsonObject("capes").entrySet()) found.put(e.getKey(), e.getValue().getAsString());
                 Map<String, Map<String, String>> minis = new HashMap<>();
@@ -806,7 +868,7 @@ public final class CosmeticsCore {
                     }
                 }
                 // Spieler ohne Cosmetics (meist ohne Mytic) seltener erneut fragen
-                long later = System.currentTimeMillis() + REMOTE_NONE_MS - REMOTE_MS;
+                long later = System.currentTimeMillis() + noneMs - remoteMs;
                 for (String uuid : ask) {
                     if (!found.containsKey(uuid) && !minis.containsKey(uuid) && !tagsFound.containsKey(uuid) && !aurasFound.containsKey(uuid)
                             && !shieldsFound.containsKey(uuid) && !wingsFound.containsKey(uuid) && !accFound.containsKey(uuid)) ASKED.put(uuid, later);
@@ -817,10 +879,17 @@ public final class CosmeticsCore {
                     REMOTE_SHIELD.put(uuid, shieldsFound.containsKey(uuid) ? shieldsFound.get(uuid) : "");
                     REMOTE_WINGS.put(uuid, wingsFound.containsKey(uuid) ? wingsFound.get(uuid) : "");
                     REMOTE_ACC.put(uuid, accFound.containsKey(uuid) ? accFound.get(uuid) : new HashMap<String, String>());
+                    checkKnown("cape", found.get(uuid), byId(found.get(uuid)) != null);
+                    checkKnown("wings", wingsFound.get(uuid), hasWings(wingsFound.get(uuid)));
+                    checkKnown("aura", aurasFound.get(uuid), aura(aurasFound.get(uuid)) != null);
+                    checkKnown("shield", shieldsFound.get(uuid), hasShield(shieldsFound.get(uuid)));
+                    if (accFound.containsKey(uuid)) for (String id : accFound.get(uuid).values()) checkKnown("acc", id, acc(id) != null);
                 }
+                lookupFails = 0;
             } catch (Exception e) {
-                // in 30 Sekunden erneut versuchen
-                long retry = System.currentTimeMillis() - REMOTE_MS + 30000;
+                // erneut versuchen: nach 30 s, bei weiteren Fehlern in Folge (z. B. 429) seltener, höchstens alle 5 Minuten
+                lookupFails++;
+                long retry = System.currentTimeMillis() - remoteMs + backoff(lookupFails, 5 * 60 * 1000);
                 for (String uuid : ask) ASKED.put(uuid, retry);
             } finally {
                 lookupRunning = false;

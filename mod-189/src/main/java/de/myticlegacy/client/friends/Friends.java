@@ -117,6 +117,13 @@ public final class Friends {
     /** Freischaltungen aus dem letzten Lebenszeichen (Cosmetics) und Zähler, wie oft sie kamen */
     private static volatile JsonObject owned;
     private static volatile int ownedSeq;
+    /**
+     * Cosmetics-Änderungen anderer Spieler (Server mit cos1): Stand des letzten Lebenszeichens (Serverzeit) und die
+     * seitdem gemeldeten UUIDs – CosmeticsCore fragt nur diese neu ab statt alle paar Minuten alle.
+     */
+    private static volatile long cosSince;
+    private static volatile boolean cosFeed;
+    private static final ConcurrentLinkedQueue<String> COS_CHANGED = new ConcurrentLinkedQueue<>();
 
     private Friends() {
     }
@@ -290,6 +297,8 @@ public final class Friends {
                 if (currentServer != null) body.addProperty("server", currentServer);
                 if (mcVersion != null) body.addProperty("version", mcVersion);
                 body.addProperty("hideServer", !showServer);
+                // Cosmetics-Änderungen anderer seit dem letzten Lebenszeichen mitschicken lassen (ältere Server ignorieren das)
+                body.addProperty("cosSince", cosSince);
                 // versteckt: nur Server, die das kennen (presence2), sonst wie früher nur die Liste holen
                 if (!visible) body.addProperty("hidden", true);
                 result = call("POST", "api/presence", body, 10000);
@@ -313,10 +322,31 @@ public final class Friends {
             for (JsonElement e : data.getAsJsonArray("caps")) if ("presence2".equals(e.getAsString())) caps = true;
         }
         presence2 = caps;
+        if (data.has("cos") && data.get("cos").isJsonObject()) {
+            JsonObject cos = data.getAsJsonObject("cos");
+            if (cos.has("changed") && cos.get("changed").isJsonArray()) {
+                for (JsonElement e : cos.getAsJsonArray("changed")) if (COS_CHANGED.size() < 1000) COS_CHANGED.add(e.getAsString());
+            }
+            if (cos.has("since")) cosSince = cos.get("since").getAsLong();
+            cosFeed = true;
+        }
         if (data.has("owned") && data.get("owned").isJsonObject()) {
             owned = data.getAsJsonObject("owned");
             ownedSeq++;
         }
+    }
+
+    /** Meldet der Server Cosmetics-Änderungen mit dem Lebenszeichen? (dann reicht seltenes Nachfragen) */
+    public static boolean cosFeed() {
+        return cosFeed;
+    }
+
+    /** Seit dem letzten Aufruf gemeldete Spieler (UUID ohne Striche), deren Cosmetics sich geändert haben. */
+    public static List<String> takeCosChanged() {
+        List<String> out = new ArrayList<>();
+        String u;
+        while ((u = COS_CHANGED.poll()) != null) out.add(u);
+        return out;
     }
 
     /** Freischaltungen aus dem letzten Lebenszeichen ({items, admin}) oder null. */
