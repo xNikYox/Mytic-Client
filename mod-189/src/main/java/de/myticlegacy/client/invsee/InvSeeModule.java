@@ -53,7 +53,7 @@ public class InvSeeModule extends HudModule {
     private static final String LAST_COMMAND = "invsee.lastCommand", OFFSETS = "invsee.offsets189";
     private static InvSeeModule instance;
 
-    public final BoolSetting summary, hud, itemNames, everyChest, showArmor, hudSameItems;
+    public final BoolSetting summary, hud, itemNames, everyChest, showArmor, hideMissing, hudSameItems;
     public final ModeSetting layout;
     public final SliderSetting overlayScale;
     public final ItemListSetting items, hudItems;
@@ -76,6 +76,7 @@ public class InvSeeModule extends HudModule {
         hud = new BoolSetting(this, "hud", "HUD mit dem letzten /invsee", true);
         itemNames = new BoolSetting(this, "names", "Item-Namen anzeigen", true);
         showArmor = new BoolSetting(this, "armor", "Rüstung mit Haltbarkeit und Schutzart", true);
+        hideMissing = new BoolSetting(this, "hideMissing", "Fehlende Items (×0) ausblenden", true);
         everyChest = new BoolSetting(this, "everyChest", "Auch bei jeder Kiste", false);
         layout = new ModeSetting(this, "layout", "Anordnung im Inventar", "Liste", "Liste", "Einzeln");
         overlayScale = new SliderSetting(this, "overlayScale", "Größe im Inventar", 50, 200, 5, 100, " %");
@@ -327,7 +328,7 @@ public class InvSeeModule extends HudModule {
     }
 
     private List<InvSeeData.Row> rows(InvSeeData.Snapshot s) {
-        List<InvSeeData.Row> rows = InvSeeData.itemRows(hudList(), s.stacks);
+        List<InvSeeData.Row> rows = InvSeeData.itemRows(hudList(), hideMissing.get(), s.stacks);
         if (showArmor.get()) rows.addAll(InvSeeData.armorRows(s.armor));
         return rows;
     }

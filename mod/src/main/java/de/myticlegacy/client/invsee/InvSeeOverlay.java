@@ -93,7 +93,7 @@ public final class InvSeeOverlay {
         InvSeeData.Snapshot snap = InvSeeData.snapshot(title, containerStacks());
         if (invsee) InvSeeModule.lastSeen(snap);
         if (!m.summary.get()) return;
-        List<InvSeeData.Row> rows = InvSeeData.itemRows(m.items.get(), snap.counts());
+        List<InvSeeData.Row> rows = InvSeeData.itemRows(m.items.get(), m.hideMissing.get(), snap.counts());
         if (m.showArmor.get()) rows.addAll(InvSeeData.armorRows(snap.armor()));
         AbstractContainerScreenAccessor acc = (AbstractContainerScreenAccessor) screen;
         int left = acc.mytic$left(), right = left + acc.mytic$imageWidth(), top = acc.mytic$top();

@@ -76,13 +76,14 @@ public final class InvSeeData {
         return new Snapshot(player, countAll(stacks), findArmor(stacks));
     }
 
-    public static List<Row> itemRows(List<String> ids, Map<String, Integer> counts) {
+    public static List<Row> itemRows(List<String> ids, boolean hideMissing, Map<String, Integer> counts) {
         List<Row> rows = new ArrayList<>();
         for (String id : ids) {
             Item item = ItemListSetting.item(id);
             if (item == null) continue;
             ItemStack stack = Module.stack(item);
             int n = counts.getOrDefault(id, 0);
+            if (hideMissing && n == 0) continue; // Option: fehlende Items weglassen
             List<Part> name = List.of(new Part(stack.getHoverName().getString(), n > 0 ? Tokens.TEXT : Tokens.SUBTLE));
             rows.add(new Row(id, stack, name, "×" + n, n > 0 ? Tokens.OK : Tokens.BAD, false, -1));
         }

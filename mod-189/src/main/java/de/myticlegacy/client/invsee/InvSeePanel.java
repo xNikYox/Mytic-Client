@@ -79,7 +79,7 @@ public final class InvSeePanel {
         float ly = PAD + HEAD - 2;
         Draw.rect(g, PAD - 2, ly, w - 2 * PAD + 4, Math.max(1f / Draw.k(g), 0.5f), 0, Tokens.LINE);
         float ry = ly + 3;
-        if (rows.isEmpty()) Type.middle(g, "Keine Items gewählt", PAD, ry + ROW / 2, FS, Tokens.MEDIUM, Tokens.SUBTLE);
+        if (rows.isEmpty()) Type.middle(g, "Keine gewählten Items vorhanden", PAD, ry + ROW / 2, FS, Tokens.MEDIUM, Tokens.SUBTLE);
         for (InvSeeData.Row row : rows) {
             drawRow(g, row, PAD, ry, w - 2 * PAD, names);
             ry += ROW;

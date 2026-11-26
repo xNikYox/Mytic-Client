@@ -79,7 +79,7 @@ public final class InvSeeOverlay {
         InvSeeData.Snapshot snap = InvSeeData.snapshot(title, containerStacks());
         if (invsee) InvSeeModule.lastSeen(snap);
         if (!m.summary.get()) return;
-        List<InvSeeData.Row> rows = InvSeeData.itemRows(m.items.get(), snap.stacks);
+        List<InvSeeData.Row> rows = InvSeeData.itemRows(m.items.get(), m.hideMissing.get(), snap.stacks);
         if (m.showArmor.get()) rows.addAll(InvSeeData.armorRows(snap.armor));
         int left = field(screen, "guiLeft", "field_147003_i"), top = field(screen, "guiTop", "field_147009_r");
         int right = left + field(screen, "xSize", "field_146999_f");

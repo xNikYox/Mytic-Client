@@ -83,12 +83,13 @@ public final class InvSeeData {
         return n;
     }
 
-    public static List<Row> itemRows(List<String> ids, List<ItemStack> stacks) {
+    public static List<Row> itemRows(List<String> ids, boolean hideMissing, List<ItemStack> stacks) {
         List<Row> rows = new ArrayList<Row>();
         for (String id : ids) {
             ItemStack icon = ItemListSetting.stack(id);
             if (icon == null) continue;
             int n = count(id, stacks);
+            if (hideMissing && n == 0) continue; // Option: fehlende Items weglassen
             List<Part> name = Collections.singletonList(new Part(icon.getDisplayName(), n > 0 ? Tokens.TEXT : Tokens.SUBTLE));
             rows.add(new Row(id, icon, name, "×" + n, n > 0 ? Tokens.OK : Tokens.BAD, false, -1));
         }
