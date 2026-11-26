@@ -91,6 +91,18 @@ test("Snapshot: sortiert, ohne PC-Werte und Geheimnisse; Zusammenführen behält
   assert.equal(merged.cape, null);
 });
 
+test("Accessoires (Kopf & Hals, Mods ab 2.58) wandern mit, wie die übrige Cosmetics-Auswahl", () => {
+  const local = { cape: "tannenzauber", acc: { kopf: "weihnachtsmuetze", hals: "schal" }, accHideHelmet: false, ownedCache: ["acc:*"] };
+  const part = syncedPart(MAIN, local);
+  assert.deepEqual(part.acc, { kopf: "weihnachtsmuetze", hals: "schal" });
+  assert.equal(part.accHideHelmet, false);
+  assert.equal("ownedCache" in part, false, "Freischaltungen kommen vom Server");
+  const merged = mergeLocal(MAIN, { acc: { hals: "schal" }, accHideHelmet: true }, local);
+  assert.deepEqual(merged.acc, { hals: "schal" });
+  assert.equal(merged.accHideHelmet, true);
+  assert.deepEqual(merged.ownedCache, ["acc:*"]);
+});
+
 test("pack/unpack und Größengrenze", () => {
   const { data, hash } = pack({ v: 1, files: { "myticclient.json": { a: 1 } } });
   assert.match(hash, /^[0-9a-f]{64}$/);
