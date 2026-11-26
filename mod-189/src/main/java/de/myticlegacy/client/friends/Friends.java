@@ -138,6 +138,23 @@ public final class Friends {
     private Friends() {
     }
 
+    /** Fähigkeiten des Friends-Servers aus dem letzten Lebenszeichen (z. B. "emote1") */
+    private static volatile Set<String> CAPS = Collections.emptySet();
+
+    public static boolean hasCap(String cap) {
+        return CAPS.contains(cap);
+    }
+
+    /** Adresse der Echtzeit-Verbindung (Emotes) */
+    public static String liveUrl() {
+        return BASE + "api/live";
+    }
+
+    /** Sitzung für die Echtzeit-Verbindung (nur in die Kopfzeile, nie ins Log) */
+    public static String authToken() {
+        return TOKEN;
+    }
+
     /** Wurde der Client über den Mytic Launcher mit Freundesliste gestartet? */
     public static boolean available() {
         return !BASE.isEmpty() && !TOKEN.isEmpty();
@@ -328,10 +345,15 @@ public final class Friends {
     /** Was das Lebenszeichen zusätzlich bringt (Server mit presence2). */
     private static void extras(JsonObject data) {
         boolean caps = false;
+        Set<String> all = new HashSet<>();
         if (data.has("caps") && data.get("caps").isJsonArray()) {
-            for (JsonElement e : data.getAsJsonArray("caps")) if ("presence2".equals(e.getAsString())) caps = true;
+            for (JsonElement e : data.getAsJsonArray("caps")) {
+                if ("presence2".equals(e.getAsString())) caps = true;
+                all.add(e.getAsString());
+            }
         }
         presence2 = caps;
+        CAPS = all;
         if (data.has("cos") && data.get("cos").isJsonObject()) {
             JsonObject cos = data.getAsJsonObject("cos");
             if (cos.has("changed") && cos.get("changed").isJsonArray()) {

@@ -29,5 +29,6 @@
   "key.myticclient.minimap_worldmap": "Open world map",
   "key.myticclient.minimap_waypoint": "Set waypoint here",
   "key.myticclient.minimap_waypoints": "Open waypoints",
-  "key.myticclient.minimap_zoom": "Cycle minimap zoom"
+  "key.myticclient.minimap_zoom": "Cycle minimap zoom",
+  "key.myticclient.emotes": "Open emote wheel"
 }

@@ -103,6 +103,9 @@ public final class MyticClient implements ClientModInitializer {
     public static final KeyMapping[] packKeys = new KeyMapping[de.myticlegacy.client.module.PackOverlayModule.SLOTS];
     public static ShulkerPreviewModule shulkerPreview;
     public static FriendsModule friends;
+    /** Emotes (Rad per Taste, für andere Mytic-Spieler sichtbar) */
+    public static de.myticlegacy.client.module.EmoteModule emotes;
+    public static KeyMapping emoteKey;
     public static de.myticlegacy.client.invsee.InvSeeModule invsee;
     public static de.myticlegacy.client.minimap.MinimapModule minimap;
 
@@ -238,6 +241,7 @@ public final class MyticClient implements ClientModInitializer {
         saturation = module(new de.myticlegacy.client.module.SaturationModule());
         shulkerPreview = module(new ShulkerPreviewModule());
         friends = module(new FriendsModule());
+        emotes = module(new de.myticlegacy.client.module.EmoteModule());
         theme = module(new SimpleModules.Theme());
         keyConflicts = module(new de.myticlegacy.client.module.KeyConflictModule());
         serverProfiles = module(new de.myticlegacy.client.module.ServerProfilesModule());
@@ -256,6 +260,7 @@ public final class MyticClient implements ClientModInitializer {
         streamerKey = Compat.registerKey("key.myticclient.streamer", InputConstants.UNKNOWN.getValue());
         galleryKey = Compat.registerKey("key.myticclient.screenshots", InputConstants.UNKNOWN.getValue());
         clipKey = Compat.registerKey("key.myticclient.clip", InputConstants.KEY_F8);
+        emoteKey = Compat.registerKey("key.myticclient.emotes", InputConstants.KEY_G);
         de.myticlegacy.client.games.GameToast.registerKeys(); // Herausforderung annehmen (J) / ablehnen (K)
         styles.registerKey(); // Mytic Styles (B)
         invsee.register(); // InvSee-Übersicht: /invsee erkennen, Taste I wiederholt das letzte /invsee
@@ -377,6 +382,7 @@ public final class MyticClient implements ClientModInitializer {
         freelook.tick(mc);
         snaplook.tick(mc);
         secondPerson.tick(mc);
+        emotes.tick(mc);
         pitchLock.tick(mc);
         while (pitchLockKey.consumeClick()) pitchLock.toggle(mc);
         de.myticlegacy.client.cosmetics.Shields.demoTick(mc);

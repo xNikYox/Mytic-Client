@@ -118,6 +118,15 @@ public final class Icons {
         icon("hat", "<path d=\"M4 17.5h16M7 17.5V9.5a5 5 0 0 1 10 0v8\"/><path d=\"M7 13.5h10\"/>");
         icon("mini", "<circle cx=\"12\" cy=\"6.5\" r=\"3\"/><path d=\"M8.5 21v-5.5H7.5v-4a2 2 0 0 1 2-2h5a2 2 0 0 1 2 2v4h-1V21\"/>");
         icon("wave", "<path d=\"M7 11V5.5a1.5 1.5 0 0 1 3 0V10M10 9.5V4a1.5 1.5 0 0 1 3 0v6M13 9.5V5a1.5 1.5 0 0 1 3 0v6.5M16 9.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7 6.5 6.5 0 0 1-5.6-3.2L4 13.6a1.5 1.5 0 0 1 2.5-1.6L7 13\"/>");
+        // Emotes und „Beitreten“
+        icon("cheer", "<circle cx=\"12\" cy=\"6\" r=\"2.2\"/><path d=\"M12 9.5v6M12 15.5l-3 5M12 15.5l3 5M12 11L7 4.5M12 11l5-6.5\"/>");
+        icon("clap", "<path d=\"M8.5 20.5l3.5-10 3.5 10M7 7.5L5 5.5M17 7.5l2-2M12 6.5V3\"/>");
+        icon("music", "<path d=\"M9 17.5V6l10-2v11.5\"/><circle cx=\"6.5\" cy=\"17.5\" r=\"2.5\"/><circle cx=\"16.5\" cy=\"15.5\" r=\"2.5\"/>");
+        icon("bow", "<circle cx=\"7\" cy=\"8\" r=\"2.2\"/><path d=\"M9.5 9.5l6 2.5v8.5M15.5 12l-4.5 3.5M9.5 9.5l-1.5 5.5\"/>");
+        icon("facepalm", "<circle cx=\"12\" cy=\"12\" r=\"8.5\"/><path d=\"M6 10.5h12M9 16c1.8-1 4.2-1 6 0\"/>");
+        icon("point", "<path d=\"M3.5 12h12M11 7l5 5-5 5\"/><circle cx=\"19.5\" cy=\"12\" r=\"1.3\"/>");
+        icon("sit", "<circle cx=\"9\" cy=\"5\" r=\"2.2\"/><path d=\"M9 8.5v6h6v6M9 14.5L6 20.5M4 20.5h16\"/>");
+        icon("join", "<path d=\"M10 4h9v16h-9\"/><path d=\"M3.5 12h11M10.5 8l4 4-4 4\"/>");
         icon("external", "<path d=\"M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5\"/>");
         icon("folder", "<path d=\"M3.5 6.5a2 2 0 0 1 2-2h4l2 2.5h7a2 2 0 0 1 2 2v8.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z\"/>");
         icon("bug", "<rect x=\"7\" y=\"7.5\" width=\"10\" height=\"12\" rx=\"5\"/><path d=\"M12 11v8.5M3.5 13H7M17 13h3.5M5 7.5l2.5 2M19 7.5l-2.5 2M5 19.5l2.5-2M19 19.5l-2.5-2M9.5 5.5l1 2M14.5 5.5l-1 2\"/>");
