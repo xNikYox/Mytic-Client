@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { createApi, SHOT_BODY_MAX, SYNC_BODY_MAX } from "./api.js";
 import { SCHEMA, MIGRATIONS } from "./schema.js";
+import { attachLive } from "./ws-node.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -43,7 +44,7 @@ export function clientIp(req, trustProxy = process.env.TRUST_PROXY === "1") {
 }
 
 export function createServer(api, { trustProxy } = {}) {
-  return http.createServer(async (req, res) => {
+  const server = http.createServer(async (req, res) => {
     const ip = clientIp(req, trustProxy);
     // Inhalt mit harter Grenze lesen (Screenshot-Upload größer); api.js prüft zusätzlich und bremst je Adresse
     const max = /\/api\/shots\/?(\?|$)/.test(req.url || "") ? SHOT_BODY_MAX : /\/api\/sync\/?(\?|$)/.test(req.url || "") ? SYNC_BODY_MAX : 16 * 1024;
@@ -73,6 +74,9 @@ export function createServer(api, { trustProxy } = {}) {
     res.writeHead(response.status, Object.fromEntries(response.headers));
     res.end(Buffer.from(await response.arrayBuffer()));
   });
+  // Emotes in Echtzeit (GET /api/live als WebSocket)
+  server.live = attachLive(server, api, (req) => clientIp(req, trustProxy));
+  return server;
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {

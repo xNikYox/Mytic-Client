@@ -68,7 +68,7 @@ a.pick { color: var(--cyan); cursor: pointer; text-decoration: underline; }
 </main>
 <script>
 (function () {
-  var NAMES = { cape: "Umhänge", wings: "Flügel", shield: "Schilde", aura: "Auren", acc: "Kopf & Hals" };
+  var NAMES = { cape: "Umhänge", wings: "Flügel", shield: "Schilde", aura: "Auren", acc: "Kopf & Hals", emote: "Emotes" };
   var GENERAL = [["*", "Alles"], ["admin", "Admin"], ["minime", "MiniMe"], ["nametag", "Nametag (freier Text + Vorlagen)"]];
   var key = "", catalog = null, current = null;
   try { key = sessionStorage.getItem("mytic-admin-key") || ""; } catch (e) {}
