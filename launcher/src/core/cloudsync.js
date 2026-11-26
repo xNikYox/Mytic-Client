@@ -402,4 +402,4 @@ class CloudSync {
   }
 }
 
-module.exports = { CloudSync, SYNC_FILES, canonical, decide, pack, unpack, syncedPart, mergeLocal, DEBOUNCE_MS, MAX_BYTES };
+module.exports = { CloudSync, SYNC_FILES, SECRET_KEY, stripSecrets, canonical, decide, pack, unpack, syncedPart, mergeLocal, DEBOUNCE_MS, MAX_BYTES };
