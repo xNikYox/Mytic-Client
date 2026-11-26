@@ -272,6 +272,7 @@ public final class MyticClient implements ClientModInitializer {
         CombatTracker.register();
         ClientTickEvents.END_CLIENT_TICK.register(MyticClient::tick);
         de.myticlegacy.client.games.GameCommand.register(); // /myticgame (Mytic Games, zuerst Schach)
+        de.myticlegacy.client.diag.DiagnoseMeasure.register(); // /myticdiagnose: 60 s Render-Thread messen (Diagnose-Messung)
         net.fabricmc.fabric.api.client.item.v1.ItemTooltipCallback.EVENT.register((stack, context, flag, lines) -> shulkerPreview.trimTooltip(stack, lines));
         ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> {
             if (screen instanceof net.minecraft.client.gui.screens.inventory.AbstractContainerScreen<?>) {
@@ -359,6 +360,7 @@ public final class MyticClient implements ClientModInitializer {
 
     private static void tick(Minecraft mc) {
         Diagnose.tick(mc);
+        de.myticlegacy.client.diag.DiagnoseMeasure.tick();
         // Rechts-Shift: Übersicht (Freunde, Mods, Cosmetics); Strg + Rechts-Shift: direkt die Mods
         while (menuKey.consumeClick()) {
             if (Compat.screen(mc) == null) Compat.setScreen(Compat.ctrlDown() ? new ModMenuScreen(null) : new HubScreen());

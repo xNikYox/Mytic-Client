@@ -4,6 +4,11 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.ConnectScreen;
+import net.minecraft.client.gui.screens.DisconnectedScreen;
+import net.minecraft.client.gui.screens.LoadingOverlay;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.multiplayer.PlayerInfo;
 
 import java.lang.management.GarbageCollectorMXBean;
@@ -11,7 +16,9 @@ import java.lang.management.ManagementFactory;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -20,6 +27,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Live-Messung für die Lag-Diagnose im Launcher: Ruckler (lange Bilder), Speicherbereinigungs-Pausen, Arbeitsspeicher,
  * FPS und Ping – zusammengefasst pro Sitzung in logs/mytic-diagnose.json (alle 30 s und beim Beenden). Kostet pro Bild
  * nur eine Zeitmessung, pro Sekunde ein paar Werte.
+ * Dazu Zeiten für die Diagnose im Launcher: Spielstart bis Hauptmenü, Server-Verbindung bis Welt geladen (mit längstem
+ * Bild während des Joins) und Ressourcen-Neuladen (mit Anzahl der Pakete) – geprüft einmal pro Tick, ohne eigene Mixins.
  */
 public final class Diagnose {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -36,6 +45,18 @@ public final class Diagnose {
     private static int renderDistance, simulationDistance;
     private static String server = "";
     private static final Map<Integer, Integer> fpsHistogram = new LinkedHashMap<>();
+
+    // Zeiten (Join, Neuladen, Spielstart); werden im Render-Thread geschrieben, beim Speichern kopiert
+    private static final int KEEP = 10, AFTER_JOIN_MS = 5000;
+    private static long titleAtMs = -1;
+    private static long joinStart, joinLevelAt, joinWorldAt;
+    private static volatile boolean joinTracking;
+    private static volatile long joinMaxFrameNs, afterJoinMaxFrameNs;
+    private static String joinKind, joinServer;
+    private static long reloadStart;
+    private static int reloadPacks;
+    private static boolean reloadInitial = true;
+    private static final List<Map<String, Object>> joins = new ArrayList<>(), reloads = new ArrayList<>();
 
     private Diagnose() {
     }
@@ -56,6 +77,11 @@ public final class Diagnose {
         if (lastFrame != 0) {
             long dt = now - lastFrame;
             if (dt > secondMaxFrame) secondMaxFrame = dt;
+            if (joinTracking) {
+                if (joinWorldAt == 0) {
+                    if (dt > joinMaxFrameNs) joinMaxFrameNs = dt;
+                } else if (dt > afterJoinMaxFrameNs) afterJoinMaxFrameNs = dt;
+            }
             Minecraft mc = Minecraft.getInstance();
             if (mc.level != null && mc.isWindowActive() && dt < 10_000_000_000L) {
                 if (dt > SPIKE_NS) spikes++;
@@ -69,6 +95,7 @@ public final class Diagnose {
     /** Jeden Tick (20×/s) aus MyticClient; einmal pro Sekunde wird gemessen */
     public static void tick(Minecraft mc) {
         long now = System.currentTimeMillis();
+        phases(mc, now);
         if (now - lastSecond < 1000) return;
         lastSecond = now;
         long gc = gcPauseMs();
@@ -106,6 +133,90 @@ public final class Diagnose {
             lastWrite = now;
             write();
         }
+    }
+
+    /** Übergänge erkennen: Ladebildschirm (Neuladen), erstes Menü, Verbindung → Welt geladen */
+    private static void phases(Minecraft mc, long now) {
+        boolean loadingOverlay = mc.getOverlay() instanceof LoadingOverlay;
+        Screen screen = de.myticlegacy.client.compat.Compat.screen(mc);
+        // Spielstart (JVM) bis zum ersten Menü ohne Ladebildschirm
+        if (titleAtMs < 0 && !loadingOverlay && screen != null) {
+            titleAtMs = now - ManagementFactory.getRuntimeMXBean().getStartTime();
+            write();
+        }
+        // Ressourcen neu laden (Start, F3+T, Pakete ändern)
+        if (loadingOverlay && reloadStart == 0) {
+            reloadStart = now;
+            reloadPacks = packCount(mc);
+        } else if (!loadingOverlay && reloadStart != 0) {
+            Map<String, Object> r = new LinkedHashMap<>();
+            r.put("at", now);
+            r.put("ms", now - reloadStart);
+            r.put("packs", reloadPacks);
+            r.put("initial", reloadInitial);
+            reloadInitial = false;
+            reloadStart = 0;
+            keep(reloads, r);
+        }
+        // Join: Verbindung (ConnectScreen) bzw. Einzelspieler-Start → Welt da → kein Ladebildschirm mehr
+        // Einzelspieler-Messung, die in Wahrheit das Verlassen einer Welt war: bei Server-Verbindung neu beginnen
+        if (joinTracking && joinLevelAt == 0 && "singleplayer".equals(joinKind) && screen instanceof ConnectScreen) {
+            joinTracking = false;
+            joinStart = 0;
+        }
+        if (joinStart == 0 && !joinTracking) {
+            if (mc.level == null && (screen instanceof ConnectScreen || mc.getSingleplayerServer() != null)) {
+                joinStart = now;
+                joinLevelAt = 0;
+                joinWorldAt = 0;
+                joinMaxFrameNs = 0;
+                afterJoinMaxFrameNs = 0;
+                joinKind = screen instanceof ConnectScreen ? "server" : "singleplayer";
+                joinServer = "";
+                joinTracking = true;
+            }
+        } else if (joinTracking && joinWorldAt == 0) {
+            if (joinLevelAt == 0 && mc.level != null) joinLevelAt = now;
+            if (mc.getCurrentServer() != null) joinServer = mc.getCurrentServer().ip;
+            if (mc.level != null && mc.player != null && !de.myticlegacy.client.compat.LevelLoading.active(mc)) {
+                joinWorldAt = now;
+            } else if (mc.level == null && (screen instanceof DisconnectedScreen || screen instanceof TitleScreen || screen instanceof de.myticlegacy.client.gui.MyticTitleScreen
+                    || screen instanceof net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen || now - joinStart > 300_000)) {
+                joinTracking = false; // abgebrochen oder gescheitert
+                joinStart = 0;
+            }
+        } else if (joinTracking && now - joinWorldAt >= AFTER_JOIN_MS) {
+            Map<String, Object> j = new LinkedHashMap<>();
+            j.put("at", joinStart);
+            j.put("kind", joinKind);
+            j.put("server", "singleplayer".equals(joinKind) ? "Einzelspieler" : joinServer);
+            j.put("connectMs", (joinLevelAt == 0 ? joinWorldAt : joinLevelAt) - joinStart);
+            j.put("loadingMs", joinLevelAt == 0 ? 0 : joinWorldAt - joinLevelAt);
+            j.put("totalMs", joinWorldAt - joinStart);
+            j.put("maxFrameMs", joinMaxFrameNs / 1_000_000L);
+            j.put("afterJoinMaxFrameMs", afterJoinMaxFrameNs / 1_000_000L);
+            joinTracking = false;
+            joinStart = 0;
+            keep(joins, j);
+        }
+        if (mc.level == null && joinTracking && joinWorldAt != 0) { // direkt wieder raus
+            joinTracking = false;
+            joinStart = 0;
+        }
+    }
+
+    private static int packCount(Minecraft mc) {
+        try {
+            return mc.getResourcePackRepository().getSelectedIds().size();
+        } catch (Throwable t) {
+            return -1;
+        }
+    }
+
+    private static synchronized void keep(List<Map<String, Object>> list, Map<String, Object> entry) {
+        list.add(entry);
+        while (list.size() > KEEP) list.remove(0);
+        write();
     }
 
     /** Summe der Pausen der Speicherbereinigung (nur echte Pausen, keine nebenläufige Arbeit von ZGC/G1) */
@@ -176,6 +287,19 @@ public final class Diagnose {
         o.put("server", server);
         o.put("gc", ManagementFactory.getGarbageCollectorMXBeans().stream().map(GarbageCollectorMXBean::getName).toList());
         o.put("cpus", Runtime.getRuntime().availableProcessors());
+        Map<String, Object> t = new LinkedHashMap<>();
+        t.put("gameStartToTitleMs", titleAtMs);
+        t.put("joins", new ArrayList<>(joins));
+        t.put("reloads", new ArrayList<>(reloads));
+        o.put("timings", t);
+        Map<String, Object> sys = new LinkedHashMap<>();
+        sys.put("minecraft", de.myticlegacy.client.compat.Compat.versionName());
+        sys.put("java", System.getProperty("java.version"));
+        sys.put("javaVendor", System.getProperty("java.vendor"));
+        sys.put("os", System.getProperty("os.name") + " " + System.getProperty("os.version") + " (" + System.getProperty("os.arch") + ")");
+        sys.put("maxMemoryMb", Runtime.getRuntime().maxMemory() / 1048576);
+        sys.put("jvmArgs", ManagementFactory.getRuntimeMXBean().getInputArguments().stream().filter(a -> a.startsWith("-X")).toList());
+        o.put("system", sys);
         return GSON.toJson(o);
     }
 

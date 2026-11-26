@@ -42,6 +42,7 @@ val renames = listOf(
         Regex("""\bEntityType\.ZOMBIE\b""") to "net.minecraft.world.entity.EntityTypes.ZOMBIE",
         Regex("""\bEntityType\.PLAYER\b""") to "net.minecraft.world.entity.EntityTypes.PLAYER",
         Regex("""\.getMainCamera\(\)""") to ".mainCamera()",
+        Regex("""\bmc\.getOverlay\(\)""") to "mc.gui.overlay()", // Lade-Overlay liegt ab 26.2 im Gui
     ))
 val copyShared by tasks.registering(Sync::class) {
     inputs.property("mc", mc)

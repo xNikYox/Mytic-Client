@@ -15,6 +15,7 @@
   "key.myticclient.secondperson": "2nd person (front view)",
   "key.myticclient.pitchlock": "Lock/unlock pitch",
   "key.myticclient.clip": "Save clip (last seconds)",
+  "key.myticclient.diagnose": "Diagnostic measurement (60 s)",
   "key.myticclient.hudprofile1": "HUD profile 1",
   "key.myticclient.hudprofile2": "HUD profile 2",
   "key.myticclient.hudprofile3": "HUD profile 3",
