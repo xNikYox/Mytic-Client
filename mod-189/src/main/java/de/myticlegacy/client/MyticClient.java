@@ -411,6 +411,9 @@ public final class MyticClient {
         Friends.notify = friends.notify.get();
         Friends.mcVersion = "1.8.9";
         Friends.currentServer = server;
+        // Freunde sehen öffentliche Adressen; LAN-Welten und private Adressen nur als Platzhalter
+        net.minecraft.client.multiplayer.ServerData data = mc.theWorld == null ? null : mc.getCurrentServerData();
+        Friends.sharedServer = data != null ? de.myticlegacy.client.friends.JoinTarget.shown(data.serverIP, data.isOnLAN(), false) : server;
         if (mc.thePlayer == null) return;
         String notice;
         while ((notice = Friends.pollNotice()) != null) {

@@ -10,7 +10,7 @@ public class FriendsModule extends Module {
 
     public FriendsModule() {
         super("friends", "Freunde", "Freunde sehen, dass du online bist (Rechts-Shift → Freunde)", Category.CLIENT, () -> Items.skull, true);
-        showServer = new BoolSetting(this, "showServer", "Server für Freunde anzeigen", true);
+        showServer = new BoolSetting(this, "showServer", "Server für Freunde sichtbar (nur Freunde, zum Beitreten)", true);
         notify = new BoolSetting(this, "notify", "Benachrichtigen, wenn Freunde online kommen", true);
     }
 }

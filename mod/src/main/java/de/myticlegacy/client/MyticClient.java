@@ -352,6 +352,9 @@ public final class MyticClient implements ClientModInitializer {
         Friends.notify = friends.notify.get();
         Friends.mcVersion = Compat.versionName();
         Friends.currentServer = server;
+        // Freunde sehen öffentliche Adressen; Realms, LAN-Welten und private Adressen nur als Platzhalter
+        net.minecraft.client.multiplayer.ServerData data = mc.level == null ? null : mc.getCurrentServer();
+        Friends.sharedServer = data != null ? de.myticlegacy.client.friends.JoinTarget.shown(data.ip, data.isLan(), data.isRealm()) : server;
         if (mc.player == null) return;
         String notice;
         while ((notice = Friends.pollNotice()) != null) Compat.chat(mc, "§8[§dMytic§8] " + notice);
