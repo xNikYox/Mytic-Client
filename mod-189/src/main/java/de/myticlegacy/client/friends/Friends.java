@@ -37,6 +37,8 @@ public final class Friends {
         public final String server;
         public final String version;
         public final long lastSeen;
+        /** Öffentliche Server-Adresse, „Beitreten“ möglich (Server mit join1; ältere Server: aus der Adresse geschätzt) */
+        private final boolean join;
 
         Friend(JsonObject o) {
             uuid = str(o, "uuid");
@@ -46,6 +48,7 @@ public final class Friends {
             place = str(o, "place");
             server = str(o, "server");
             version = str(o, "version");
+            join = o.has("join") && !o.get("join").isJsonNull() ? o.get("join").getAsBoolean() : JoinTarget.joinable(server);
             long seen = 0;
             if (o.has("lastSeen") && !o.get("lastSeen").isJsonNull()) seen = o.get("lastSeen").getAsLong();
             if (o.has("at") && !o.get("at").isJsonNull()) seen = o.get("at").getAsLong();
@@ -54,6 +57,11 @@ public final class Friends {
 
         public boolean inGame() {
             return online && "game".equals(place);
+        }
+
+        /** Kann man diesem Freund auf seinen Server folgen? (im Spiel, öffentliche Adresse) */
+        public boolean joinable() {
+            return inGame() && join && JoinTarget.joinable(server);
         }
 
         /** Statuszeile wie im Launcher. */
@@ -90,6 +98,8 @@ public final class Friends {
 
     /** Vom Spiel-Thread gesetzt: aktueller Server und Minecraft-Version. */
     public static volatile String currentServer;
+    /** Was Freunde als Server sehen (JoinTarget.shown: Realms/LAN/private Adressen als Platzhalter) */
+    public static volatile String sharedServer;
     public static volatile String mcVersion;
     /** Online-Status für Freunde sichtbar / Server anzeigen / Benachrichtigungen (aus den Mod-Einstellungen). */
     public static volatile boolean visible = true;
@@ -126,6 +136,23 @@ public final class Friends {
     private static final ConcurrentLinkedQueue<String> COS_CHANGED = new ConcurrentLinkedQueue<>();
 
     private Friends() {
+    }
+
+    /** Fähigkeiten des Friends-Servers aus dem letzten Lebenszeichen (z. B. "emote1") */
+    private static volatile Set<String> CAPS = Collections.emptySet();
+
+    public static boolean hasCap(String cap) {
+        return CAPS.contains(cap);
+    }
+
+    /** Adresse der Echtzeit-Verbindung (Emotes) */
+    public static String liveUrl() {
+        return BASE + "api/live";
+    }
+
+    /** Sitzung für die Echtzeit-Verbindung (nur in die Kopfzeile, nie ins Log) */
+    public static String authToken() {
+        return TOKEN;
     }
 
     /** Wurde der Client über den Mytic Launcher mit Freundesliste gestartet? */
@@ -265,7 +292,7 @@ public final class Friends {
 
     /** Status, wie ihn das Lebenszeichen meldet (Wechsel = sofort melden; versteckt zählt nur das Umschalten) */
     private static String state() {
-        return visible ? "on|" + showServer + "|" + currentServer + "|" + mcVersion : "hidden";
+        return visible ? "on|" + showServer + "|" + sharedServer + "|" + mcVersion : "hidden";
     }
 
     /** Hintergrund-Takt (ohne Netz): Lebenszeichen nur, wenn fällig oder der Status sich geändert hat (Server betreten/verlassen). */
@@ -294,7 +321,7 @@ public final class Friends {
             if (visible || presence2) {
                 JsonObject body = new JsonObject();
                 body.addProperty("place", "game");
-                if (currentServer != null) body.addProperty("server", currentServer);
+                if (sharedServer != null) body.addProperty("server", sharedServer);
                 if (mcVersion != null) body.addProperty("version", mcVersion);
                 body.addProperty("hideServer", !showServer);
                 // Cosmetics-Änderungen anderer seit dem letzten Lebenszeichen mitschicken lassen (ältere Server ignorieren das)
@@ -318,10 +345,15 @@ public final class Friends {
     /** Was das Lebenszeichen zusätzlich bringt (Server mit presence2). */
     private static void extras(JsonObject data) {
         boolean caps = false;
+        Set<String> all = new HashSet<>();
         if (data.has("caps") && data.get("caps").isJsonArray()) {
-            for (JsonElement e : data.getAsJsonArray("caps")) if ("presence2".equals(e.getAsString())) caps = true;
+            for (JsonElement e : data.getAsJsonArray("caps")) {
+                if ("presence2".equals(e.getAsString())) caps = true;
+                all.add(e.getAsString());
+            }
         }
         presence2 = caps;
+        CAPS = all;
         if (data.has("cos") && data.get("cos").isJsonObject()) {
             JsonObject cos = data.getAsJsonObject("cos");
             if (cos.has("changed") && cos.get("changed").isJsonArray()) {

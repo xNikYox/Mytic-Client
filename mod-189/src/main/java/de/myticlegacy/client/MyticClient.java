@@ -107,6 +107,9 @@ public final class MyticClient {
     public static FpsBoostModule fpsBoost;
     public static de.myticlegacy.client.module.ChatModule chat;
     public static FriendsModule friends;
+    /** Emotes (Rad per Taste, für andere Mytic-Spieler sichtbar) */
+    public static de.myticlegacy.client.module.EmoteModule emotes;
+    public static KeyBinding emoteKey;
     public static de.myticlegacy.client.invsee.InvSeeModule invsee;
     public static ClipModule clips;
     public static KeyBinding clipKey;
@@ -226,6 +229,7 @@ public final class MyticClient {
         fpsBoost = module(new FpsBoostModule());
         module(new de.myticlegacy.client.module.PerfProfileModule()); // Leistungsprofile (auch unter Einstellungen → Leistung)
         friends = module(new FriendsModule());
+        emotes = module(new de.myticlegacy.client.module.EmoteModule());
         theme = module(new SimpleModules.Theme());
         chat = module(new de.myticlegacy.client.module.ChatModule()); // Chat+
         clips = module(new ClipModule());
@@ -236,6 +240,7 @@ public final class MyticClient {
         snaplookKey = Compat.registerKey("key.myticclient.snaplook", InputConstants.KEY_V);
         invsee.register(); // InvSee-Übersicht: /invsee erkennen, Taste I wiederholt das letzte /invsee
         clipKey = Compat.registerKey("key.myticclient.clip", org.lwjgl.input.Keyboard.KEY_F8);
+        emoteKey = Compat.registerKey("key.myticclient.emotes", org.lwjgl.input.Keyboard.KEY_G);
         for (int i = 0; i < AutoTextModule.SLOTS; i++) autoTextKeys[i] = Compat.registerKey("key.myticclient.autotext" + (i + 1), 0);
 
         CombatTracker.register();
@@ -411,6 +416,9 @@ public final class MyticClient {
         Friends.notify = friends.notify.get();
         Friends.mcVersion = "1.8.9";
         Friends.currentServer = server;
+        // Freunde sehen öffentliche Adressen; LAN-Welten und private Adressen nur als Platzhalter
+        net.minecraft.client.multiplayer.ServerData data = mc.theWorld == null ? null : mc.getCurrentServerData();
+        Friends.sharedServer = data != null ? de.myticlegacy.client.friends.JoinTarget.shown(data.serverIP, data.isOnLAN(), false) : server;
         if (mc.thePlayer == null) return;
         String notice;
         while ((notice = Friends.pollNotice()) != null) {
@@ -431,6 +439,7 @@ public final class MyticClient {
             if (Compat.screen(mc) == null) Compat.setScreen(ctrl ? new ModMenuScreen(null) : new HubScreen());
         }
         tickFriends(mc);
+        emotes.tick(mc);
         invsee.tick(mc);
         if (mc.theWorld == null) sessionStart = 0;
         else if (sessionStart == 0) sessionStart = System.currentTimeMillis();

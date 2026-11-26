@@ -197,7 +197,7 @@ test("Lebenszeichen der Mod: Spielzeit, Einladungen, Freischaltungen und verstec
   await s.call("POST", "/api/friends/accept", { uuid: ALICE }, b);
   // Launcher: nur Freundesliste (mit caps), keine Extras
   let res = await s.call("POST", "/api/presence", { place: "launcher" }, a);
-  assert.deepEqual(res.data.caps, ["presence2", "sync1", "cos1"]);
+  assert.deepEqual(res.data.caps, ["presence2", "sync1", "cos1", "join1", "emote1"]);
   assert.equal(res.data.games, undefined);
   assert.equal(res.data.owned, undefined);
   // Mod: Spielzeit mitschicken, Einladungen und Freischaltungen zurück
@@ -644,4 +644,108 @@ test("Cosmetics-Lookup: Offline-UUID (Server im Offline-Modus) über den Namen z
   // Name passt nicht zur Offline-UUID oder echte UUID mit Namen: nichts umgeleitet
   look = await s.call("POST", "/api/cosmetics/lookup", { uuids: [off, BOB], names: { [off]: "Bob", [BOB]: "Alice" } }, b);
   assert.deepEqual(look.data.acc, {});
+});
+
+test("Freunden beitreten: join nur für öffentliche Adressen, private Adressen bleiben privat", async () => {
+  const s = setup();
+  const a = await s.login("Alice");
+  const b = await s.login("Bob");
+  await s.call("POST", "/api/friends/request", { name: "bob" }, a);
+  await s.call("POST", "/api/friends/accept", { uuid: ALICE }, b);
+  const seen = async (data) => {
+    await s.call("POST", "/api/presence", { place: "game", version: "1.21.11", ...data }, a);
+    return (await s.call("GET", "/api/friends", null, b)).data.friends[0];
+  };
+  let f = await seen({ server: "play.example.net:25570" });
+  assert.deepEqual([f.server, f.join], ["play.example.net:25570", true]);
+  f = await seen({ server: [192, 168, 1, 20].join(".") });
+  assert.deepEqual([f.server, f.join], ["Privater Server", false]);
+  f = await seen({ server: "localhost:25565" });
+  assert.deepEqual([f.server, f.join], ["Privater Server", false]);
+  f = await seen({ server: "Einzelspieler" });
+  assert.deepEqual([f.server, f.join], ["Einzelspieler", false]);
+  f = await seen({ server: "Realms" });
+  assert.deepEqual([f.server, f.join], ["Realms", false]);
+  f = await seen({ server: "play.example.net", hideServer: true });
+  assert.deepEqual([f.server, f.join], [null, false]);
+  // im Launcher oder offline: nie beitretbar
+  await s.call("POST", "/api/presence", { place: "launcher" }, a);
+  f = (await s.call("GET", "/api/friends", null, b)).data.friends[0];
+  assert.equal(f.join, false);
+  await seen({ server: "play.example.net" });
+  s.tick(ONLINE_MS + 1000);
+  f = (await s.call("GET", "/api/friends", null, b)).data.friends[0];
+  assert.deepEqual([f.online, f.server, f.join], [false, null, false]);
+});
+
+test("Emotes in Echtzeit über GET /api/live (WebSocket, Node)", async () => {
+  const s = setup();
+  const a = await s.login("Alice");
+  const b = await s.login("Bob");
+  const { createServer } = await import("../src/node-server.js");
+  const server = createServer(s.api);
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const url = `ws://127.0.0.1:${server.address().port}/api/live`;
+  const open = (token) => new Promise((resolve, reject) => {
+    const ws = new WebSocket(url, { headers: token ? { authorization: `Bearer ${token}` } : {} });
+    const inbox = [];
+    const waiters = [];
+    ws.onmessage = (e) => {
+      const msg = e.data === "pong" ? "pong" : JSON.parse(e.data);
+      const w = waiters.shift();
+      if (w) w(msg);
+      else inbox.push(msg);
+    };
+    ws.next = (ms = 2000) => (inbox.length ? Promise.resolve(inbox.shift()) : new Promise((res, rej) => {
+      const timer = setTimeout(() => {
+        waiters.splice(waiters.indexOf(done), 1);
+        rej(new Error("keine Nachricht"));
+      }, ms);
+      const done = (m) => {
+        clearTimeout(timer);
+        res(m);
+      };
+      waiters.push(done);
+    }));
+    ws.json = (data) => ws.send(typeof data === "string" ? data : JSON.stringify(data));
+    ws.onopen = () => resolve(ws);
+    ws.onerror = () => reject(new Error("abgelehnt"));
+  });
+  try {
+    await assert.rejects(open(null), /abgelehnt/); // ohne Anmeldung keine Verbindung
+    const wa = await open(a);
+    const wb = await open(b);
+    const hi = await wa.next();
+    assert.equal(hi.t, "hi");
+    assert.equal(hi.emotes.length, 8);
+    assert.equal(hi.gap, 3000);
+    await wb.next();
+    const hash = "ab".repeat(16);
+    wa.json({ t: "srv", s: hash });
+    wb.json({ t: "srv", s: hash });
+    wa.json("ping");
+    assert.equal(await wa.next(), "pong");
+    wb.json("ping");
+    assert.equal(await wb.next(), "pong");
+    wa.json({ t: "emote", e: "winken" });
+    const got = await wb.next();
+    assert.deepEqual([got.t, got.u, got.n, got.e, typeof got.at], ["emote", ALICE, "Alice", "winken", "number"]);
+    // zu schnell: Hinweis statt Emote
+    wa.json({ t: "emote", e: "jubeln" });
+    assert.equal((await wa.next()).t, "wait");
+    wa.json({ t: "stop" });
+    assert.deepEqual(await wb.next(), { t: "stop", u: ALICE });
+    // anderer Server: nichts mehr
+    wb.json({ t: "srv", s: "cd".repeat(16) });
+    wb.json("ping");
+    assert.equal(await wb.next(), "pong"); // srv ist verarbeitet
+    s.tick(3000);
+    wa.json({ t: "emote", e: "tanzen" });
+    await assert.rejects(wb.next(300), /keine Nachricht/);
+    wa.close();
+    wb.close();
+  } finally {
+    server.close();
+    server.closeAllConnections?.();
+  }
 });

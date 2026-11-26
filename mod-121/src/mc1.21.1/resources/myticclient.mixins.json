@@ -22,7 +22,8 @@
     "ItemModelResolverMixin",
     "ShieldSpecialRendererMixin",
     "ItemInHandLayerMixin",
-    "LivingEntityRendererMixin"
+    "LivingEntityRendererMixin",
+    "PlayerModelEmoteMixin"
   ],
   "injectors": {
     "defaultRequire": 1

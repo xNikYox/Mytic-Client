@@ -9,6 +9,8 @@ import { MOJANG_KEYS } from "./mojang-keys.js";
 import { CATALOG } from "./catalog.js";
 import { ADMIN_PAGE } from "./admin-page.js";
 import { START_FEN, parseFen, toFen, applyUci, status as chessStatus } from "./chess.js";
+import { joinable, shownServer } from "./join.js";
+import { EMOTE_CATALOG } from "./live.js";
 
 /** Ab wann ein Spieler als offline gilt (Mod und Launcher melden sich höchstens jede Minute, bei Bedarf öfter). */
 export const ONLINE_MS = 150 * 1000;
@@ -18,8 +20,10 @@ export const ONLINE_MS = 150 * 1000;
  * "sync1" = GET/PUT /api/sync gibt es, und das Lebenszeichen bringt den Stand des Einstellungs-Syncs mit (sync).
  * "cos1" = Lebenszeichen mit cosSince bringt mit, wessen Cosmetics sich seitdem geändert haben (cos) – die Mod fragt
  * dann nur diese Spieler neu ab statt alle paar Minuten alle.
+ * "join1" = Freunde in der Liste haben "join" (öffentliche Server-Adresse, „Beitreten“ möglich).
+ * "emote1" = GET /api/live (WebSocket) für Emotes in Echtzeit gibt es.
  */
-const CAPS = ["presence2", "sync1", "cos1"];
+const CAPS = ["presence2", "sync1", "cos1", "join1", "emote1"];
 /** Cosmetics-Änderungen je Lebenszeichen höchstens so viele; ältere Stände als COS_WINDOW_MS gelten als Neustart. */
 const COS_CHANGES_MAX = 200;
 const COS_WINDOW_MS = 60 * 60 * 1000;
@@ -432,6 +436,8 @@ export function createApi(db, options = {}) {
       online: row.last_seen > t - ONLINE_MS,
       place: row.last_seen > t - ONLINE_MS ? row.place || "launcher" : null,
       server: row.last_seen > t - ONLINE_MS ? row.server || null : null,
+      // „Beitreten“: nur öffentliche Adressen (Freunde sehen die Adresse ohnehin, Fremde nie)
+      join: row.last_seen > t - ONLINE_MS && row.place === "game" && joinable(row.server),
       version: row.version || null,
       lastSeen: row.last_seen || 0,
     };
@@ -1246,7 +1252,8 @@ export function createApi(db, options = {}) {
       const place = data.place === "game" ? "game" : "launcher";
       let view = me;
       if (data.hidden !== true) {
-        const server = place === "game" && !data.hideServer ? clean(data.server, 64) : null;
+        // private Adressen (LAN, localhost, 192.168.…) nie weitergeben – auch nicht von älteren Mods
+        const server = place === "game" && !data.hideServer ? shownServer(clean(data.server, 64)) : null;
         const version = clean(data.version, 16);
         await db.run("UPDATE users SET last_seen = ?, place = ?, server = ?, version = ? WHERE uuid = ?", [now(), place, server, version, me.uuid]);
         view = { ...me, last_seen: now(), place, server, version };
@@ -1369,7 +1376,9 @@ export function createApi(db, options = {}) {
     // ------------------------------------------------------------------ Admin: Cosmetics freischalten
     "GET /api/admin/catalog": async (request, ip) => {
       await adminAuth(request, ip);
-      return { catalog: CATALOG };
+      // Emotes: nur die nicht freien zum Freischalten anbieten (die ersten acht sind für alle frei)
+      const emotes = EMOTE_CATALOG.filter((e) => !e.free).map((e) => [e.id, e.name]);
+      return { catalog: emotes.length ? { ...CATALOG, emote: emotes } : CATALOG };
     },
 
     /** Spieler suchen (Name oder UUID); unbekannte Namen werden wie bei Freundschaftsanfragen angelegt. */
@@ -1865,14 +1874,33 @@ export function createApi(db, options = {}) {
   /** Strengere Töpfe für Anmeldung ohne Konto und für Uploads. */
   const STRICT = { "POST /api/auth/challenge": "auth", "POST /api/auth/login": "auth", "POST /api/auth/offline": "auth", "POST /api/shots": "upload", "PUT /api/sync": "upload" };
 
-  return async function handle(request, info) {
+  async function handle(request, info) {
     try {
       return await dispatch(request, clientIp(request, info));
     } catch (error) {
       if (error instanceof HttpError) return json({ error: error.message }, error.status, error.retryAfter);
       throw error;
     }
+  }
+
+  /**
+   * Für die Echtzeit-Verbindung (live.js, GET /api/live): Anmeldung prüfen und bremsen wie eine normale Anfrage.
+   * Gibt { uuid, name } zurück oder eine fertige Fehler-Antwort ({ response }).
+   */
+  handle.liveAuth = async (request, info) => {
+    try {
+      limit("all", clientIp(request, info));
+      const me = await auth(request);
+      return { uuid: me.uuid, name: me.name };
+    } catch (error) {
+      if (error instanceof HttpError) return { response: json({ error: error.message }, error.status, error.retryAfter) };
+      throw error;
+    }
   };
+  /** Darf uuid dieses Emote nutzen? (frei oder freigeschaltet: "emote:<id>", "emote:*", "*") */
+  handle.ownsEmote = async (uuid, id) => owns(await grantsOf(uuid), "emote", id);
+  handle.now = now;
+  return handle;
 
   async function dispatch(request, ip) {
     const url = new URL(request.url);

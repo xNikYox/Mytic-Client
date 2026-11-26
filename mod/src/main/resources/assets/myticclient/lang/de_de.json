@@ -29,5 +29,6 @@
   "key.myticclient.minimap_worldmap": "Weltkarte öffnen",
   "key.myticclient.minimap_waypoint": "Wegpunkt hier setzen",
   "key.myticclient.minimap_waypoints": "Wegpunkte öffnen",
-  "key.myticclient.minimap_zoom": "Minimap-Zoom wechseln"
+  "key.myticclient.minimap_zoom": "Minimap-Zoom wechseln",
+  "key.myticclient.emotes": "Emote-Rad öffnen"
 }

@@ -20,7 +20,8 @@
     "ItemModelResolverMixin",
     "ShieldSpecialRendererMixin",
     "LivingEntityRendererMixin",
-    "PackRepositoryMixin"
+    "PackRepositoryMixin",
+    "PlayerModelEmoteMixin"
   ],
   "injectors": {
     "defaultRequire": 1

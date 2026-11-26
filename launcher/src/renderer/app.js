@@ -1241,6 +1241,35 @@ $("update-install").addEventListener("click", async () => {
 let friendsData = null;
 let friendsTimer = null;
 const removeArmed = new Set();
+const joinArmed = new Set();
+
+/** Öffentliche Server-Adresse eines Freundes (Server meldet "join"; ältere Server: grob aus der Adresse geschätzt). */
+function friendJoinable(f) {
+  if (!f.online || f.place !== "game" || !f.server) return false;
+  if (typeof f.join === "boolean") return f.join;
+  return /^[a-z0-9.-]+\.[a-z]{2,}(:\d{1,5})?$/i.test(f.server) && !/^(localhost|.*\.local)(:|$)/i.test(f.server);
+}
+
+/** „Beitreten“: Minecraft mit dem aktiven Profil starten und direkt auf den Server des Freundes verbinden. */
+async function joinFriend(f) {
+  if (!selectedAccount()) {
+    openAccounts();
+    return;
+  }
+  const mine = activeProfile().mcVersion;
+  showPage("home");
+  $("launch").disabled = true;
+  $("status").textContent = `Verbinde mit ${f.server} …`;
+  if (f.version && mine && f.version !== mine) toast(`${f.name} spielt mit ${f.version}, dein Profil mit ${mine} – der Server muss deine Version unterstützen.`);
+  try {
+    await api.launch({ server: f.server });
+  } catch (error) {
+    $("status").textContent = running ? runningText() : "Start fehlgeschlagen";
+    $("launch-fill").style.width = "0";
+    toast(errorText(error), true);
+    $("launch").disabled = false;
+  }
+}
 
 /** Kopf aus 64 Pixeln "AARRGGBB" (vom Friends-Server) als Bild. */
 function headImage(hex, name, size = 32) {
@@ -1301,7 +1330,7 @@ function friendRow(user, status, actions) {
   buttons.className = "friend-actions";
   for (const action of actions) {
     const button = document.createElement("button");
-    button.className = `ghost small${action.danger ? " danger" : ""}`;
+    button.className = `ghost small${action.danger ? " danger" : ""}${action.accent ? " accent" : ""}`;
     button.textContent = action.label;
     button.title = action.title || "";
     button.addEventListener("click", action.run);
@@ -1340,7 +1369,24 @@ function renderFriends(data) {
     empty.textContent = "Noch keine Freunde – gib oben einen Spielernamen ein. Dein Freund muss den Mytic Client einmal gestartet haben.";
     list.replaceChildren(empty);
   } else {
-    list.replaceChildren(...data.friends.map((f) => friendRow(f, friendStatus(f), [{
+    list.replaceChildren(...data.friends.map((f) => friendRow(f, friendStatus(f), [...(friendJoinable(f) ? [{
+      label: joinArmed.has(f.uuid) ? "Starten & beitreten?" : "Beitreten",
+      accent: true,
+      title: `Minecraft starten und mit ${f.server} verbinden`,
+      run: () => {
+        if (!joinArmed.has(f.uuid)) {
+          joinArmed.add(f.uuid);
+          renderFriends(friendsData);
+          setTimeout(() => {
+            joinArmed.delete(f.uuid);
+            if (friendsData) renderFriends(friendsData);
+          }, 4000);
+          return;
+        }
+        joinArmed.delete(f.uuid);
+        joinFriend(f);
+      },
+    }] : []), {
       label: removeArmed.has(f.uuid) ? "Wirklich entfernen?" : "Entfernen",
       danger: true,
       run: () => {

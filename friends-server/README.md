@@ -67,6 +67,40 @@ nach 3–6 Minuten, ohne öfter abzufragen:
   Server im Offline-Modus): Passt die UUID zum Namen, gilt das Microsoft-Konto mit diesem Namen; die Antwort steht
   unter der angefragten UUID, `aliases: { angefragt: Konto }` ordnet Änderungsmeldungen zu.
 
+## Freunden beitreten (`join1`)
+
+Freunde sehen den Server, auf dem man spielt (Einstellung „Server für Freunde sichtbar“, Standard an; Fremde sehen
+ihn nie). Jeder Freund in der Liste hat jetzt `join: true|false` – `true` nur, wenn er gerade im Spiel ist und die
+Adresse öffentlich erreichbar ist (`src/join.js`): keine Einzelspieler-/LAN-Welt, kein Realm, keine privaten oder lokalen
+Adressen (localhost, 127/8, 10/8, 172.16/12, 192.168/16, 169.254/16, 100.64/10, IPv6 ::1/fc00::/7/fe80::/10, Namen ohne
+Punkt oder auf .local/.lan/.home.arpa …). Private Adressen speichert der Server gar nicht erst, Freunde sehen
+„Privater Server“ (auch bei älteren Mods). Keine zusätzliche Anfrage: alles steckt im bisherigen Lebenszeichen.
+
+## Emotes in Echtzeit (`emote1`, `GET /api/live`)
+
+Emotes sollen bei anderen Mytic-Spielern auf demselben Server in unter 1–2 s ankommen. Abfragen im Sekundentakt wären
+≈ 3 600 Anfragen je Spieler und Stunde – deshalb ein **WebSocket** auf das Durable Object mit **Hibernation**:
+
+- Verbindungsaufbau = 1 Anfrage, eingehende Nachrichten zählen nur zu **1/20**, ausgehende gar nicht. Das Objekt schläft
+  zwischen den Nachrichten (kein Dauerbetrieb); `"ping"` beantwortet Cloudflare selbst (Auto-Response).
+- Die Mod verbindet sich nur, solange sie auf einem Multiplayer-Server ist (und Emotes an sind), und trennt nach
+  2 Minuten im Menü. Sie meldet nur den **Hash** des Servers (`{"t":"srv","s":SHA-256("mytic-srv|host:port")}`), nie die
+  Adresse. Emotes gehen nur an andere Verbindungen mit demselben Hash; die Mod zeigt sie nur bei Spielern, die sie
+  gerade sieht.
+- Bremse: 1 Emote je 3 s und Konto (`{"t":"wait"}`), Abbruch-Meldungen alle 0,5 s, höchstens 30 Nachrichten je 10 s,
+  2 Verbindungen je Konto. Der Katalog steht in `src/live.js` (alle acht frei; spätere Emotes mit `free: false` lassen sich
+  auf der Admin-Seite als `emote:<id>` freischalten).
+- Unter Node macht `src/ws-node.js` dasselbe (kleiner eigener WebSocket-Server).
+
+| je spielendem Nutzer und Stunde | Anfragen |
+|---|---|
+| Verbindung (1 je Server-Betreten, dazu seltene Neuverbindungen) | ≈ 1–2 |
+| `ping` alle 60 s (60 / 20, falls Auto-Responses zählen) | ≤ 3 |
+| eigene Emotes/Abbrüche (z. B. 20 / 20) + Serverwechsel | ≈ 1 |
+| **Summe** | **≈ 4–6** (≈ +7 % zu den ≈ 70 des Lebenszeichens) |
+
+Empfangene Emotes kosten nichts. Ohne Verbindung (älterer Server ohne `emote1`) spielt die Mod Emotes nur für sich.
+
 ## Einstellungs-Sync (`GET`/`PUT /api/sync`)
 
 Der Launcher synchronisiert die Mytic-Einstellungen (Mods, HUD, Profile, Fadenkreuz, Chat, Cosmetics-Auswahl) je Konto:

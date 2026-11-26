@@ -26,6 +26,8 @@ public class FriendsScreen extends DesignScreen {
     private int tab;
     private String selected;
     private Friends.Friend confirmRemove;
+    /** „Beitreten“ mit Rückfrage */
+    private Friends.Friend confirmJoin;
     private final Kit.Field add = new Kit.Field(16);
     private final Kit.Field search = new Kit.Field(16);
     private final Kit.Scroll scroll = new Kit.Scroll();
@@ -64,6 +66,17 @@ public class FriendsScreen extends DesignScreen {
     }
 
     private static void challenge(Friends.Friend f) {
+    }
+
+    /** Auf denselben Server wie man selbst? (dann gibt es nichts beizutreten) */
+    private static boolean sameServer(Friends.Friend f) {
+        String mine = Friends.currentServer;
+        return mine != null && f.server != null && mine.trim().equalsIgnoreCase(f.server.trim());
+    }
+
+    private void join(Friends.Friend f) {
+        confirmJoin = null;
+        if (!de.myticlegacy.client.friends.JoinFlow.join(f.server, f.name)) Toasts.error("Diesem Server kann man nicht beitreten");
     }
 
     private boolean inWorld() {
@@ -133,6 +146,7 @@ public class FriendsScreen extends DesignScreen {
         }
         drawDetail(x + mainW, y, side, h);
         if (confirmRemove != null) drawConfirm();
+        else if (confirmJoin != null) drawJoin();
     }
 
     /** Dunklere Fläche der rechten Spalte, rechts an die Rundung des Fensters angepasst */
@@ -236,6 +250,11 @@ public class FriendsScreen extends DesignScreen {
                 right -= bw + 8 * d;
                 kit.button("ch:" + f.uuid, right, y + (rh - bh) / 2f, bw, bh, "Herausfordern", null, Widgets.SECONDARY, () -> challenge(f));
             }
+            if (f.joinable() && !sameServer(f)) {
+                float bh = 32 * d, bw = kit.buttonWidth("Beitreten", "join", bh);
+                right -= bw + 8 * d;
+                kit.button("join:" + f.uuid, right, y + (rh - bh) / 2f, bw, bh, "Beitreten", "join", Widgets.PRIMARY, () -> confirmJoin = f);
+            }
         }
         float tw = right - tx - 12 * d;
         kit.textMid(f.name, tx, y + rh / 2f - 10 * d, 16, Tokens.SEMIBOLD, f.online ? Tokens.TEXT : Tokens.MUTED, tw);
@@ -319,8 +338,17 @@ public class FriendsScreen extends DesignScreen {
             kit.textCenter(de.myticlegacy.client.gui.ui.Type.ellipsize(kit.g, f.status(), pw - 24 * d, 14.5f * d, Tokens.MEDIUM), cx, top + 188 * d, 14.5f,
                     Tokens.MEDIUM, f.inGame() ? 0xFFD6C0FF : Tokens.MUTED);
             float bh = 38 * d, by = top + 212 * d;
-            if (canChallenge()) {
-                final Friends.Friend ff = f;
+            final Friends.Friend ff = f;
+            boolean join = f.joinable();
+            if (join && canChallenge()) {
+                float half = (pw - 36 * d - 10 * d) / 2f;
+                kit.button("djoin", px + 18 * d, by, half, bh, sameServer(f) ? "Gleicher Server" : "Beitreten", "join", Widgets.PRIMARY,
+                        sameServer(f) ? null : (Runnable) () -> confirmJoin = ff);
+                kit.button("dch", px + 18 * d + half + 10 * d, by, half, bh, "Herausfordern", "play", Widgets.SECONDARY, () -> challenge(ff));
+            } else if (join) {
+                kit.button("djoin", px + 18 * d, by, pw - 36 * d, bh, sameServer(f) ? "Gleicher Server" : "Beitreten", "join", Widgets.PRIMARY,
+                        sameServer(f) ? null : (Runnable) () -> confirmJoin = ff);
+            } else if (canChallenge()) {
                 kit.button("dch", px + 18 * d, by, pw - 36 * d, bh, "Herausfordern", "play", Widgets.PRIMARY, f.online ? () -> challenge(ff) : null);
             } else {
                 kit.badge(f.online ? "Online" : "Offline", null, cx - kit.width(f.online ? "Online" : "Offline", 12.5f, Tokens.SEMIBOLD) / 2f - 9 * d, by + 7 * d,
@@ -334,6 +362,7 @@ public class FriendsScreen extends DesignScreen {
             List<String[]> rows = new ArrayList<String[]>();
             if (f.inGame()) rows.add(new String[]{"servers", f.server == null ? "Im Spiel" : f.server.equals("Einzelspieler") ? "Spielt im Einzelspieler" : "Spielt auf " + f.server});
             else if (f.online) rows.add(new String[]{"monitor", "Ist im Mytic Launcher"});
+            if (f.inGame() && f.server != null && !f.joinable()) rows.add(new String[]{"lock", "Nicht beitretbar (Einzelspieler, LAN, Realms oder privat)"});
             if (f.version != null && !f.version.isEmpty()) rows.add(new String[]{"cube", "Minecraft " + f.version});
             if (!f.online) rows.add(new String[]{"clock", Character.toUpperCase(f.status().charAt(0)) + f.status().substring(1)});
             rows.add(new String[]{"users", "In deiner Freundesliste"});
@@ -366,7 +395,7 @@ public class FriendsScreen extends DesignScreen {
             MyticClient.friends.toggle();
             Friends.refresh();
         });
-        privacy("srv", "Server für Freunde anzeigen", MyticClient.friends.showServer.get(), px, by + 44 * d, pw, () -> {
+        privacy("srv", "Server für Freunde sichtbar", MyticClient.friends.showServer.get(), px, by + 44 * d, pw, () -> {
             MyticClient.friends.showServer.toggle();
             MyticClient.config().save();
             Friends.refresh();
@@ -400,12 +429,38 @@ public class FriendsScreen extends DesignScreen {
         kit.button("cfm:no", x + w - 28 * d - ew - 10 * d - cw, by, cw, bh, "Abbrechen", null, Widgets.GHOST, () -> confirmRemove = null);
     }
 
+    /** Rückfrage „Server beitreten?“ mit Hinweis auf eine andere Minecraft-Version */
+    private void drawJoin() {
+        final Friends.Friend f = confirmJoin;
+        if (!f.joinable()) {
+            confirmJoin = null;
+            return;
+        }
+        String mine = Friends.mcVersion;
+        boolean otherVersion = f.version != null && mine != null && !f.version.equals(mine);
+        float w = 560 * d, h = (otherVersion ? 288 : 248) * d, x = (vw - w) / 2f, y = (vh - h) / 2f;
+        kit.modal(x, y, w, h, () -> confirmJoin = null);
+        kit.text("Server beitreten?", x + 28 * d, y + 30 * d, 21, Tokens.SEMIBOLD, Tokens.TEXT);
+        String leave = inWorld() ? (Friends.currentServer != null && Friends.currentServer.equals("Einzelspieler") ? "Deine Welt wird gespeichert und verlassen. " : "Du verlässt den aktuellen Server. ") : "";
+        kit.paragraph(leave + "Du verbindest dich mit " + f.server + ", dem Server von " + f.name + ".", x + 28 * d, y + 72 * d,
+                w - 56 * d, 15, Tokens.MEDIUM, Tokens.MUTED, 22, 3);
+        if (otherVersion) {
+            kit.paragraph(f.name + " spielt mit Minecraft " + f.version + ", du mit " + mine + " – der Server muss deine Version unterstützen.",
+                    x + 28 * d, y + 148 * d, w - 56 * d, 14, Tokens.MEDIUM, Tokens.WARN, 20, 2);
+        }
+        float bh = 44 * d, by = y + h - 28 * d - bh;
+        float ew = kit.buttonWidth("Beitreten", "join", bh);
+        kit.button("jn:ok", x + w - 28 * d - ew, by, ew, bh, "Beitreten", "join", Widgets.PRIMARY, () -> join(f));
+        float cw = kit.buttonWidth("Abbrechen", null, bh);
+        kit.button("jn:no", x + w - 28 * d - ew - 10 * d - cw, by, cw, bh, "Abbrechen", null, Widgets.GHOST, () -> confirmJoin = null);
+    }
+
     // ------------------------------------------------------------------------------------------ Eingaben
 
     @Override
     protected boolean typedFree(String s) {
         // einfach lostippen = Freund hinzufügen (die Taste aus der Übersicht kurz nach dem Öffnen nicht mitzählen)
-        if (!Friends.available() || confirmRemove != null || System.currentTimeMillis() - openedAt < 250) return false;
+        if (!Friends.available() || confirmRemove != null || confirmJoin != null || System.currentTimeMillis() - openedAt < 250) return false;
         if (s.length() != 1 || NAME_CHARS.indexOf(s.charAt(0)) < 0) return false;
         kit.focus(add);
         return kit.typed(s);
@@ -414,6 +469,7 @@ public class FriendsScreen extends DesignScreen {
     @Override
     protected void back() {
         if (confirmRemove != null) confirmRemove = null;
+        else if (confirmJoin != null) confirmJoin = null;
         else Compat.setScreen(inWorld() ? new HubScreen() : null);
     }
 }
