@@ -27,7 +27,8 @@
     "TotemPopMixin",
     "ClipCaptureMixin",
     "VanillaHudMixin",
-    "BossBarMixin"
+    "BossBarMixin",
+    "OptionsSaveMixin"
   ],
   "injectors": {
     "defaultRequire": 0

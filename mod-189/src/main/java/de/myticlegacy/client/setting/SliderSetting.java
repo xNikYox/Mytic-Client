@@ -19,7 +19,11 @@ public class SliderSetting extends Setting<Double> {
 
     @Override
     public Double get() {
-        Object raw = raw();
+        return cachedValue();
+    }
+
+    @Override
+    protected Double convert(Object raw) {
         return raw instanceof Number ? clamp(((Number) raw).doubleValue()) : defaultValue;
     }
 

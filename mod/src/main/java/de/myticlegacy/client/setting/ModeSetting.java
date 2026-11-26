@@ -15,7 +15,12 @@ public class ModeSetting extends Setting<String> {
 
     @Override
     public String get() {
-        return raw() instanceof String s && Arrays.asList(options).contains(s) ? s : defaultValue;
+        return cachedValue();
+    }
+
+    @Override
+    protected String convert(Object raw) {
+        return raw instanceof String s && Arrays.asList(options).contains(s) ? s : defaultValue;
     }
 
     @Override

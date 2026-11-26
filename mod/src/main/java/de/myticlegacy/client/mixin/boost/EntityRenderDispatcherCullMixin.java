@@ -9,11 +9,19 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-/** FPS-Boost: weit entfernte oder verdeckte Entities gar nicht erst zeichnen */
+/**
+ * FPS-Boost: weit entfernte oder verdeckte Entities gar nicht erst zeichnen. Entfernung vorab (billig, spart Minecrafts
+ * Sichtfeld-Prüfung), Sichtstrahlen erst danach und nur für Entities, die Minecraft sonst zeichnen würde.
+ */
 @Mixin(EntityRenderDispatcher.class)
 public abstract class EntityRenderDispatcherCullMixin {
     @Inject(method = "shouldRender", at = @At("HEAD"), cancellable = true, require = 0)
     private void mytic$cull(Entity entity, Frustum frustum, double x, double y, double z, CallbackInfoReturnable<Boolean> cir) {
-        if (Culling.cullEntity(entity)) cir.setReturnValue(false);
+        if (Culling.cullEntityFar(entity)) cir.setReturnValue(false);
+    }
+
+    @Inject(method = "shouldRender", at = @At("RETURN"), cancellable = true, require = 0)
+    private void mytic$cullHidden(Entity entity, Frustum frustum, double x, double y, double z, CallbackInfoReturnable<Boolean> cir) {
+        if (cir.getReturnValueZ() && Culling.cullEntityHidden(entity)) cir.setReturnValue(false);
     }
 }

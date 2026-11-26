@@ -17,10 +17,10 @@ import java.util.Map;
 public final class Config {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
-    public Map<String, Boolean> enabled = new LinkedHashMap<>();
+    public Map<String, Boolean> enabled = new de.myticlegacy.client.setting.TrackedMap<>();
     public Map<String, int[]> positions = new LinkedHashMap<>();
     /** Einstellungen der Module, Schlüssel "modul.einstellung". Zahlen werden von Gson als Double gelesen. */
-    public Map<String, Object> settings = new LinkedHashMap<>();
+    public Map<String, Object> settings = new de.myticlegacy.client.setting.TrackedMap<>();
     /** Helligkeit vor dem Einschalten von Fullbright, wird beim Ausschalten wiederhergestellt. */
     public double savedGamma = 0.5;
     /** Gewählter Umhang (Cosmetics), null = keiner. */
@@ -122,6 +122,10 @@ public final class Config {
                     if (config.perfSaved == null) config.perfSaved = new LinkedHashMap<String, String>();
                     if (config.hudProfiles == null) config.hudProfiles = new LinkedHashMap<>();
                     if (config.serverProfiles == null) config.serverProfiles = new LinkedHashMap<>();
+                    // Gson liest Maps als LinkedTreeMap (Suche per Baum) – als TrackedMap: schnelles Nachschlagen, Änderungen gemeldet
+                    config.enabled = de.myticlegacy.client.setting.TrackedMap.of(config.enabled);
+                    config.settings = de.myticlegacy.client.setting.TrackedMap.of(config.settings);
+                    config.positions = new LinkedHashMap<>(config.positions); // HUD-Positionen werden pro Bild gelesen
                     config.hudProfiles.values().removeIf(p -> p == null);
                     for (HudProfile p : config.hudProfiles.values()) {
                         if (p.positions == null) p.positions = new LinkedHashMap<>();

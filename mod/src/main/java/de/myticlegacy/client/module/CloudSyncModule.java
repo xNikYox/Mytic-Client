@@ -248,13 +248,13 @@ public class CloudSyncModule extends Module {
             // 2. übernehmen – bei fremden Codes bleiben die eigenen Werte der Befehls-Module erhalten
             if (enabled != null) {
                 if (foreign) for (String id : NO_IMPORT) if (cfg.enabled.containsKey(id)) enabled.put(id, cfg.enabled.get(id));
-                cfg.enabled = enabled;
+                cfg.enabled = de.myticlegacy.client.setting.TrackedMap.of(enabled);
             }
             if (positions != null) cfg.positions = positions;
             if (settings != null) {
                 if (foreign) for (Map.Entry<String, Object> e : cfg.settings.entrySet())
                     if (NO_IMPORT.contains(e.getKey().substring(0, Math.max(0, e.getKey().indexOf('.'))))) settings.put(e.getKey(), e.getValue());
-                cfg.settings = settings;
+                cfg.settings = de.myticlegacy.client.setting.TrackedMap.of(settings);
             }
             if (hudProfiles != null) cfg.hudProfiles = hudProfiles;
             if (hasHudProfile) cfg.hudProfile = hudProfile;

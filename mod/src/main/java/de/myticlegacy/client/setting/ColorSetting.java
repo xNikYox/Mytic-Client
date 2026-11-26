@@ -14,7 +14,12 @@ public class ColorSetting extends Setting<Integer> {
 
     @Override
     public Integer get() {
-        return raw() instanceof Number n ? (int) n.longValue() : defaultValue;
+        return cachedValue();
+    }
+
+    @Override
+    protected Integer convert(Object raw) {
+        return raw instanceof Number n ? (int) n.longValue() : defaultValue;
     }
 
     @Override

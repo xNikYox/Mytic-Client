@@ -9,7 +9,12 @@ public class BoolSetting extends Setting<Boolean> {
 
     @Override
     public Boolean get() {
-        return raw() instanceof Boolean b ? b : defaultValue;
+        return cachedValue();
+    }
+
+    @Override
+    protected Boolean convert(Object raw) {
+        return raw instanceof Boolean b ? b : defaultValue;
     }
 
     @Override

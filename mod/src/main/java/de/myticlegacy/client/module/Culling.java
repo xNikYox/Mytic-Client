@@ -40,11 +40,6 @@ public final class Culling {
         return MyticClient.fpsBoost;
     }
 
-    private static boolean active() {
-        FpsBoostModule b = boost();
-        return b != null && b.enabled() && b.culling.get();
-    }
-
     private static Vec3 camera(long now) {
         if (now - camAt > 4) {
             cam = BoostCompat.camera();
@@ -64,17 +59,42 @@ public final class Culling {
 
     /** true = Entity nicht zeichnen */
     public static boolean cullEntity(Entity e) {
-        if (!active()) return false;
+        return cullEntityFar(e) || cullEntityHidden(e);
+    }
+
+    /** Darf diese Entity überhaupt ausgeblendet werden? (Spieler, Kamera, leuchtend, Reittiere/Reiter nie) */
+    private static boolean exempt(Entity e) {
+        if (e instanceof Player) return true; // schließt den eigenen Spieler ein
         Minecraft mc = Minecraft.getInstance();
-        if (e == mc.player || e == mc.getCameraEntity() || e instanceof Player || e.isCurrentlyGlowing() || e.isVehicle() || e.isPassenger()) return false;
+        return e == mc.player || e == mc.getCameraEntity() || e.isCurrentlyGlowing() || e.isVehicle() || e.isPassenger();
+    }
+
+    /**
+     * Teil 1 (billig, vor der Sichtfeld-Prüfung von Minecraft): true = zu weit weg, nicht zeichnen.
+     */
+    public static boolean cullEntityFar(Entity e) {
+        FpsBoostModule b = boost();
+        if (b == null || !b.enabled() || !b.culling.get() || exempt(e)) return false;
         long now = System.currentTimeMillis();
         Vec3 c = camera(now);
-        int limit = e instanceof ItemEntity || e instanceof ExperienceOrb ? Math.min(32, boost().mobDistance.intValue()) : boost().mobDistance.intValue();
+        int limit = b.mobDistance.intValue();
+        if (limit > 32 && (e instanceof ItemEntity || e instanceof ExperienceOrb)) limit = 32;
         if (e.distanceToSqr(c) > (double) limit * limit) {
             count(now);
             return true;
         }
-        if (entityHidden(e, c, now)) {
+        return false;
+    }
+
+    /**
+     * Teil 2 (Sichtstrahlen): true = hinter Wänden, nicht zeichnen. Wird nur für Entities gefragt, die Minecraft sonst
+     * zeichnen würde (im Sichtfeld) – so verbrauchen Entities hinter der Kamera kein Strahlen-Budget.
+     */
+    public static boolean cullEntityHidden(Entity e) {
+        FpsBoostModule b = boost();
+        if (b == null || !b.enabled() || !b.culling.get() || exempt(e)) return false;
+        long now = System.currentTimeMillis();
+        if (entityHidden(e, camera(now), now)) {
             count(now);
             return true;
         }
@@ -92,13 +112,14 @@ public final class Culling {
     };
 
     public static boolean cullBlockEntity(BlockEntity be) {
-        if (!active()) return false;
+        FpsBoostModule b = boost();
+        if (b == null || !b.enabled() || !b.culling.get()) return false;
         if (NEVER_CULL.get(be.getClass())) return false;
         long now = System.currentTimeMillis();
         Vec3 c = camera(now);
         BlockPos p = be.getBlockPos();
         double dx = p.getX() + 0.5 - c.x, dy = p.getY() + 0.5 - c.y, dz = p.getZ() + 0.5 - c.z;
-        int limit = boost().blockEntityDistance.intValue();
+        int limit = b.blockEntityDistance.intValue();
         if (dx * dx + dy * dy + dz * dz > (double) limit * limit || blockHidden(p, c, now)) {
             count(now);
             return true;
@@ -132,9 +153,12 @@ public final class Culling {
         if (has && fresh(entry, now)) return (entry & 1) == 0;
         if (!takeBudget(now)) return has && (entry & 1) == 0;
         AABB b = e.getBoundingBox();
-        Vec3 mid = b.getCenter();
-        boolean visible = visible(c, mid, b) || visible(c, new Vec3(mid.x, b.maxY - 0.05, mid.z), b)
-                || visible(c, new Vec3(b.minX + 0.05, b.minY + 0.05, b.minZ + 0.05), b) || visible(c, new Vec3(b.maxX - 0.05, b.maxY - 0.05, b.maxZ - 0.05), b);
+        double mx = (b.minX + b.maxX) * 0.5, my = (b.minY + b.maxY) * 0.5, mz = (b.minZ + b.maxZ) * 0.5;
+        // ohne neue Vec3-Objekte: Mitte, oben Mitte, zwei gegenüberliegende Ecken
+        boolean visible = visible(c, mx, my, mz, b.minX, b.minY, b.minZ, b.maxX, b.maxY, b.maxZ)
+                || visible(c, mx, b.maxY - 0.05, mz, b.minX, b.minY, b.minZ, b.maxX, b.maxY, b.maxZ)
+                || visible(c, b.minX + 0.05, b.minY + 0.05, b.minZ + 0.05, b.minX, b.minY, b.minZ, b.maxX, b.maxY, b.maxZ)
+                || visible(c, b.maxX - 0.05, b.maxY - 0.05, b.maxZ - 0.05, b.minX, b.minY, b.minZ, b.maxX, b.maxY, b.maxZ);
         entities.put(id, (now << 1) | (visible ? 1 : 0));
         return !visible;
     }
@@ -145,24 +169,31 @@ public final class Culling {
         boolean has = entry != 0;
         if (has && fresh(entry, now)) return (entry & 1) == 0;
         if (!takeBudget(now)) return has && (entry & 1) == 0;
-        AABB b = new AABB(pos);
-        Vec3 mid = b.getCenter();
-        boolean visible = visible(c, mid, b);
+        // Block als Box (ohne neue AABB/Vec3-Objekte): Mitte, dann die der Kamera zugewandten Ecken
+        double x0 = pos.getX(), y0 = pos.getY(), z0 = pos.getZ(), x1 = x0 + 1, y1 = y0 + 1, z1 = z0 + 1;
+        double mx = x0 + 0.5, my = y0 + 0.5, mz = z0 + 0.5;
+        boolean visible = visible(c, mx, my, mz, x0, y0, z0, x1, y1, z1);
+        double midDist = dist2(c, mx, my, mz);
         for (int i = 0; i < 8 && !visible; i++) {
-            Vec3 corner = new Vec3((i & 1) == 0 ? b.minX + 0.02 : b.maxX - 0.02, (i & 2) == 0 ? b.minY + 0.02 : b.maxY - 0.02, (i & 4) == 0 ? b.minZ + 0.02 : b.maxZ - 0.02);
-            if (corner.distanceToSqr(c) <= mid.distanceToSqr(c)) visible = visible(c, corner, b);
+            double cx = (i & 1) == 0 ? x0 + 0.02 : x1 - 0.02, cy = (i & 2) == 0 ? y0 + 0.02 : y1 - 0.02, cz = (i & 4) == 0 ? z0 + 0.02 : z1 - 0.02;
+            if (dist2(c, cx, cy, cz) <= midDist) visible = visible(c, cx, cy, cz, x0, y0, z0, x1, y1, z1);
         }
         blocks.put(key, (now << 1) | (visible ? 1 : 0));
         return !visible;
     }
 
-    /** Freie Sicht von a nach b? Blöcke im Ziel selbst zählen nicht (Voxel-Durchlauf) */
-    private static boolean visible(Vec3 a, Vec3 b, AABB own) {
+    private static double dist2(Vec3 a, double x, double y, double z) {
+        double dx = x - a.x, dy = y - a.y, dz = z - a.z;
+        return dx * dx + dy * dy + dz * dz;
+    }
+
+    /** Freie Sicht von a zum Punkt (bx, by, bz)? Blöcke in der eigenen Box (min/max) zählen nicht (Voxel-Durchlauf) */
+    private static boolean visible(Vec3 a, double bx, double by, double bz, double minX, double minY, double minZ, double maxX, double maxY, double maxZ) {
         Level level = Minecraft.getInstance().level;
         if (level == null) return true;
-        double dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+        double dx = bx - a.x, dy = by - a.y, dz = bz - a.z;
         int x = (int) Math.floor(a.x), y = (int) Math.floor(a.y), z = (int) Math.floor(a.z);
-        int tx = (int) Math.floor(b.x), ty = (int) Math.floor(b.y), tz = (int) Math.floor(b.z);
+        int tx = (int) Math.floor(bx), ty = (int) Math.floor(by), tz = (int) Math.floor(bz);
         int sx = dx > 0 ? 1 : -1, sy = dy > 0 ? 1 : -1, sz = dz > 0 ? 1 : -1;
         double inf = Double.MAX_VALUE;
         double tdx = dx == 0 ? inf : Math.abs(1 / dx), tdy = dy == 0 ? inf : Math.abs(1 / dy), tdz = dz == 0 ? inf : Math.abs(1 / dz);
@@ -175,7 +206,7 @@ public final class Culling {
             else if (my < mz) { y += sy; my += tdy; }
             else { z += sz; mz += tdz; }
             if (x == tx && y == ty && z == tz) return true;
-            if (x + 1 > own.minX && x < own.maxX && y + 1 > own.minY && y < own.maxY && z + 1 > own.minZ && z < own.maxZ) continue;
+            if (x + 1 > minX && x < maxX && y + 1 > minY && y < maxY && z + 1 > minZ && z < maxZ) continue;
             cursor.set(x, y, z);
             if (BoostCompat.solid(level, cursor)) return false;
         }

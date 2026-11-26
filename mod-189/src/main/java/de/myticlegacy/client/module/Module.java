@@ -29,8 +29,29 @@ public class Module {
         this.enabledByDefault = enabledByDefault;
     }
 
+    /** Gemerkter Zustand (an/aus) samt Zählerstand der Konfiguration – enabled() wird pro Bild sehr oft gefragt */
+    private static final class Cached {
+        final int generation;
+        final Object map;
+        final boolean on;
+
+        Cached(int generation, Object map, boolean on) {
+            this.generation = generation;
+            this.map = map;
+            this.on = on;
+        }
+    }
+
+    private volatile Cached cached;
+
     public boolean enabled() {
-        return MyticClient.config().enabled.getOrDefault(id, enabledByDefault);
+        java.util.Map<String, Boolean> map = MyticClient.config().enabled;
+        int generation = de.myticlegacy.client.setting.TrackedMap.generation();
+        Cached c = cached;
+        if (c != null && c.generation == generation && c.map == map) return c.on;
+        boolean on = map.getOrDefault(id, enabledByDefault);
+        cached = new Cached(generation, map, on);
+        return on;
     }
 
     public void setEnabled(boolean value) {

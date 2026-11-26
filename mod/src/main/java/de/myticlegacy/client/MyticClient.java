@@ -425,10 +425,42 @@ public final class MyticClient implements ClientModInitializer {
                 }
                 fullbrightApplied = true;
             }
-            ((OptionInstanceAccessor) (Object) gamma).mytic$setValue(15.0);
+            if (gamma.get() != 15.0) ((OptionInstanceAccessor) (Object) gamma).mytic$setValue(15.0);
         } else if (fullbrightApplied || gamma.get() > 1.0) {
-            ((OptionInstanceAccessor) (Object) gamma).mytic$setValue(Math.min(1.0, config().savedGamma));
+            ((OptionInstanceAccessor) (Object) gamma).mytic$setValue(realGamma());
             fullbrightApplied = false;
+        }
+    }
+
+    /** Helligkeit vor Fullbright, sicher im gültigen Bereich 0..1 (options.txt lehnt andere Werte ab) */
+    private static double realGamma() {
+        double g = config().savedGamma;
+        return Double.isNaN(g) ? 0.5 : Math.max(0.0, Math.min(1.0, g));
+    }
+
+    private static boolean gammaSwapped;
+
+    /** Vor options.save(): Fullbright-Helligkeit (15) durch die echte ersetzen, damit nur gültige Werte gespeichert werden */
+    public static void beforeOptionsSave(net.minecraft.client.Options options) {
+        try {
+            var gamma = options.gamma();
+            if (gamma.get() > 1.0) {
+                ((OptionInstanceAccessor) (Object) gamma).mytic$setValue(realGamma());
+                gammaSwapped = true;
+            }
+        } catch (RuntimeException e) {
+            LOG.debug("Helligkeit vor dem Speichern nicht gesetzt", e);
+        }
+    }
+
+    /** Nach options.save(): Fullbright-Helligkeit wieder einsetzen */
+    public static void afterOptionsSave(net.minecraft.client.Options options) {
+        if (!gammaSwapped) return;
+        gammaSwapped = false;
+        try {
+            if (fullbright != null && fullbright.enabled()) ((OptionInstanceAccessor) (Object) options.gamma()).mytic$setValue(15.0);
+        } catch (RuntimeException e) {
+            LOG.debug("Helligkeit nach dem Speichern nicht gesetzt", e);
         }
     }
 }

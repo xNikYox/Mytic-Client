@@ -13,7 +13,11 @@ public class DataSetting extends Setting<String> {
 
     @Override
     public String get() {
-        Object raw = raw();
+        return cachedValue();
+    }
+
+    @Override
+    protected String convert(Object raw) {
         return raw instanceof String && ((String) raw).length() <= max ? (String) raw : defaultValue;
     }
 
