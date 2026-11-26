@@ -44,5 +44,6 @@ abstract class AvatarRendererMixin {
         ((LivingEntityRendererInvoker) (Object) this).mytic$addLayer(new MiniMeLayer((PlayerRenderer) (Object) this, context.getModelSet()));
         ((LivingEntityRendererInvoker) (Object) this).mytic$addLayer(new WingsLayer((PlayerRenderer) (Object) this));
         ((LivingEntityRendererInvoker) (Object) this).mytic$addLayer(new de.myticlegacy.client.render.AuraLayer((PlayerRenderer) (Object) this));
+        ((LivingEntityRendererInvoker) (Object) this).mytic$addLayer(new de.myticlegacy.client.render.AccessoryLayer((PlayerRenderer) (Object) this));
     }
 }

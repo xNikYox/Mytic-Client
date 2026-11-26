@@ -22,6 +22,7 @@ abstract class AvatarRendererMixin {
     private static void mytic$wind(AbstractClientPlayer player, PlayerRenderState state, float partialTick, CallbackInfo ci) {
         ((MiniMeState) state).mytic$setMiniMes(MiniMe.skinsFor(player));
         ((WingsState) state).mytic$setWings(Cosmetics.wingsFor(player));
+        ((de.myticlegacy.client.cosmetics.AccState) state).mytic$setAcc(Cosmetics.accFor(player));
         if (state.skin == null || !Cosmetics.isMytic(state.skin.capeTexture())) return;
         float[] wind = Cosmetics.wind(player.getId());
         state.capeLean += wind[0];
@@ -45,5 +46,6 @@ abstract class AvatarRendererMixin {
         ((LivingEntityRendererInvoker) (Object) this).mytic$addLayer(new MiniMeLayer((PlayerRenderer) (Object) this, context.getModelSet()));
         ((LivingEntityRendererInvoker) (Object) this).mytic$addLayer(new WingsLayer((PlayerRenderer) (Object) this));
         ((LivingEntityRendererInvoker) (Object) this).mytic$addLayer(new de.myticlegacy.client.render.AuraLayer((PlayerRenderer) (Object) this));
+        ((LivingEntityRendererInvoker) (Object) this).mytic$addLayer(new de.myticlegacy.client.render.AccessoryLayer((PlayerRenderer) (Object) this));
     }
 }

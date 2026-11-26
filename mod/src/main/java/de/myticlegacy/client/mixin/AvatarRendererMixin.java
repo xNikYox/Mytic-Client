@@ -29,6 +29,7 @@ abstract class AvatarRendererMixin {
     private void mytic$wind(@org.spongepowered.asm.mixin.injection.Coerce Object entity, AvatarRenderState state, float partialTick, CallbackInfo ci) {
         ((MiniMeState) state).mytic$setMiniMes(MiniMe.skinsFor(entity));
         ((de.myticlegacy.client.cosmetics.WingsState) state).mytic$setWings(Cosmetics.wingsFor(entity));
+        ((de.myticlegacy.client.cosmetics.AccState) state).mytic$setAcc(Cosmetics.accFor(entity));
         if (state.skin == null || !Cosmetics.isMytic(state.skin.cape())) return;
         float[] wind = Cosmetics.wind(entity.hashCode());
         state.capeLean += wind[0];
@@ -36,11 +37,12 @@ abstract class AvatarRendererMixin {
         state.capeFlap += wind[2];
     }
 
-    /** MiniMe- und Flügel-Ebene anmelden. */
+    /** MiniMe-, Flügel-, Aura- und Accessoire-Ebene anmelden. */
     @Inject(method = "<init>", at = @At("TAIL"))
     private void mytic$miniMeLayer(EntityRendererProvider.Context context, boolean slim, CallbackInfo ci) {
         ((LivingEntityRendererInvoker) this).mytic$addLayer(new MiniMeLayer((AvatarRenderer) (Object) this, context.getModelSet()));
         ((LivingEntityRendererInvoker) this).mytic$addLayer(new de.myticlegacy.client.render.WingsLayer((AvatarRenderer) (Object) this));
         ((LivingEntityRendererInvoker) this).mytic$addLayer(new de.myticlegacy.client.render.AuraLayer((AvatarRenderer) (Object) this));
+        ((LivingEntityRendererInvoker) this).mytic$addLayer(new de.myticlegacy.client.render.AccessoryLayer((AvatarRenderer) (Object) this));
     }
 }

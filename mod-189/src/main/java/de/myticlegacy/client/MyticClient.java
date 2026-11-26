@@ -451,6 +451,7 @@ public final class MyticClient {
         de.myticlegacy.client.cosmetics.Cosmetics.tick(mc);
         de.myticlegacy.client.cosmetics.MiniMe.register(mc);
         de.myticlegacy.client.cosmetics.Wings.register(mc);
+        de.myticlegacy.client.cosmetics.Accessories.register(mc);
         de.myticlegacy.client.cosmetics.PhysicsCape.register(mc);
         de.myticlegacy.client.cosmetics.AuraLayer.register(mc);
         CombatTracker.tick(mc);

@@ -84,6 +84,71 @@ public final class CosmeticsCore {
     }
 
     private static List<Aura> auras = Collections.emptyList();
+
+    /**
+     * Accessoire „Kopf & Hals“ aus dem Katalog: Box-Modell in Modell-Pixeln (y nach oben, Füße = 0, Hals = 24, Gesicht nach
+     * +z, +x = linke Seite des Spielers) mit Pixel-Textur acc/&lt;id&gt;.png im Minecraft-Box-Layout (2 Texel je Pixel).
+     */
+    public static final class Acc {
+        public final String id, name, slot;
+        public final int texW, texH;
+        public final List<AccBox> boxes;
+
+        Acc(String id, String name, String slot, int texW, int texH, List<AccBox> boxes) {
+            this.id = id;
+            this.name = name;
+            this.slot = slot;
+            this.texW = texW;
+            this.texH = texH;
+            this.boxes = boxes;
+        }
+
+        public boolean emissive() {
+            for (AccBox b : boxes) if (b.emissive) return true;
+            return false;
+        }
+    }
+
+    /** Eine Box: Ecke und Größe in Modell-Pixeln, Textur-Ecke und Größe in Texeln, gespiegelt, leuchtet (volle Helligkeit). */
+    public static final class AccBox {
+        public final float x, y, z, w, h, d;
+        public final int u, v, tw, th, td;
+        public final boolean mirror, emissive;
+
+        AccBox(float[] from, float[] size, int[] uv, int[] tex, boolean mirror, boolean emissive) {
+            x = from[0];
+            y = from[1];
+            z = from[2];
+            w = size[0];
+            h = size[1];
+            d = size[2];
+            u = uv[0];
+            v = uv[1];
+            tw = tex[0];
+            th = tex[1];
+            td = tex[2];
+            this.mirror = mirror;
+            this.emissive = emissive;
+        }
+
+        /**
+         * Box im Minecraft-Modell (Drehpunkt Hals, y nach unten, Gesicht nach -z) in Texel-Einheiten (beim Zeichnen
+         * halb so groß): {x, y, z} der Ecke ohne Zugabe und {dx, dy, dz} Zugabe je Seite, damit die ganzzahlige
+         * Textur-Größe genau die Modell-Größe ergibt.
+         */
+        public float[] minecraft() {
+            float gx = (2 * w - tw) / 2f, gy = (2 * h - th) / 2f, gz = (2 * d - td) / 2f;
+            return new float[]{2 * x + gx, 2 * (24 - y - h) + gy, 2 * (-(z + d)) + gz, gx, gy, gz};
+        }
+    }
+
+    /** Plätze für Accessoires (je Platz eins): Kopf, Hals */
+    public static final String[] ACC_SLOTS = {"kopf", "hals"};
+    private static List<Acc> accessories = Collections.emptyList();
+    /** Nametag-Vorlagen aus dem Katalog: {id, name, text} */
+    private static List<String[]> nametagPresets = Collections.emptyList();
+    /** uuid (ohne Striche) → Accessoires je Platz (leer = keine). */
+    private static final Map<String, Map<String, String>> REMOTE_ACC = new ConcurrentHashMap<>();
     /** uuid (ohne Striche) → Aura-ID oder "" (keine). */
     private static final Map<String, String> REMOTE_AURA = new ConcurrentHashMap<>();
     /** Schilde aus dem Katalog: {id, name, bilder, ms je bild} */
@@ -112,7 +177,7 @@ public final class CosmeticsCore {
         return owned;
     }
 
-    /** Darf ich das benutzen? kind: cape, wings, shield, aura, minime, nametag. */
+    /** Darf ich das benutzen? kind: cape, wings, shield, aura, acc, minime, nametag. */
     public static boolean owns(String kind, String id) {
         java.util.Set<String> items = ownedSet();
         if (items.contains("*")) return true;
@@ -234,6 +299,34 @@ public final class CosmeticsCore {
                             }
                             auras = Collections.unmodifiableList(list2);
                         }
+                        if (root.has("accessories")) {
+                            List<Acc> list3 = new ArrayList<>();
+                            for (JsonElement e : root.getAsJsonArray("accessories")) {
+                                try {
+                                    JsonObject o = e.getAsJsonObject();
+                                    List<AccBox> boxes = new ArrayList<>();
+                                    for (JsonElement be : o.getAsJsonArray("boxes")) {
+                                        JsonObject b = be.getAsJsonObject();
+                                        boxes.add(new AccBox(floats(b.getAsJsonArray("from")), floats(b.getAsJsonArray("size")), ints(b.getAsJsonArray("uv")),
+                                                ints(b.getAsJsonArray("tex")), b.has("mirror") && b.get("mirror").getAsBoolean(), b.has("emissive") && b.get("emissive").getAsBoolean()));
+                                    }
+                                    int[] tex = ints(o.getAsJsonArray("texture"));
+                                    list3.add(new Acc(o.get("id").getAsString(), o.get("name").getAsString(), o.get("slot").getAsString(), tex[0], tex[1],
+                                            Collections.unmodifiableList(boxes)));
+                                } catch (RuntimeException bad) {
+                                    MyticClient.LOG.warn("Accessoire im Cosmetics-Paket unlesbar: " + bad);
+                                }
+                            }
+                            accessories = Collections.unmodifiableList(list3);
+                        }
+                        if (root.has("nametagPresets")) {
+                            List<String[]> presets = new ArrayList<>();
+                            for (JsonElement e : root.getAsJsonArray("nametagPresets")) {
+                                JsonObject o = e.getAsJsonObject();
+                                presets.add(new String[]{o.get("id").getAsString(), o.get("name").getAsString(), o.get("text").getAsString()});
+                            }
+                            nametagPresets = Collections.unmodifiableList(presets);
+                        }
                         if (root.has("shields")) {
                             List<String[]> sh = new ArrayList<>();
                             for (JsonElement e : root.getAsJsonArray("shields")) {
@@ -256,6 +349,90 @@ public final class CosmeticsCore {
         }
         capes = Collections.unmodifiableList(list);
         return capes;
+    }
+
+    private static float[] floats(JsonArray a) {
+        float[] out = new float[a.size()];
+        for (int i = 0; i < out.length; i++) out[i] = a.get(i).getAsFloat();
+        return out;
+    }
+
+    private static int[] ints(JsonArray a) {
+        int[] out = new int[a.size()];
+        for (int i = 0; i < out.length; i++) out[i] = a.get(i).getAsInt();
+        return out;
+    }
+
+    // ------------------------------------------------------------------------------------------ Accessoires (Kopf & Hals)
+
+    /** Accessoires im Paket (ab Paket 1.13) */
+    public static List<Acc> accessories() {
+        capes();
+        return accessories;
+    }
+
+    public static Acc acc(String id) {
+        if (id == null) return null;
+        for (Acc a : accessories()) if (a.id.equals(id)) return a;
+        return null;
+    }
+
+    /** Nametag-Vorlagen im Paket: {id, name, text mit &-Codes} */
+    public static List<String[]> nametagPresets() {
+        capes();
+        return nametagPresets;
+    }
+
+    private static final Map<String, Memo> SEL_ACC = new ConcurrentHashMap<>();
+
+    /** Eigenes Accessoire an einem Platz (kopf, hals) oder null (Vorschau: -Dmytic.accDemo=<id>[,<id>]). */
+    public static String selectedAcc(final String slot) {
+        String demo = System.getProperty("mytic.accDemo");
+        if (demo != null) {
+            for (String id : demo.split(",")) {
+                Acc a = acc(id.trim());
+                if (a != null && a.slot.equals(slot)) return a.id;
+            }
+        }
+        Memo m = SEL_ACC.get(slot);
+        if (m == null) {
+            m = new Memo();
+            SEL_ACC.put(slot, m);
+        }
+        return memo(m, () -> {
+            Map<String, String> set = MyticClient.config().acc;
+            String id = set == null ? null : set.get(slot);
+            Acc a = acc(id);
+            return a != null && a.slot.equals(slot) && owns("acc", id) ? id : null;
+        });
+    }
+
+    public static void selectAcc(String slot, String id) {
+        forgetSelection();
+        if (MyticClient.config().acc == null) MyticClient.config().acc = new java.util.LinkedHashMap<String, String>();
+        if (id == null) MyticClient.config().acc.remove(slot);
+        else MyticClient.config().acc.put(slot, id);
+        MyticClient.config().save();
+        push();
+    }
+
+    /** Accessoire eines Spielers an einem Platz: eigenes aus der Auswahl, andere vom Friends-Server. */
+    public static Acc accOf(String uuid, boolean self, String slot) {
+        if (self) return acc(selectedAcc(slot));
+        Map<String, String> set = REMOTE_ACC.get(uuid);
+        Acc a = set == null ? null : acc(set.get(slot));
+        return a != null && a.slot.equals(slot) ? a : null;
+    }
+
+    /** Accessoires eines Spielers für die Render-Ebene: {kopf, hals} (Einträge null = keins) oder null, wenn gar keins. */
+    public static Acc[] accsOf(String uuid, boolean self) {
+        Acc head = accOf(uuid, self, "kopf"), neck = accOf(uuid, self, "hals");
+        return head == null && neck == null ? null : new Acc[]{head, neck};
+    }
+
+    /** Kopf-Accessoire ausblenden, solange ein Helm (oder etwas anderes auf dem Kopf) getragen wird (Einstellung, Standard an) */
+    public static boolean hideAccUnderHelmet() {
+        return MyticClient.config().accHideHelmet;
     }
 
     /** Größe eines Flügels in Modell-Pixeln {Breite, Höhe}; die Textur ist doppelt so breit (beide Seiten). */
@@ -474,6 +651,7 @@ public final class CosmeticsCore {
 
     private static void forgetSelection() {
         SEL_CAPE.at = SEL_WINGS.at = SEL_SHIELD.at = SEL_AURA.at = 0;
+        for (Memo m : SEL_ACC.values()) m.at = 0;
     }
 
     public static void select(String id) {
@@ -492,6 +670,7 @@ public final class CosmeticsCore {
         final String shieldId = MyticClient.config().shield;
         final String auraId = MyticClient.config().aura;
         final String nametag = MyticClient.config().nametag;
+        final Map<String, String> accSet = MyticClient.config().acc == null ? new HashMap<String, String>() : new HashMap<String, String>(MyticClient.config().acc);
         Friends.background(() -> {
             try {
                 JsonObject body = new JsonObject();
@@ -503,6 +682,9 @@ public final class CosmeticsCore {
                 body.addProperty("shield", shieldId);
                 body.addProperty("aura", auraId);
                 body.addProperty("nametag", nametag);
+                JsonObject acc = new JsonObject();
+                for (Map.Entry<String, String> e : accSet.entrySet()) if (e.getValue() != null) acc.addProperty(e.getKey(), e.getValue());
+                body.add("acc", acc);
                 Friends.post("api/cosmetics", body);
             } catch (Exception e) {
                 MyticClient.LOG.warn("Cosmetics nicht gespeichert: " + e.getMessage());
@@ -559,7 +741,8 @@ public final class CosmeticsCore {
         } else if (seq == 0 && System.currentTimeMillis() - ownedAt > 3 * 60 * 1000) {
             refreshOwned();
         }
-        if (!pushed && (MyticClient.config().cape != null || MiniMeCore.any() || MyticClient.config().wings != null || MyticClient.config().shield != null || MyticClient.config().aura != null || MyticClient.config().nametag != null)) push();
+        if (!pushed && (MyticClient.config().cape != null || MiniMeCore.any() || MyticClient.config().wings != null || MyticClient.config().shield != null || MyticClient.config().aura != null || MyticClient.config().nametag != null
+                || (MyticClient.config().acc != null && !MyticClient.config().acc.isEmpty()))) push();
         if (lookupRunning) return;
         long now = System.currentTimeMillis();
         // erst fragen, wenn einer fällig ist – dann alle, die in der nächsten Minute fällig würden, gleich mit (weniger Anfragen)
@@ -614,17 +797,26 @@ public final class CosmeticsCore {
                 if (answer.has("wings")) {
                     for (Map.Entry<String, JsonElement> e : answer.getAsJsonObject("wings").entrySet()) wingsFound.put(e.getKey(), e.getValue().getAsString());
                 }
+                Map<String, Map<String, String>> accFound = new HashMap<>();
+                if (answer.has("acc")) {
+                    for (Map.Entry<String, JsonElement> e : answer.getAsJsonObject("acc").entrySet()) {
+                        Map<String, String> set = new HashMap<>();
+                        for (Map.Entry<String, JsonElement> p : e.getValue().getAsJsonObject().entrySet()) set.put(p.getKey(), p.getValue().getAsString());
+                        accFound.put(e.getKey(), set);
+                    }
+                }
                 // Spieler ohne Cosmetics (meist ohne Mytic) seltener erneut fragen
                 long later = System.currentTimeMillis() + REMOTE_NONE_MS - REMOTE_MS;
                 for (String uuid : ask) {
                     if (!found.containsKey(uuid) && !minis.containsKey(uuid) && !tagsFound.containsKey(uuid) && !aurasFound.containsKey(uuid)
-                            && !shieldsFound.containsKey(uuid) && !wingsFound.containsKey(uuid)) ASKED.put(uuid, later);
+                            && !shieldsFound.containsKey(uuid) && !wingsFound.containsKey(uuid) && !accFound.containsKey(uuid)) ASKED.put(uuid, later);
                     REMOTE.put(uuid, found.containsKey(uuid) ? found.get(uuid) : "");
                     REMOTE_MINI.put(uuid, minis.containsKey(uuid) ? minis.get(uuid) : new HashMap<String, String>());
                     REMOTE_NAMETAG.put(uuid, tagsFound.containsKey(uuid) ? tagsFound.get(uuid) : "");
                     REMOTE_AURA.put(uuid, aurasFound.containsKey(uuid) ? aurasFound.get(uuid) : "");
                     REMOTE_SHIELD.put(uuid, shieldsFound.containsKey(uuid) ? shieldsFound.get(uuid) : "");
                     REMOTE_WINGS.put(uuid, wingsFound.containsKey(uuid) ? wingsFound.get(uuid) : "");
+                    REMOTE_ACC.put(uuid, accFound.containsKey(uuid) ? accFound.get(uuid) : new HashMap<String, String>());
                 }
             } catch (Exception e) {
                 // in 30 Sekunden erneut versuchen

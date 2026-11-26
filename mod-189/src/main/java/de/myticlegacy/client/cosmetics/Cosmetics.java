@@ -207,6 +207,11 @@ public final class Cosmetics {
         Wings.drawPreview(g, id, x, y, w, h);
     }
 
+    /** Vorschau eines Accessoires im Cosmetics-Menü. */
+    public static void drawAccPreview(GuiGraphics g, String id, int x, int y, int w, int h) {
+        Accessories.drawPreview(g, id, x, y, w, h);
+    }
+
     /** 1.8.9 hat keine Schilde (der Reiter fehlt dort). */
     public static void drawShieldPreview(GuiGraphics g, String id, int x, int y, int w, int h, boolean animated) {
     }

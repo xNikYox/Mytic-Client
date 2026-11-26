@@ -91,6 +91,7 @@ public final class MenuPlayer {
         s.capeLean2 = wind[1];
         s.capeFlap = 2f + wind[2];
         ((WingsState) s).mytic$setWings(CosmeticsCore.selectedWings());
+        ((de.myticlegacy.client.cosmetics.AccState) s).mytic$setAcc(CosmeticsCore.accsOf(null, true));
         ((MiniMeState) s).mytic$setMiniMes(MiniMe.ownSkins());
 
         Quaternionf rotation = new Quaternionf().rotateZ((float) Math.PI);

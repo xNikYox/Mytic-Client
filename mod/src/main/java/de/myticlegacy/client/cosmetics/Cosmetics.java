@@ -47,6 +47,18 @@ public final class Cosmetics {
         return cape == null ? null : texture(cape);
     }
 
+    /** Accessoires dieser Figur {kopf, hals} oder null. */
+    public static CosmeticsCore.Acc[] accFor(Object entity) {
+        Minecraft mc = Minecraft.getInstance();
+        if (!(entity instanceof net.minecraft.world.entity.Entity e) || mc.player == null) return null;
+        return CosmeticsCore.accsOf(CosmeticsCore.key(e.getUUID()), e.getUUID().equals(mc.player.getUUID()));
+    }
+
+    /** Vorschau eines Accessoires im Cosmetics-Menü (fertig gezeichnetes Bild acc/<id>_icon.png, 128x128). */
+    public static void drawAccPreview(GuiGraphics g, String id, int x, int y, int w, int h) {
+        Blit.region(g, Identifier.fromNamespaceAndPath("myticclient", "textures/acc/" + id + "_icon.png"), x, y, w, h, 0, 0, 128, 128, 128, 128);
+    }
+
     /** Flügel dieser Figur oder null. */
     public static String wingsFor(Object entity) {
         Minecraft mc = Minecraft.getInstance();

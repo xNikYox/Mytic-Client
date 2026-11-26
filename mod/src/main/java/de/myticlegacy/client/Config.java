@@ -43,6 +43,10 @@ public final class Config {
     public String shield;
     /** Gewählte Flügel (Cosmetics), null = keine. */
     public String wings;
+    /** Accessoires „Kopf & Hals“ je Platz (kopf, hals) → ID (Cosmetics, Mods ab 2.58). */
+    public Map<String, String> acc = new LinkedHashMap<String, String>();
+    /** Kopf-Accessoire (Mütze, Geweih) ausblenden, solange ein Helm getragen wird */
+    public boolean accHideHelmet = true;
     /** Grafik-Optionen vor dem Einschalten von FPS-Boost (Name → Wert als Text), werden beim Ausschalten zurückgesetzt. */
     public Map<String, String> savedOptions = new LinkedHashMap<>();
     /** Leistungsprofil („Maximale FPS“, „Ausgewogen“, „Schön“; null = Eigenes) und die eigenen Werte davor (Name → Wert als Text) */

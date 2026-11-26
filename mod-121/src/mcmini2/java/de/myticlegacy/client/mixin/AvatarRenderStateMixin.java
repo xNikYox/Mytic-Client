@@ -1,5 +1,7 @@
 package de.myticlegacy.client.mixin;
 
+import de.myticlegacy.client.cosmetics.AccState;
+import de.myticlegacy.client.cosmetics.CosmeticsCore;
 import de.myticlegacy.client.cosmetics.MiniMeState;
 import de.myticlegacy.client.cosmetics.WingsState;
 import net.minecraft.client.renderer.entity.state.PlayerRenderState;
@@ -7,9 +9,9 @@ import net.minecraft.client.resources.PlayerSkin;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 
-/** 1.21.2–1.21.8: MiniMe- und Flügel-Feld am PlayerRenderState (Name wie in 1.21.11). */
+/** 1.21.2–1.21.8: MiniMe-, Flügel- und Accessoire-Feld am PlayerRenderState (Name wie in 1.21.11). */
 @Mixin(PlayerRenderState.class)
-abstract class AvatarRenderStateMixin implements MiniMeState, WingsState {
+abstract class AvatarRenderStateMixin implements MiniMeState, WingsState, AccState {
     @Unique
     private PlayerSkin[] mytic$miniMes;
 
@@ -34,5 +36,18 @@ abstract class AvatarRenderStateMixin implements MiniMeState, WingsState {
     @Override
     public void mytic$setWings(String id) {
         mytic$wings = id;
+    }
+
+    @Unique
+    private CosmeticsCore.Acc[] mytic$acc;
+
+    @Override
+    public CosmeticsCore.Acc[] mytic$acc() {
+        return mytic$acc;
+    }
+
+    @Override
+    public void mytic$setAcc(CosmeticsCore.Acc[] acc) {
+        mytic$acc = acc;
     }
 }
