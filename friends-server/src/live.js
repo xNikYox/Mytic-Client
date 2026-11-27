@@ -27,7 +27,6 @@ export const EMOTE_CATALOG = [
   { id: "tanzen", name: "Tanzen", ms: 4000, free: true },
   { id: "verbeugen", name: "Verbeugen", ms: 2200, free: true },
   { id: "facepalm", name: "Facepalm", ms: 2400, free: true },
-  { id: "zeigen", name: "Zeigen", ms: 1800, free: true },
   { id: "hinsetzen", name: "Hinsetzen", ms: 4000, free: true },
 ];
 export const EMOTE_GAP_MS = 3000;      // höchstens ein Emote je 3 s und Spieler

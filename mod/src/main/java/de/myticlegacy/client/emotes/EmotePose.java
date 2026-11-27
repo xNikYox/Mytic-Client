@@ -83,14 +83,6 @@ public final class EmotePose {
             arm(out, LARM, 0.05f, 0, -0.08f);
             out[HEAD] = 0.42f * e;
             out[HEAD + 1] = 0.16f * e * (float) Math.sin(t * w2pi * 1.8f); // Kopfschütteln
-        } else if ("zeigen".equals(id)) {
-            float e = env(t, len, 0.18f, 0.35f);
-            float jab = t < 0.6f ? 0.12f * (float) Math.sin(t / 0.6f * PI) : 0;
-            arm(out, RARM, (-1.62f - jab) * e, -0.08f * e, 0);
-            arm(out, LARM, 0.08f, 0, -0.06f);
-            out[BODY] = 0;
-            out[BODY + 1] = -0.12f * e;
-            out[BODY + 2] = 0;
         } else if ("hinsetzen".equals(id)) {
             float e = env(t, len, 0.5f, 0.5f);
             out[DROP] = 10.5f * e;

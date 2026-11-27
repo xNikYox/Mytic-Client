@@ -19,8 +19,8 @@ const HASH_A = "a1".repeat(16), HASH_B = "b2".repeat(16);
 const ip = (...parts) => parts.join(".");
 
 test("Emote-Katalog: acht freie Emotes mit eindeutigen IDs", () => {
-  assert.equal(EMOTE_CATALOG.length, 8);
-  assert.equal(new Set(EMOTE_CATALOG.map((e) => e.id)).size, 8);
+  assert.equal(EMOTE_CATALOG.length, 7);
+  assert.equal(new Set(EMOTE_CATALOG.map((e) => e.id)).size, 7);
   assert.ok(EMOTE_CATALOG.every((e) => e.free && /^[a-z]+$/.test(e.id) && e.ms >= 1000 && e.ms <= 4000));
 });
 
@@ -95,11 +95,11 @@ test("Emotes: freie Emotes ohne Abfrage der Freischaltungen", async () => {
   const a = sock(), b = sock();
   await h.opened(a, { uuid: "u1", name: "A" });
   await h.opened(b, { uuid: "u2", name: "B" });
-  assert.equal(a.out[0].emotes.length, 8);
+  assert.equal(a.out[0].emotes.length, 7);
   await h.message(a, JSON.stringify({ t: "srv", s: HASH_A }));
   await h.message(b, JSON.stringify({ t: "srv", s: HASH_A }));
-  await h.message(a, JSON.stringify({ t: "emote", e: "zeigen" }));
-  assert.equal(b.out.at(-1).e, "zeigen");
+  await h.message(a, JSON.stringify({ t: "emote", e: "facepalm" }));
+  assert.equal(b.out.at(-1).e, "facepalm");
   assert.deepEqual(asked, [], "freie Emotes brauchen keine Abfrage");
 });
 

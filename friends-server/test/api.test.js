@@ -733,7 +733,7 @@ test("Emotes in Echtzeit über GET /api/live (WebSocket, Node)", async () => {
     const wb = await open(b);
     const hi = await wa.next();
     assert.equal(hi.t, "hi");
-    assert.equal(hi.emotes.length, 8);
+    assert.equal(hi.emotes.length, 7);
     assert.equal(hi.gap, 3000);
     await wb.next();
     const hash = "ab".repeat(16);

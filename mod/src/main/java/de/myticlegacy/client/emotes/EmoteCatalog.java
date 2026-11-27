@@ -38,7 +38,6 @@ public final class EmoteCatalog {
         list.add(new Emote("tanzen", "Tanzen", "music", 4000, true));
         list.add(new Emote("verbeugen", "Verbeugen", "bow", 2200, true));
         list.add(new Emote("facepalm", "Facepalm", "facepalm", 2400, true));
-        list.add(new Emote("zeigen", "Zeigen", "point", 1800, true));
         list.add(new Emote("hinsetzen", "Hinsetzen", "sit", 4000, true));
         ALL = Collections.unmodifiableList(list);
     }
