@@ -39,9 +39,10 @@ public class AccessoryLayer extends RenderLayer<AvatarRenderState, PlayerModel> 
             getParentModel().root().translateAndRotate(pose);
             (head ? getParentModel().head : getParentModel().body).translateAndRotate(pose);
             pose.scale(0.5f, 0.5f, 0.5f);
-            if (parts[0] != null) collector.submitModelPart(parts[0], pose, RenderTypes.entityCutoutNoCull(texture), light, OverlayTexture.NO_OVERLAY, null);
-            // leuchtende Teile (rote Nase) mit voller Helligkeit
-            if (parts[1] != null) collector.submitModelPart(parts[1], pose, RenderTypes.entityCutoutNoCull(texture), FULL_BRIGHT, OverlayTexture.NO_OVERLAY, null);
+            // leuchtende Teile (rote Nase) mit voller Helligkeit, Blinkgruppen (Lichterkette) im Takt
+            for (int i = 0; i < parts.length; i++) {
+                if (parts[i] != null) collector.submitModelPart(parts[i], pose, RenderTypes.entityCutoutNoCull(texture), AccModels.light(i, light, FULL_BRIGHT), OverlayTexture.NO_OVERLAY, null);
+            }
             pose.popPose();
         }
     }

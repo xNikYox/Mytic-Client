@@ -39,8 +39,9 @@ public class AccessoryLayer extends RenderLayer<PlayerRenderState, PlayerModel> 
             getParentModel().root().translateAndRotate(pose);
             (head ? getParentModel().head : getParentModel().body).translateAndRotate(pose);
             pose.scale(0.5f, 0.5f, 0.5f);
-            if (parts[0] != null) parts[0].render(pose, buffers.getBuffer(RenderType.entityCutoutNoCull(texture)), light, OverlayTexture.NO_OVERLAY);
-            if (parts[1] != null) parts[1].render(pose, buffers.getBuffer(RenderType.entityCutoutNoCull(texture)), FULL_BRIGHT, OverlayTexture.NO_OVERLAY);
+            for (int i = 0; i < parts.length; i++) {
+                if (parts[i] != null) parts[i].render(pose, buffers.getBuffer(RenderType.entityCutoutNoCull(texture)), AccModels.light(i, light, FULL_BRIGHT), OverlayTexture.NO_OVERLAY);
+            }
             pose.popPose();
         }
     }

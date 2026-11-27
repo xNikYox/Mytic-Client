@@ -39,7 +39,7 @@ public final class Accessories implements LayerRenderer<AbstractClientPlayer> {
     private static final Map<String, ResourceLocation> READY = new HashMap<String, ResourceLocation>();
     private static final Map<String, BufferedImage> DECODED = new ConcurrentHashMap<String, BufferedImage>();
     private static final Map<String, Boolean> LOADING = new ConcurrentHashMap<String, Boolean>();
-    /** Teile je Accessoire: {normale Boxen, leuchtende Boxen} */
+    /** Teile je Accessoire: {normale Boxen, dauerhaft leuchtende Boxen, Blinkgruppe 0, 1, 2} */
     private static final Map<String, List<ModelRenderer>[]> PARTS = new HashMap<String, List<ModelRenderer>[]>();
     private final RenderPlayer renderer;
 
@@ -105,7 +105,8 @@ public final class Accessories implements LayerRenderer<AbstractClientPlayer> {
     private static List<ModelRenderer>[] parts(CosmeticsCore.Acc acc) {
         List<ModelRenderer>[] lists = PARTS.get(acc.id);
         if (lists != null) return lists;
-        lists = new List[]{new ArrayList<ModelRenderer>(), new ArrayList<ModelRenderer>()};
+        lists = new List[]{new ArrayList<ModelRenderer>(), new ArrayList<ModelRenderer>(), new ArrayList<ModelRenderer>(),
+                new ArrayList<ModelRenderer>(), new ArrayList<ModelRenderer>()};
         ModelBase base = new ModelBase() {
         };
         base.textureWidth = acc.texW;
@@ -117,7 +118,7 @@ public final class Accessories implements LayerRenderer<AbstractClientPlayer> {
             ModelRenderer part = new ModelRenderer(base, b.u, b.v);
             part.mirror = b.mirror;
             part.addBox(m[0] - m[3] + grow, m[1] - m[4] + grow, m[2] - m[5] + grow, b.tw, b.th, b.td, grow);
-            lists[b.emissive ? 1 : 0].add(part);
+            lists[!b.emissive ? 0 : b.blink < 0 ? 1 : 2 + b.blink].add(part);
         }
         PARTS.put(acc.id, lists);
         return lists;
@@ -144,13 +145,18 @@ public final class Accessories implements LayerRenderer<AbstractClientPlayer> {
             GlStateManager.color(1f, 1f, 1f, 1f);
             mc.getTextureManager().bindTexture(tex);
             for (ModelRenderer p : parts[0]) p.render(0.03125f);
-            if (!parts[1].isEmpty()) {
-                // leuchtende Teile (rote Nase) mit voller Helligkeit
+            // leuchtende Teile (rote Nase) mit voller Helligkeit; Blinkgruppen (Lichterkette) gerade aus: normales Licht
+            List<ModelRenderer> lit = new ArrayList<ModelRenderer>(parts[1]);
+            for (int g = 0; g < 3; g++) {
+                if (CosmeticsCore.blinkOn(g)) lit.addAll(parts[2 + g]);
+                else for (ModelRenderer p : parts[2 + g]) p.render(0.03125f);
+            }
+            if (!lit.isEmpty()) {
                 float lastX = OpenGlHelper.lastBrightnessX;
                 float lastY = OpenGlHelper.lastBrightnessY;
                 OpenGlHelper.setLightmapTextureCoords(OpenGlHelper.lightmapTexUnit, 240f, 240f);
                 GlStateManager.disableLighting();
-                for (ModelRenderer p : parts[1]) p.render(0.03125f);
+                for (ModelRenderer p : lit) p.render(0.03125f);
                 GlStateManager.enableLighting();
                 OpenGlHelper.setLightmapTextureCoords(OpenGlHelper.lightmapTexUnit, lastX, lastY);
             }

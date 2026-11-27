@@ -122,13 +122,17 @@ public final class CosmeticsCore {
         }
     }
 
-    /** Eine Box: Ecke und Größe in Modell-Pixeln, Textur-Ecke und Größe in Texeln, gespiegelt, leuchtet (volle Helligkeit). */
+    /**
+     * Eine Box: Ecke und Größe in Modell-Pixeln, Textur-Ecke und Größe in Texeln, gespiegelt, leuchtet (volle Helligkeit),
+     * Blinkgruppe (0..2, nur bei leuchtenden Boxen: die Gruppen gehen der Reihe nach kurz aus; -1 = leuchtet dauerhaft).
+     */
     public static final class AccBox {
         public final float x, y, z, w, h, d;
         public final int u, v, tw, th, td;
         public final boolean mirror, emissive;
+        public final int blink;
 
-        AccBox(float[] from, float[] size, int[] uv, int[] tex, boolean mirror, boolean emissive) {
+        AccBox(float[] from, float[] size, int[] uv, int[] tex, boolean mirror, boolean emissive, int blink) {
             x = from[0];
             y = from[1];
             z = from[2];
@@ -142,6 +146,7 @@ public final class CosmeticsCore {
             td = tex[2];
             this.mirror = mirror;
             this.emissive = emissive;
+            this.blink = emissive && blink >= 0 && blink <= 2 ? blink : -1;
         }
 
         /**
@@ -153,6 +158,11 @@ public final class CosmeticsCore {
             float gx = (2 * w - tw) / 2f, gy = (2 * h - th) / 2f, gz = (2 * d - td) / 2f;
             return new float[]{2 * x + gx, 2 * (24 - y - h) + gy, 2 * (-(z + d)) + gz, gx, gy, gz};
         }
+    }
+
+    /** Blinkgruppe g (0..2) gerade an? Alle 350 ms ist eine andere Gruppe aus. */
+    public static boolean blinkOn(int g) {
+        return (System.currentTimeMillis() / 350 + g) % 3 != 0;
     }
 
     /** Plätze für Accessoires (je Platz eins): Kopf, Hals */
@@ -300,7 +310,8 @@ public final class CosmeticsCore {
                                     for (JsonElement be : o.getAsJsonArray("boxes")) {
                                         JsonObject b = be.getAsJsonObject();
                                         boxes.add(new AccBox(floats(b.getAsJsonArray("from")), floats(b.getAsJsonArray("size")), ints(b.getAsJsonArray("uv")),
-                                                ints(b.getAsJsonArray("tex")), b.has("mirror") && b.get("mirror").getAsBoolean(), b.has("emissive") && b.get("emissive").getAsBoolean()));
+                                                ints(b.getAsJsonArray("tex")), b.has("mirror") && b.get("mirror").getAsBoolean(), b.has("emissive") && b.get("emissive").getAsBoolean(),
+                                                b.has("blink") ? b.get("blink").getAsInt() : -1));
                                     }
                                     int[] tex = ints(o.getAsJsonArray("texture"));
                                     list3.add(new Acc(o.get("id").getAsString(), o.get("name").getAsString(), o.get("slot").getAsString(), tex[0], tex[1],
