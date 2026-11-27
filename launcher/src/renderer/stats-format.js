@@ -42,7 +42,14 @@
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   }
 
-  const api = { formatDuration, formatLastPlayed, formatDay, localDay, toMillis };
+  /** Coins aus dem Lebenszeichen (coins.balance) → "1.240 Coins"; unbekannt → null. */
+  function formatCoins(coins) {
+    const n = coins && typeof coins === "object" ? coins.balance : coins;
+    if (!Number.isInteger(n) || n < 0) return null;
+    return `${String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ".")} Coins`;
+  }
+
+  const api = { formatDuration, formatLastPlayed, formatDay, localDay, toMillis, formatCoins };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.statsFormat = api;
 })(typeof window === "object" ? window : globalThis);

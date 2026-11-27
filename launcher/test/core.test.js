@@ -660,7 +660,12 @@ test("Java-Speicher: ZGC ab Java 21 mit genug Kernen, sonst G1; eigener GC hat V
 });
 
 test("Statistik: Spielzeit formatieren", () => {
-  const { formatDuration, formatLastPlayed, formatDay, localDay } = require("../src/renderer/stats-format");
+  const { formatDuration, formatLastPlayed, formatDay, localDay, formatCoins } = require("../src/renderer/stats-format");
+  assert.equal(formatCoins({ balance: 1240 }), "1.240 Coins");
+  assert.equal(formatCoins({ balance: 0 }), "0 Coins");
+  assert.equal(formatCoins(1234567), "1.234.567 Coins");
+  assert.equal(formatCoins(undefined), null);
+  assert.equal(formatCoins({ balance: -1 }), null);
   assert.equal(formatDuration(0), "0 Min");
   assert.equal(formatDuration(null), "0 Min");
   assert.equal(formatDuration(-5), "0 Min");

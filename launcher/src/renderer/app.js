@@ -176,6 +176,13 @@ function selectedAccount() {
   return state.accounts.list.find((a) => a.uuid === state.accounts.selected) || null;
 }
 
+/** Kontoart und Coins (Kontostand kommt mit dem Lebenszeichen der Freundesliste, keine eigene Anfrage). */
+function renderCoins() {
+  const account = selectedAccount();
+  const coins = account && friendsData && friendsData.me && friendsData.me.name === account.name ? statsFormat.formatCoins(friendsData.coins) : null;
+  $("account-type").textContent = account ? (account.type === "microsoft" ? "Microsoft-Konto" : "Offline-Konto") + (coins ? ` · ${coins}` : "") : "Kein Konto";
+}
+
 function renderAccounts() {
   const account = selectedAccount();
   if (friendsData && friendsData.me && (!account || friendsData.me.name !== account.name)) {
@@ -183,7 +190,7 @@ function renderAccounts() {
     setTimeout(loadFriends, 0);
   }
   $("account-name").textContent = account ? account.name : "Anmelden";
-  $("account-type").textContent = account ? (account.type === "microsoft" ? "Microsoft-Konto" : "Offline-Konto") : "Kein Konto";
+  renderCoins();
   $("launch-name").textContent = account ? account.name : "kein Konto";
   $("account-avatar").hidden = !account;
   $("account-fallback").textContent = account ? account.name[0].toUpperCase() : "?";
@@ -1355,7 +1362,10 @@ async function friendAction(call) {
 }
 
 function renderFriends(data) {
+  // Kontostand nur aus dem Lebenszeichen (ohne laufendes Spiel); sonst den letzten Stand behalten
+  if (data && friendsData && !data.coins && friendsData.coins && data.me && friendsData.me && data.me.name === friendsData.me.name) data.coins = friendsData.coins;
   friendsData = data;
+  renderCoins();
   const notice = $("friends-notice");
   if (!data || !data.configured) {
     notice.hidden = false;
