@@ -244,6 +244,11 @@ public final class Friends {
     }
 
     /** Nächste Chat-Benachrichtigung (Freund online, neue Anfrage) oder null. */
+    /** Hinweis im Chat ("[Mytic] …"), z. B. Tagesbonus oder Geschenk */
+    public static void notice(String text) {
+        if (NOTICES.size() < 50) NOTICES.add(text);
+    }
+
     public static String pollNotice() {
         return NOTICES.poll();
     }
@@ -334,6 +339,9 @@ public final class Friends {
                 body.addProperty("hideServer", !showServer);
                 // Cosmetics-Änderungen anderer seit dem letzten Lebenszeichen mitschicken lassen (ältere Server ignorieren das)
                 body.addProperty("cosSince", cosSince);
+                // Tagesbonus nach Ortszeit; Gutschriften seit der zuletzt gemeldeten Buchung als Hinweis (Server mit coins1)
+                body.addProperty("tz", de.myticlegacy.client.cosmetics.CoinsCore.tz());
+                if (de.myticlegacy.client.cosmetics.CoinsCore.lastTx() >= 0) body.addProperty("coinTx", de.myticlegacy.client.cosmetics.CoinsCore.lastTx());
                 // versteckt: nur Server, die das kennen (presence2), sonst wie früher nur die Liste holen
                 if (!visible) body.addProperty("hidden", true);
                 if (play != null) body.add("play", play);
@@ -378,6 +386,8 @@ public final class Friends {
             gameInvites = g.has("invites") ? g.get("invites").getAsInt() : 0;
             if (gameInvites > 0) gameHints++;
         }
+        // Coins: Kontostand, Preisstand, Tagesbonus und Gutschriften (Server mit coins1)
+        if (data.has("coins") && data.get("coins").isJsonObject()) de.myticlegacy.client.cosmetics.CoinsCore.fromBeat(data.getAsJsonObject("coins"));
         if (data.has("owned") && data.get("owned").isJsonObject()) {
             owned = data.getAsJsonObject("owned");
             ownedSeq++;

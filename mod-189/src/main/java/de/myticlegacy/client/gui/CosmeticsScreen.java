@@ -4,6 +4,7 @@ import de.myticlegacy.client.MyticClient;
 import de.myticlegacy.client.compat.Compat;
 import de.myticlegacy.client.compat.Gfx;
 import de.myticlegacy.client.cosmetics.AdminCore;
+import de.myticlegacy.client.cosmetics.CoinsCore;
 import de.myticlegacy.client.cosmetics.Cosmetics;
 import de.myticlegacy.client.cosmetics.CosmeticsCore;
 import de.myticlegacy.client.cosmetics.MiniMeCore;
@@ -29,6 +30,8 @@ import java.util.Locale;
  * aktiven Cosmetics, mit der Maus drehbar), rechts Kategorien als Segmente, Raster mit Vorschauen (Umhänge, Flügel,
  * Schilde, Auren), Formulare für MiniMe und Nametag, für Admins das Freischalten. Auswahl wirkt sofort und wird
  * gespeichert; andere Mytic-Spieler sehen sie.
+ * Shop: jedes Teil kostet Coins (Preis auf der Karte, „Kaufen“ mit Rückfrage und Vorschau an der Figur), Sets mit
+ * Rabatt, Reiter „Coins“ mit Tagesbonus, Verschenken an Freunde und Verlauf; Admins buchen Coins im Reiter „Admin“.
  */
 public class CosmeticsScreen extends DesignScreen {
     private static final float W = 1600, H = 880, STAGE = 620, HEAD = 88, SUB = 72, FOOT = 92;
@@ -36,6 +39,8 @@ public class CosmeticsScreen extends DesignScreen {
     // 1.8.9 hat keine Schilde
     private static final String[] BASE_TABS = {"Umhänge", "MiniMe", "Flügel", "Auren", "Kopf & Hals", "Nametag"};
     private static final String ACC_TAB = "Kopf & Hals";
+    /** Gold für Coins */
+    private static final int GOLD = 0xFFFFC23A;
     /** Plätze im Reiter „Kopf & Hals“: Platz im Katalog, Beschriftung */
     private static final String[][] ACC_SLOTS = {{"kopf", "Kopf"}, {"hals", "Hals"}};
     /** &-Farbcodes in Minecraft-Reihenfolge und ihre Farben */
@@ -57,6 +62,28 @@ public class CosmeticsScreen extends DesignScreen {
     private final Kit.Field mini = new Kit.Field(16);
     private final Kit.Field tag = new Kit.Field(CosmeticsCore.NAMETAG_RAW);
     private final Kit.Field admin = new Kit.Field(32);
+    private final Kit.Field coinAmount = new Kit.Field(7);
+    private final Kit.Field coinReason = new Kit.Field(60);
+    private final Kit.Field giftAmount = new Kit.Field(3);
+    private final Kit.Scroll setScroll = new Kit.Scroll();
+    private final Kit.Scroll txScroll = new Kit.Scroll();
+
+    /** Offener Kauf-Dialog: Teil (kind/id/item) oder Set (set) */
+    private static final class Buy {
+        String kind, id, item, name;
+        CoinsCore.SetInfo set;
+        int price;
+        volatile String error;
+        volatile boolean running;
+    }
+
+    private Buy buying;
+    /** Freund, dem Coins geschenkt werden sollen; true = Rückfrage offen */
+    private String giftTo;
+    private boolean giftConfirm;
+    /** Nach einem Kauf ausrüsten – im Spiel-Thread (frame), nicht im Hintergrund */
+    private volatile String equipKind, equipId;
+    private volatile boolean closeBuy;
     private final Kit.Scroll scroll = new Kit.Scroll();
     private String message;
     /** Drehung der Figur (Grad, 0 = von vorn) */
@@ -65,12 +92,14 @@ public class CosmeticsScreen extends DesignScreen {
     public CosmeticsScreen() {
         super("cos", "Kosmetik");
         CosmeticsCore.refreshOwned();
-        if (CosmeticsCore.isAdmin()) {
-            TABS = java.util.Arrays.copyOf(BASE_TABS, BASE_TABS.length + 1);
-            TABS[BASE_TABS.length] = "Admin";
-        } else {
-            TABS = BASE_TABS;
+        // Shop-Reiter nur mit Freundesliste (Coins liegen auf dem Friends-Server), „Admin“ nur mit Admin-Recht
+        List<String> tabs = new ArrayList<String>(java.util.Arrays.asList(BASE_TABS));
+        if (Friends.available()) {
+            tabs.add("Sets");
+            tabs.add("Coins");
         }
+        if (CosmeticsCore.isAdmin()) tabs.add("Admin");
+        TABS = tabs.toArray(new String[0]);
         if (tab >= TABS.length) tab = 0;
         String own = CosmeticsCore.ownNametag();
         tag.text = own == null ? "" : own;
@@ -83,8 +112,11 @@ public class CosmeticsScreen extends DesignScreen {
         admin.allowed = NAME_CHARS;
         admin.onEnter = () -> {
             AdminCore.load(admin.text);
+            CoinsCore.adminLoad(admin.text);
             kit.focus(null);
         };
+        coinAmount.allowed = "0123456789";
+        giftAmount.allowed = "0123456789";
     }
 
     // ------------------------------------------------------------------------------------------ Versionsteile
@@ -127,6 +159,8 @@ public class CosmeticsScreen extends DesignScreen {
         if (tabName.equals("Auren")) return "sparkle";
         if (tabName.equals("Nametag")) return "tag";
         if (tabName.equals(ACC_TAB)) return "hat";
+        if (tabName.equals("Sets")) return "gift";
+        if (tabName.equals("Coins")) return "coin";
         return "lock";
     }
 
@@ -178,6 +212,16 @@ public class CosmeticsScreen extends DesignScreen {
 
     @Override
     protected void frame(GuiGraphics g) {
+        // nach einem Kauf (Antwort kam im Hintergrund): ausrüsten und Dialog schließen – hier im Spiel-Thread
+        String ek = equipKind, ei = equipId;
+        if (ek != null) {
+            equipKind = null;
+            equip(ek, ei);
+        }
+        if (closeBuy) {
+            closeBuy = false;
+            buying = null;
+        }
         float[] r = center(W, H);
         float x = r[0], y = r[1], w = r[2], h = r[3];
         kit.window(x, y, w, h, !inWorld());
@@ -193,6 +237,8 @@ public class CosmeticsScreen extends DesignScreen {
         float fy = y + h - FOOT * d;
         kit.hline(mx, fy, mw);
         drawFooter(mx, fy, mw);
+        if (buying != null) drawBuy();
+        else if (giftConfirm && giftTo != null) drawGiftConfirm();
     }
 
     // ------------------------------------------------------------------------------------------ Bühne
@@ -289,19 +335,45 @@ public class CosmeticsScreen extends DesignScreen {
             List<String[]> list = items();
             int owned = 0;
             for (int i = 1; i < list.size(); i++) if (CosmeticsCore.owns(kindOfTab(), list.get(i)[0])) owned++;
-            sub = owned + " von " + (list.size() - 1) + " freigeschaltet";
+            sub = owned + " von " + (list.size() - 1) + (Friends.available() ? " gekauft" : " freigeschaltet");
         } else if (isTab("MiniMe")) {
             sub = "Ein kleiner Begleiter mit dem Skin eines beliebigen Spielers";
         } else if (isTab("Nametag")) {
             sub = "Text über deinem Namen, mit Farben und Formaten";
+        } else if (isTab("Sets")) {
+            sub = "Ganze Sets auf einmal – " + CoinsCore.discount() + " % günstiger als einzeln";
+        } else if (isTab("Coins")) {
+            sub = "Tagesbonus, Geschenke an Freunde und dein Verlauf";
         } else {
-            sub = "Cosmetics für Spieler freischalten";
+            sub = "Cosmetics freischalten und Coins buchen";
         }
         kit.text(title, x + 32 * d, y + 24 * d, 21, Tokens.SEMIBOLD, Tokens.TEXT);
         kit.text(sub, x + 32 * d, y + 54 * d, 14.5f, Tokens.MEDIUM, Tokens.SUBTLE);
         float right = x + w - 32 * d - 40 * d;
         kit.iconButton("close", right, y + 24 * d, 40 * d, "x", true, () -> Compat.setScreen(null));
-        if (gridTab()) kit.field("search", search, right - 12 * d - 280 * d, y + 24 * d, 280 * d, 40 * d, "Suchen …", "search");
+        float left = right - 12 * d;
+        if (gridTab()) {
+            left -= 280 * d;
+            kit.field("search", search, left, y + 24 * d, 280 * d, 40 * d, "Suchen …", "search");
+            left -= 12 * d;
+        }
+        // Kontostand (kommt mit dem Lebenszeichen); Klick öffnet den Reiter „Coins“
+        if (CoinsCore.supported()) {
+            String text = (CoinsCore.balance() < 0 ? "…" : CoinsCore.fmt(CoinsCore.balance())) + " Coins";
+            float bw = kit.width(text, 12.5f, Tokens.SEMIBOLD) + 36 * d;
+            left -= bw;
+            kit.badge(text, "coin", left, y + 32 * d, GOLD);
+            final int coinsTab = java.util.Arrays.asList(TABS).indexOf("Coins");
+            if (coinsTab >= 0) kit.hit("coinsbadge", left, y + 32 * d, bw, 24 * d, () -> openTab(coinsTab));
+        }
+    }
+
+    private void openTab(int i) {
+        tab = i;
+        kit.focus(null);
+        scroll.reset();
+        message = null;
+        if (isTab("Coins") && !CoinsCore.infoLoaded) CoinsCore.loadInfo();
     }
 
     private void drawTabs(float x, float y, float w) {
@@ -313,12 +385,7 @@ public class CosmeticsScreen extends DesignScreen {
             total += 54 * d + kit.width(TABS[i], 14.5f, Tokens.SEMIBOLD);
         }
         if (total > w - 64 * d) icons = null;
-        kit.seg("tabs", x + 32 * d, y + (SUB * d - 44 * d) / 2f, TABS, icons, null, tab, i -> {
-            tab = i;
-            kit.focus(null);
-            scroll.reset();
-            message = null;
-        });
+        kit.seg("tabs", x + 32 * d, y + (SUB * d - 44 * d) / 2f, TABS, icons, null, tab, this::openTab);
     }
 
     private void drawFooter(float x, float y, float w) {
@@ -369,10 +436,14 @@ public class CosmeticsScreen extends DesignScreen {
     private void drawBody(float x, float y, float w, float h) {
         if (isTab("Admin")) {
             drawAdmin(x, y, w, h);
+        } else if (isTab("Sets")) {
+            drawSets(x, y, w, h);
+        } else if (isTab("Coins")) {
+            drawCoins(x, y, w, h);
         } else if (isTab("MiniMe") && !CosmeticsCore.owns("minime", null)) {
-            empty(x, y, w, h, "lock", "MiniMe ist für dich noch nicht freigeschaltet", "Ein Admin kann es dir freischalten.");
-        } else if (isTab("Nametag") && !CosmeticsCore.owns("nametag", null)) {
-            empty(x, y, w, h, "lock", "Der Nametag ist für dich noch nicht freigeschaltet", "Ein Admin kann es dir freischalten.");
+            buyCard(x, y, w, h, "mini", "MiniMe", "minime", "Ein kleiner Begleiter mit dem Skin eines beliebigen Spielers – an Schulter, Kopf, Hand oder Bein.");
+        } else if (isTab("Nametag") && !CosmeticsCore.owns("nametag", null) && !anyPresetOwned() && CoinsCore.price("nametag") == null) {
+            empty(x, y, w, h, "lock", "Der Nametag ist für dich noch nicht freigeschaltet", Friends.available() ? "Preise werden geladen …" : "Nur über den Mytic Launcher.");
         } else if (isTab("MiniMe")) {
             drawMiniMe(x, y, w, h);
         } else if (isTab("Nametag")) {
@@ -450,8 +521,9 @@ public class CosmeticsScreen extends DesignScreen {
         final boolean locked = id != null && !CosmeticsCore.owns(kindOfTab(), id);
         boolean eq = id == null ? sel == null : id.equals(sel);
         String key = "it:" + kindOfTab() + ":" + id;
+        final String kind = kindOfTab();
         boolean hv = kit.hit(key, x, y, w, h, () -> {
-            if (locked) Toasts.show("Gesperrt – ein Admin kann es freischalten", "lock", Toasts.INFO);
+            if (locked) openBuy(kind, id, e[1]);
             else pick(id);
         });
         float ht = Motion.to(kit.key(key + ":h"), hv, Tokens.MS_HOVER), et = Motion.to(kit.key(key + ":e"), eq, 200);
@@ -463,12 +535,23 @@ public class CosmeticsScreen extends DesignScreen {
         Draw.rect(kit.g, ax, ay, aw, ah, 11 * d, 0x38000000);
         boolean animated = hv || eq;
         int stripe = locked ? Tokens.LINE_STRONG : eq ? Tokens.ACC : Draw.alpha(Tokens.R_RARE, 0.8f);
-        drawArt(id, ax, ay, aw, ah, animated);
+        drawArt(kind, id, ax, ay, aw, ah, animated);
         if (locked) Draw.rect(kit.g, ax, ay, aw, ah, 11 * d, 0x8C0B0912);
+        // Preis auf jeder Karte (gekauft: „Gekauft“)
+        Integer price = id == null ? null : CoinsCore.price(kind + ":" + id);
+        if (id != null && price != null && Friends.available()) {
+            if (locked) {
+                String pt = CoinsCore.fmt(price);
+                boolean afford = CoinsCore.balance() >= price;
+                kit.badge(pt, "coin", ax + 8 * d, ay + 8 * d, afford ? GOLD : Tokens.SUBTLE);
+            } else if (!CosmeticsCore.isAdmin()) {
+                kit.badge("Gekauft", "check", ax + 8 * d, ay + 8 * d, Tokens.OK);
+            }
+        }
         if (id != null) Draw.rect(kit.g, ax + 8 * d, ay + ah - 3 * d, aw - 16 * d, 3 * d, 1.5f * d, stripe);
         kit.textMid(e[1], x + 14 * d, yy + 12 * d + ah + 22 * d, 15, Tokens.SEMIBOLD, locked ? Tokens.MUTED : Tokens.TEXT, w - 28 * d);
-        String state = eq ? "Ausgerüstet" : locked ? "Gesperrt" : id == null ? "Ablegen" : "Verfügbar";
-        int sc = eq ? 0xFFD9C2FF : locked ? Tokens.SUBTLE : Tokens.MUTED;
+        String state = eq ? "Ausgerüstet" : locked ? (price != null ? "Kaufen · " + CoinsCore.fmt(price) + " Coins" : "Gesperrt") : id == null ? "Ablegen" : "Verfügbar";
+        int sc = eq ? 0xFFD9C2FF : locked ? (price != null ? Draw.mix(GOLD, Tokens.TEXT, 0.35f) : Tokens.SUBTLE) : Tokens.MUTED;
         kit.textMid(state, x + 14 * d, yy + 12 * d + ah + 44 * d, 12.5f, Tokens.SEMIBOLD, sc, w - 28 * d);
         if (et > 0.01f) {
             float s = 26 * d, mx = x + w - 20 * d - s, my = yy + 20 * d;
@@ -481,25 +564,25 @@ public class CosmeticsScreen extends DesignScreen {
     }
 
     /** Vorschau eines Eintrags in der Bildfläche (Pixel) */
-    private void drawArt(String id, float x, float y, float w, float h, boolean animated) {
+    private void drawArt(String kind, String id, float x, float y, float w, float h, boolean animated) {
         GuiGraphics g = kit.g;
         float cx = x + w / 2f;
         if (id == null) {
             Icons.draw(g, "x", cx - 18 * d, y + h / 2f - 18 * d, 36 * d, Tokens.SUBTLE);
             return;
         }
-        if (isTab("Umhänge")) {
+        if (kind.equals("cape")) {
             CosmeticsCore.Cape cape = CosmeticsCore.byId(id);
             int ph = Math.round(h - 24 * d), pw = Math.round(ph * 10f / 16f);
             if (cape == null || !Cosmetics.drawPreview(g, cape, Math.round(cx - pw / 2f), Math.round(y + 12 * d), pw, ph, animated)) {
                 Icons.draw(g, "cape", cx - 16 * d, y + h / 2f - 16 * d, 32 * d, Tokens.MUTED);
             }
-        } else if (isTab("Schilde")) {
+        } else if (kind.equals("shield")) {
             int ph = Math.round(h - 24 * d), pw = Math.round(ph * 12f / 22f);
             Cosmetics.drawShieldPreview(g, id, Math.round(cx - pw / 2f), Math.round(y + 12 * d), pw, ph, animated);
-        } else if (isTab("Auren")) {
+        } else if (kind.equals("aura")) {
             drawAuraPreview(CosmeticsCore.aura(id), x, y, w, h, animated);
-        } else if (isTab(ACC_TAB)) {
+        } else if (kind.equals("acc")) {
             int s = Math.round(h - 12 * d);
             Cosmetics.drawAccPreview(g, id, Math.round(cx - s / 2f), Math.round(y + 6 * d), s, s);
         } else {
@@ -675,6 +758,22 @@ public class CosmeticsScreen extends DesignScreen {
                 Tokens.SUBTLE);
 
         float fy = top + ph + 20 * d;
+        // ohne freien Nametag: Kaufen-Zeile statt Eingabe; gekaufte Vorlagen lassen sich trotzdem wählen
+        final boolean free = CosmeticsCore.owns("nametag", null);
+        float py;
+        if (!free) {
+            float bh0 = 96 * d;
+            Draw.rect(kit.g, lx, fy, lw, bh0, 16 * d, Tokens.SURFACE);
+            Draw.ring(kit.g, lx, fy, lw, bh0, 16 * d, 1, Draw.alpha(GOLD, 0.45f));
+            kit.text("Eigener Nametag", lx + 20 * d, fy + 20 * d, 16, Tokens.SEMIBOLD, Tokens.TEXT);
+            kit.textMid("Freier Text mit allen Farben und Formaten – oder unten einzelne Vorlagen kaufen", lx + 20 * d, fy + 62 * d, 13.5f, Tokens.MEDIUM, Tokens.MUTED, lw - 240 * d);
+            final Integer np = CoinsCore.price("nametag");
+            String label = np == null ? "Preis wird geladen …" : "Kaufen · " + CoinsCore.fmt(np);
+            float bw = kit.buttonWidth(label, "coin", 42 * d);
+            kit.button("tag:buy", lx + lw - 20 * d - bw, fy + (bh0 - 42 * d) / 2f, bw, 42 * d, label, "coin", Widgets.PRIMARY,
+                    np == null ? null : (Runnable) () -> openBuy("nametag", null, "Eigener Nametag"));
+            py = fy + bh0 + 20 * d;
+        } else {
         kit.field("tag", tag, lx, fy, lw, 46 * d, "Text eingeben, z. B. &b&lMytic &7| &dPro", "pencil");
         // Farben
         float sy = fy + 62 * d, s = 30 * d;
@@ -701,19 +800,24 @@ public class CosmeticsScreen extends DesignScreen {
             Type.pixel(kit.g, FORMATS[i][0], bx + (bw - tw) / 2f, oy + 16 * d + (bh - 7f * sc / k) / 2f, sc, 0, Tokens.TEXT);
             bx += bw + 8 * d;
         }
-        // Vorlagen (aus dem Cosmetics-Paket): setzen den Text ins Feld
+        py = oy + 76 * d;
+        }
+        // Vorlagen (aus dem Cosmetics-Paket): setzen den Text ins Feld; ohne freien Nametag einzeln kaufbar
         java.util.List<String[]> presets = CosmeticsCore.nametagPresets();
-        float py = oy + 76 * d;
         if (!presets.isEmpty()) {
             kit.caption("Vorlagen", lx + 2 * d, py);
             float px = lx, row = 0;
             for (int i = 0; i < presets.size(); i++) {
-                final String raw = presets.get(i)[2];
+                final String raw = presets.get(i)[2], pid = presets.get(i)[0], pname = presets.get(i)[1];
+                final boolean pLocked = !free && !CosmeticsCore.owns("nametag", pid);
+                final Integer pPrice = CoinsCore.price("nametag:" + pid);
+                String pLabel = pLocked && pPrice != null ? CoinsCore.fmt(pPrice) : null;
+                float extra = pLabel != null ? kit.width(pLabel, 12.5f, Tokens.SEMIBOLD) + 30 * d : 0;
                 String shownPreset = CosmeticsCore.formatNametag(raw);
                 if (shownPreset == null) continue;
                 int sc = Type.pixelScale(kit.g, 11 * d);
                 float k = Draw.k(kit.g);
-                float tw = font.width(shownPreset) * sc / k, bw = tw + 24 * d, bh = 36 * d;
+                float tw = font.width(shownPreset) * sc / k, bw = tw + 24 * d + extra, bh = 36 * d;
                 if (px + bw > lx + lw && px > lx) {
                     // bis zu drei Zeilen (passt im Fenster noch über die Knöpfe)
                     if (row >= 2) break;
@@ -723,22 +827,32 @@ public class CosmeticsScreen extends DesignScreen {
                 }
                 boolean on = raw.equals(tag.text);
                 boolean hv = kit.hit("preset:" + i, px, py + 16 * d, bw, bh, () -> {
+                    if (pLocked) {
+                        openBuy("nametag", pid, "Vorlage „" + pname + "“");
+                        return;
+                    }
                     tag.text = raw;
                     kit.focus(null);
+                    if (!free) CosmeticsCore.selectNametag(raw);
                 });
                 Draw.glass(kit.g, px, py + 16 * d, bw, bh, 10 * d, on ? 0x299B5CFF : hv ? Tokens.SURFACE_HOVER : Tokens.SURFACE,
                         on ? Tokens.ACC_LINE : hv ? Tokens.LINE_STRONG : Tokens.LINE);
-                Type.pixel(kit.g, shownPreset, px + 12 * d, py + 16 * d + (bh - 7f * sc / k) / 2f, sc, 0, 0xFFFFFFFF);
+                Type.pixel(kit.g, shownPreset, px + 12 * d, py + 16 * d + (bh - 7f * sc / k) / 2f, sc, 0, pLocked ? 0x99FFFFFF : 0xFFFFFFFF);
+                if (pLabel != null) {
+                    float qx = px + 12 * d + tw + 10 * d;
+                    Icons.draw(kit.g, "coin", qx, py + 16 * d + bh / 2f - 7 * d, 14 * d, GOLD);
+                    kit.textMid(pLabel, qx + 18 * d, py + 16 * d + bh / 2f, 12.5f, Tokens.SEMIBOLD, Draw.mix(GOLD, Tokens.TEXT, 0.35f), 0);
+                }
                 px += bw + 8 * d;
             }
             py += 66 * d;
         }
         // Übernehmen / Entfernen
         float ay = py, bh = 38 * d;
-        float w0 = kit.button("tag:ok", lx, ay, bh, "Übernehmen", "check", Widgets.PRIMARY, () -> {
+        float w0 = kit.button("tag:ok", lx, ay, bh, "Übernehmen", "check", Widgets.PRIMARY, free ? (Runnable) () -> {
             CosmeticsCore.selectNametag(tag.text);
             kit.focus(null);
-        });
+        } : null);
         float w1 = kit.button("tag:rm", lx + w0 + 8 * d, ay, bh, "Entfernen", "trash", Widgets.GHOST, () -> {
             tag.text = "";
             CosmeticsCore.selectNametag(null);
@@ -770,6 +884,7 @@ public class CosmeticsScreen extends DesignScreen {
         float bh = 46 * d, bx = lx + fw + 10 * d;
         bx += kit.button("adm:load", bx, top, bh, "Laden", "search", Widgets.SECONDARY, () -> {
             AdminCore.load(admin.text);
+            CoinsCore.adminLoad(admin.text);
             scroll.reset();
         }) + 8 * d;
         kit.button("adm:save", bx, top, bh, "Speichern", "check", Widgets.PRIMARY, AdminCore.uuid != null && AdminCore.dirty ? (Runnable) AdminCore::save : null);
@@ -779,6 +894,38 @@ public class CosmeticsScreen extends DesignScreen {
         int sc = AdminCore.error ? Draw.mix(Tokens.BAD, Tokens.TEXT, 0.25f) : AdminCore.dirty ? Tokens.WARN : Tokens.MUTED;
         kit.textMid(status, lx, top + 70 * d, 14, Tokens.MEDIUM, sc, lw);
         if (AdminCore.uuid == null) return;
+
+        // Coins des Spielers: Stand, Menge, Grund, Geben/Nehmen (wie /mytic coins give|take)
+        float cy0 = top + 96 * d;
+        boolean known = AdminCore.uuid.equals(CoinsCore.adminUuid);
+        kit.caption("Coins", lx + 2 * d, cy0);
+        String bal = known ? CoinsCore.fmt(CoinsCore.adminBalance) : "…";
+        kit.badge(bal + " Coins", "coin", lx + 2 * d, cy0 + 26 * d, GOLD);
+        float cfx = lx + 150 * d;
+        kit.field("coinamt", coinAmount, cfx, cy0 + 18 * d, 110 * d, 40 * d, "Menge", "coin");
+        kit.field("coinwhy", coinReason, cfx + 118 * d, cy0 + 18 * d, Math.max(120 * d, lw - (cfx - lx) - 118 * d - 230 * d), 40 * d, "Grund (sieht der Spieler)", "pencil");
+        final int amount = parse(coinAmount.text);
+        final String who = AdminCore.uuid;
+        boolean can = amount > 0 && !CoinsCore.busy() && CoinsCore.supported();
+        float gbw = kit.buttonWidth("Geben", "plus", 40 * d), tbw = kit.buttonWidth("Nehmen", null, 40 * d);
+        kit.button("coin:take", lx + lw - tbw, cy0 + 18 * d, tbw, 40 * d, "Nehmen", null, Widgets.GHOST, can ? (Runnable) () -> CoinsCore.adminBook(who, -amount, coinReason.text, (ok, msg) -> {
+            if (ok) Toasts.ok(msg);
+            else Toasts.error(msg);
+        }) : null);
+        kit.button("coin:give", lx + lw - tbw - 8 * d - gbw, cy0 + 18 * d, gbw, 40 * d, "Geben", "plus", Widgets.PRIMARY, can ? (Runnable) () -> CoinsCore.adminBook(who, amount, coinReason.text, (ok, msg) -> {
+            if (ok) {
+                Toasts.ok(msg);
+                coinAmount.text = "";
+            } else {
+                Toasts.error(msg);
+            }
+        }) : null);
+        String last = CoinsCore.adminMessage;
+        if (last == null && known && !CoinsCore.adminTx.isEmpty()) {
+            CoinsCore.Tx t = CoinsCore.adminTx.get(0);
+            last = "Zuletzt: " + (t.delta > 0 ? "+" : "") + CoinsCore.fmt(t.delta) + " · " + CoinsCore.describe(t);
+        }
+        if (last != null) kit.textMid(last, lx, cy0 + 76 * d, 13, Tokens.MEDIUM, CoinsCore.adminError ? Draw.mix(Tokens.BAD, Tokens.TEXT, 0.25f) : Tokens.MUTED, lw);
 
         // Häkchen-Felder in Zeilen (Kopfzeilen ohne Eintrag)
         List<String[]> chips = new ArrayList<String[]>();
@@ -821,7 +968,7 @@ public class CosmeticsScreen extends DesignScreen {
             pos[i] = new float[]{cx, cy, cw};
             cx += cw + gap;
         }
-        float listTop = top + 96 * d, viewH = y + h - listTop - 8 * d;
+        float listTop = top + 196 * d, viewH = y + h - listTop - 8 * d;
         float off = kit.scroll(scroll, lx, listTop, lw, viewH, cy + ch + 12 * d);
         kit.clip(lx - 4 * d, listTop, lw + 8 * d, viewH);
         for (int i = 0; i < chips.size(); i++) {
@@ -849,6 +996,393 @@ public class CosmeticsScreen extends DesignScreen {
         kit.scrollbar("admin", scroll, lx + lw + 16 * d, listTop, viewH);
     }
 
+    // ------------------------------------------------------------------------------------------ Shop
+
+    /** Kauf-Dialog für ein Teil öffnen (kind: cape, wings, shield, aura, acc, minime, nametag; id null bei minime/nametag) */
+    private void openBuy(String kind, String id, String name) {
+        if (!Friends.available()) {
+            Toasts.show("Kaufen geht nur über den Mytic Launcher", "lock", Toasts.INFO);
+            return;
+        }
+        String item = id == null ? kind : kind + ":" + id;
+        Integer price = CoinsCore.price(item);
+        if (price == null) {
+            Toasts.show(CoinsCore.supported() ? "Preise werden geladen – gleich noch einmal" : "Der Shop kommt mit dem nächsten Server-Update", "coin", Toasts.INFO);
+            CosmeticsCore.refreshOwned();
+            return;
+        }
+        Buy b = new Buy();
+        b.kind = kind;
+        b.id = id;
+        b.item = item;
+        b.name = name;
+        b.price = price;
+        buying = b;
+        kit.focus(null);
+    }
+
+    private void openBuySet(CoinsCore.SetInfo set) {
+        if (!Friends.available()) return;
+        Buy b = new Buy();
+        b.kind = "set";
+        b.set = set;
+        b.name = set.name;
+        b.price = CoinsCore.bundlePrice(set);
+        buying = b;
+        kit.focus(null);
+    }
+
+    /** Gekauftes gleich ausrüsten */
+    private void equip(String kind, String id) {
+        if (kind.equals("cape")) CosmeticsCore.select(id);
+        else if (kind.equals("wings")) CosmeticsCore.selectWings(id);
+        else if (kind.equals("shield")) CosmeticsCore.selectShield(id);
+        else if (kind.equals("aura")) CosmeticsCore.selectAura(id);
+        else if (kind.equals("acc")) {
+            CosmeticsCore.Acc a = CosmeticsCore.acc(id);
+            if (a != null) CosmeticsCore.selectAcc(a.slot, id);
+        } else if (kind.equals("nametag") && id != null) {
+            for (String[] p : CosmeticsCore.nametagPresets()) {
+                if (p[0].equals(id)) {
+                    tag.text = p[2];
+                    CosmeticsCore.selectNametag(p[2]);
+                }
+            }
+        }
+    }
+
+    private boolean anyPresetOwned() {
+        for (String[] p : CosmeticsCore.nametagPresets()) if (CosmeticsCore.owns("nametag", p[0])) return true;
+        return false;
+    }
+
+    /** Gesperrter Reiter (MiniMe): Erklärung, Preis und „Kaufen“ */
+    private void buyCard(float x, float y, float w, float h, String icon, final String name, final String item, String text) {
+        float cx = x + w / 2f, cy = y + h / 2f - 70 * d;
+        Draw.rect(kit.g, cx - 32 * d, cy - 32 * d, 64 * d, 64 * d, 18 * d, Tokens.SURFACE);
+        Icons.draw(kit.g, icon, cx - 14 * d, cy - 14 * d, 28 * d, Tokens.MUTED);
+        kit.textCenter(name + " ist noch nicht gekauft", cx, cy + 60 * d, 17, Tokens.SEMIBOLD, Tokens.TEXT);
+        kit.textCenter(text, cx, cy + 88 * d, 14.5f, Tokens.MEDIUM, Tokens.MUTED);
+        final Integer price = CoinsCore.price(item);
+        if (!Friends.available()) {
+            kit.textCenter("Kaufen geht nur über den Mytic Launcher", cx, cy + 116 * d, 14, Tokens.MEDIUM, Tokens.SUBTLE);
+            return;
+        }
+        String label = price == null ? "Preis wird geladen …" : "Kaufen · " + CoinsCore.fmt(price) + " Coins";
+        float bh = 44 * d, bw = kit.buttonWidth(label, "coin", bh);
+        kit.button("buycard:" + item, cx - bw / 2f, cy + 120 * d, bw, bh, label, "coin", Widgets.PRIMARY,
+                price == null ? null : (Runnable) () -> openBuy(item, null, name));
+    }
+
+    /** Kauf-Dialog mit Vorschau (an der Figur und im Dialog), Kontostand vorher/nachher und Rückfrage */
+    private void drawBuy() {
+        final Buy b = buying;
+        boolean isSet = b.set != null;
+        // Vorschau an der eigenen Figur, solange der Dialog offen ist
+        if (!isSet) {
+            if (b.kind.equals("nametag") && b.id != null) {
+                for (String[] p : CosmeticsCore.nametagPresets()) if (p[0].equals(b.id)) CoinsCore.preview("nametag", p[2]);
+            } else if (b.id != null) {
+                CoinsCore.preview(b.kind, b.id);
+            }
+        }
+        int bal = CoinsCore.balance();
+        boolean enough = bal >= b.price;
+        float w = 640 * d, h = (isSet ? 360 : 330) * d, x = (vw - w) / 2f, y = (vh - h) / 2f;
+        kit.modal(x, y, w, h, () -> {
+            if (!b.running) buying = null;
+        });
+        // Bild links
+        float ax = x + 28 * d, ay = y + 28 * d, aw = 190 * d, ah = 170 * d;
+        Draw.rect(kit.g, ax, ay, aw, ah, 14 * d, 0x38000000);
+        Draw.ring(kit.g, ax, ay, aw, ah, 14 * d, 1, Tokens.LINE);
+        if (isSet) {
+            Icons.draw(kit.g, "gift", ax + aw / 2f - 36 * d, ay + ah / 2f - 36 * d, 72 * d, GOLD);
+        } else if (b.kind.equals("minime")) {
+            Icons.draw(kit.g, "mini", ax + aw / 2f - 36 * d, ay + ah / 2f - 36 * d, 72 * d, Tokens.MUTED);
+        } else if (b.kind.equals("nametag")) {
+            String raw = null;
+            if (b.id != null) for (String[] p : CosmeticsCore.nametagPresets()) if (p[0].equals(b.id)) raw = p[2];
+            String shown = CosmeticsCore.formatNametag(raw);
+            if (shown != null) drawMcText(shown, ax + aw / 2f, ay + ah / 2f - 30 * d, true);
+            else Icons.draw(kit.g, "tag", ax + aw / 2f - 36 * d, ay + ah / 2f - 36 * d, 72 * d, Tokens.MUTED);
+            drawMcText(Cosmetics.playerName(), ax + aw / 2f, ay + ah / 2f + 4 * d, true);
+        } else {
+            drawArt(b.kind, b.id, ax + 6 * d, ay + 6 * d, aw - 12 * d, ah - 12 * d, true);
+        }
+        // Text rechts
+        float tx = ax + aw + 26 * d, tw = x + w - 28 * d - tx;
+        kit.text(isSet ? "Set kaufen?" : "Kaufen?", tx, y + 30 * d, 21, Tokens.SEMIBOLD, Tokens.TEXT);
+        kit.textMid(Type.ellipsize(kit.g, "„" + b.name + "“", tw, 17 * d, Tokens.SEMIBOLD), tx, y + 76 * d, 17, Tokens.SEMIBOLD, Tokens.TEXT, tw);
+        float ly = y + 104 * d;
+        if (isSet) {
+            int missing = CoinsCore.missing(b.set), sum = 0;
+            for (String item : b.set.items) if (!CoinsCore.ownsItem(item)) sum += CoinsCore.price(item) == null ? 0 : CoinsCore.price(item);
+            kit.textMid(missing + " von " + b.set.items.size() + " Teilen fehlen dir – einzeln " + CoinsCore.fmt(sum) + " Coins", tx, ly, 14, Tokens.MEDIUM, Tokens.MUTED, tw);
+            ly += 26 * d;
+            kit.badge("−" + CoinsCore.discount() + " % im Set", "gift", tx, ly - 12 * d, Tokens.OK);
+            ly += 26 * d;
+        } else {
+            kit.textMid(kindName(b.kind), tx, ly, 14, Tokens.MEDIUM, Tokens.MUTED, tw);
+            ly += 26 * d;
+            if (!b.kind.equals("minime") && !b.kind.equals("nametag")) {
+                kit.textMid(mc.thePlayer != null ? "Vorschau links an deiner Figur" : "Vorschau im Bild", tx, ly, 13, Tokens.MEDIUM, Tokens.SUBTLE, tw);
+                ly += 26 * d;
+            }
+        }
+        // Preis und Kontostand
+        Icons.draw(kit.g, "coin", tx, ly + 2 * d, 22 * d, GOLD);
+        kit.textMid(CoinsCore.fmt(b.price) + " Coins", tx + 30 * d, ly + 13 * d, 19, Tokens.SEMIBOLD, Tokens.TEXT, 0);
+        ly += 36 * d;
+        String after = bal < 0 ? "Kontostand wird geladen …" : "Kontostand: " + CoinsCore.fmt(bal) + (enough ? " → " + CoinsCore.fmt(bal - b.price) + " Coins" : " Coins");
+        kit.textMid(after, tx, ly, 14, Tokens.MEDIUM, Tokens.MUTED, tw);
+        ly += 26 * d;
+        String err = b.error;
+        if (err != null) {
+            kit.paragraph(err, tx, ly - 8 * d, tw, 13.5f, Tokens.MEDIUM, Draw.mix(Tokens.BAD, Tokens.TEXT, 0.25f), 19, 2);
+        } else if (bal >= 0 && !enough) {
+            kit.paragraph("Dir fehlen " + CoinsCore.fmt(b.price - bal) + " Coins. Coins gibt es täglich beim Spielen und als Geschenk von Freunden.", tx, ly - 8 * d, tw, 13.5f,
+                    Tokens.MEDIUM, Draw.mix(Tokens.WARN, Tokens.TEXT, 0.2f), 19, 2);
+        }
+        // Knöpfe
+        float bh = 44 * d, by = y + h - 28 * d - bh;
+        String label = b.running ? "Wird gekauft …" : isSet ? "Set kaufen" : "Kaufen";
+        float ew = kit.buttonWidth(label, "coin", bh);
+        kit.button("buy:ok", x + w - 28 * d - ew, by, ew, bh, label, "coin", Widgets.PRIMARY, !enough || b.running || CoinsCore.busy() ? null : (Runnable) () -> {
+            b.running = true;
+            b.error = null;
+            CoinsCore.buy(isSetItem(b) ? null : b.item, isSetItem(b) ? b.set.id : null, b.price, (ok, msg) -> {
+                b.running = false;
+                if (ok) {
+                    Toasts.ok(msg);
+                    if (!isSetItem(b) && b.id != null) {
+                        equipId = b.id;
+                        equipKind = b.kind;
+                    }
+                    closeBuy = true;
+                } else {
+                    b.error = msg;
+                    Toasts.error(msg);
+                }
+            });
+        });
+        float cw = kit.buttonWidth("Abbrechen", null, bh);
+        kit.button("buy:no", x + w - 28 * d - ew - 10 * d - cw, by, cw, bh, "Abbrechen", null, Widgets.GHOST, b.running ? null : (Runnable) () -> buying = null);
+    }
+
+    private static boolean isSetItem(Buy b) {
+        return b.set != null;
+    }
+
+    private static String kindName(String kind) {
+        if (kind.equals("cape")) return "Umhang";
+        if (kind.equals("wings")) return "Flügel";
+        if (kind.equals("shield")) return "Schild";
+        if (kind.equals("aura")) return "Aura";
+        if (kind.equals("acc")) return "Accessoire (Kopf & Hals)";
+        if (kind.equals("minime")) return "MiniMe";
+        if (kind.equals("nametag")) return "Nametag";
+        return kind;
+    }
+
+    /** Reiter „Sets“: Karten mit Teilen, Preis einzeln/Set und „Set kaufen“ */
+    private void drawSets(float x, float y, float w, float h) {
+        List<CoinsCore.SetInfo> list = CoinsCore.sets();
+        if (!Friends.available()) {
+            empty(x, y, w, h, "gift", "Sets gibt es nur über den Mytic Launcher", null);
+            return;
+        }
+        if (list.isEmpty()) {
+            empty(x, y, w, h, "gift", CoinsCore.supported() ? "Sets werden geladen …" : "Der Shop kommt mit dem nächsten Server-Update", null);
+            return;
+        }
+        float gx = x + 32 * d, gw = w - 64 * d, top = y + 8 * d, viewH = h - 8 * d, ch = 228 * d, gap = 14 * d;
+        float off = kit.scroll(setScroll, gx, top, gw, viewH, list.size() * (ch + gap) + 12 * d);
+        kit.clip(gx - 4 * d, top, gw + 8 * d, viewH);
+        for (int i = 0; i < list.size(); i++) {
+            final CoinsCore.SetInfo set = list.get(i);
+            float cy = top + 4 * d + i * (ch + gap) - off;
+            if (cy + ch < top || cy > top + viewH) continue;
+            Draw.rect(kit.g, gx, cy, gw, ch, 16 * d, Tokens.SURFACE);
+            Draw.ring(kit.g, gx, cy, gw, ch, 16 * d, 1, Tokens.LINE);
+            int missing = CoinsCore.missing(set), price = CoinsCore.bundlePrice(set);
+            kit.text(set.name, gx + 20 * d, cy + 18 * d, 18, Tokens.SEMIBOLD, Tokens.TEXT);
+            float bx = gx + 20 * d + kit.width(set.name, 18, Tokens.SEMIBOLD) + 12 * d;
+            bx += kit.badge("Event · immer kaufbar", "star", bx, cy + 18 * d, GOLD) + 6 * d;
+            kit.badge((set.items.size() - missing) + " / " + set.items.size() + " Teile", "check", bx, cy + 18 * d, missing == 0 ? Tokens.OK : Tokens.MUTED);
+            // Vorschauen der Teile in einer Reihe
+            float px = gx + 20 * d, py = cy + 56 * d, pw = 86 * d, ph = 86 * d;
+            int fit = Math.max(1, (int) ((gw - 40 * d + 8 * d) / (pw + 8 * d)));
+            int shown = 0;
+            for (String item : set.items) {
+                if (shown >= fit) break;
+                int c = item.indexOf(':');
+                if (c < 0) continue;
+                String kind = item.substring(0, c), id = item.substring(c + 1);
+                if (kind.equals("shield") && !java.util.Arrays.asList(BASE_TABS).contains("Schilde")) continue;
+                float qx = px + shown * (pw + 8 * d);
+                Draw.rect(kit.g, qx, py, pw, ph, 11 * d, 0x38000000);
+                drawArt(kind, id, qx + 3 * d, py + 3 * d, pw - 6 * d, ph - 6 * d, false);
+                if (CoinsCore.ownsItem(item)) {
+                    float s = 18 * d;
+                    Draw.accentRect(kit.g, qx + pw - s - 5 * d, py + 5 * d, s, s, s / 2, 1f);
+                    Icons.draw(kit.g, "check", qx + pw - s - 2 * d, py + 8 * d, 12 * d, 0xFFFFFFFF);
+                }
+                shown++;
+            }
+            if (set.items.size() > shown) kit.textMid("+" + (set.items.size() - shown) + " weitere", px, py + ph + 18 * d, 12.5f, Tokens.MEDIUM, Tokens.SUBTLE, 0);
+            // Preis und Knopf
+            float by = cy + ch - 20 * d - 42 * d, right = gx + gw - 20 * d;
+            if (missing == 0) {
+                kit.badge("Komplett", "check", right - kit.width("Komplett", 12.5f, Tokens.SEMIBOLD) - 36 * d, by + 9 * d, Tokens.OK);
+                continue;
+            }
+            String label = "Set kaufen · " + CoinsCore.fmt(price);
+            float bw = kit.buttonWidth(label, "coin", 42 * d);
+            kit.button("set:" + set.id, right - bw, by, bw, 42 * d, label, "coin", Widgets.PRIMARY, () -> openBuySet(set));
+            int sum = 0;
+            for (String item : set.items) if (!CoinsCore.ownsItem(item) && CoinsCore.price(item) != null) sum += CoinsCore.price(item);
+            String was = "einzeln " + CoinsCore.fmt(sum);
+            float ww = kit.width(was, 14, Tokens.MEDIUM);
+            float wx = right - bw - 16 * d - ww;
+            kit.textMid(was, wx, by + 21 * d, 14, Tokens.MEDIUM, Tokens.SUBTLE, 0);
+            Draw.rect(kit.g, wx - 2 * d, by + 21 * d, ww + 4 * d, 1.5f * d, 0, Tokens.SUBTLE);
+            kit.badge("−" + CoinsCore.discount() + " %", null, wx - 12 * d - kit.width("−" + CoinsCore.discount() + " %", 12.5f, Tokens.SEMIBOLD) - 18 * d, by + 9 * d, Tokens.OK);
+        }
+        kit.unclip();
+        kit.scrollbar("sets", setScroll, gx + gw + 16 * d, top, viewH);
+    }
+
+    /** Reiter „Coins“: Kontostand, Tagesbonus mit Serie, Verschenken an Freunde, Verlauf */
+    private void drawCoins(float x, float y, float w, float h) {
+        if (!CoinsCore.supported()) {
+            empty(x, y, w, h, "coin", "Coins kommen mit dem nächsten Server-Update", null);
+            return;
+        }
+        if (!CoinsCore.infoLoaded) CoinsCore.loadInfo();
+        float lx = x + 32 * d, top = y + 12 * d, colW = (w - 64 * d - 24 * d) * 0.5f;
+        // Kontostand
+        float ch = 108 * d;
+        Draw.rect(kit.g, lx, top, colW, ch, 16 * d, Tokens.SURFACE);
+        Draw.ring(kit.g, lx, top, colW, ch, 16 * d, 1, Draw.alpha(GOLD, 0.45f));
+        Icons.draw(kit.g, "coin", lx + 20 * d, top + 26 * d, 52 * d, GOLD);
+        kit.caption("Kontostand", lx + 88 * d, top + 26 * d);
+        kit.text((CoinsCore.balance() < 0 ? "…" : CoinsCore.fmt(CoinsCore.balance())) + " Coins", lx + 88 * d, top + 48 * d, 26, Tokens.SEMIBOLD, Tokens.TEXT);
+        // Tagesbonus
+        float dy = top + ch + 16 * d, dh = 132 * d;
+        Draw.rect(kit.g, lx, dy, colW, dh, 16 * d, Tokens.SURFACE);
+        Draw.ring(kit.g, lx, dy, colW, dh, 16 * d, 1, Tokens.LINE);
+        kit.caption("Tagesbonus", lx + 20 * d, dy + 18 * d);
+        String daily = CoinsCore.dailyClaimed ? "Heute abgeholt: +" + CoinsCore.dailyAmount + " Coins (Tag " + CoinsCore.dailyStreak + ")"
+                : "Heute: +" + CoinsCore.dailyAmount + " Coins – kommt automatisch beim Spielen";
+        kit.textMid(daily, lx + 20 * d, dy + 50 * d, 14.5f, Tokens.SEMIBOLD, Tokens.TEXT, colW - 40 * d);
+        // Serie: 7 Punkte
+        int streak = Math.min(7, CoinsCore.dailyStreak);
+        float sx = lx + 20 * d, sy = dy + 72 * d, s = 26 * d;
+        for (int i = 0; i < 7; i++) {
+            boolean on = i < streak;
+            float qx = sx + i * (s + 8 * d);
+            if (on) Draw.accentRect(kit.g, qx, sy, s, s, s / 2, 1f);
+            else Draw.ring(kit.g, qx, sy, s, s, s / 2, 1, Tokens.LINE_STRONG);
+            kit.textCenter(String.valueOf(i + 1), qx + s / 2f, sy + s / 2f, 11.5f, Tokens.SEMIBOLD, on ? 0xFFFFFFFF : Tokens.SUBTLE);
+        }
+        kit.textMid("+5 je Tag in Folge, bis 40 – ein verpasster Tag beginnt wieder bei 10", sx, sy + s + 16 * d, 12.5f, Tokens.MEDIUM, Tokens.SUBTLE, colW - 40 * d);
+        // Verschenken
+        float gy = dy + dh + 16 * d, gh = y + h - 12 * d - gy;
+        Draw.rect(kit.g, lx, gy, colW, gh, 16 * d, Tokens.SURFACE);
+        Draw.ring(kit.g, lx, gy, colW, gh, 16 * d, 1, Tokens.LINE);
+        kit.caption("An Freunde verschenken", lx + 20 * d, gy + 18 * d);
+        List<Friends.Friend> friends = new ArrayList<Friends.Friend>(Friends.friends());
+        if (friends.isEmpty()) {
+            kit.textMid("Füge Freunde hinzu, um ihnen Coins zu schenken.", lx + 20 * d, gy + 54 * d, 14, Tokens.MEDIUM, Tokens.MUTED, colW - 40 * d);
+        } else {
+            int max = Math.max(1, (int) ((colW - 40 * d) / (44 * d)));
+            for (int i = 0; i < Math.min(max, friends.size()); i++) {
+                final Friends.Friend f = friends.get(i);
+                float hx = lx + 20 * d + i * 44 * d, hy = gy + 40 * d;
+                boolean sel = f.name != null && f.name.equals(giftTo);
+                boolean hv = kit.hit("gf:" + f.uuid, hx, hy, 38 * d, 38 * d, () -> giftTo = f.name);
+                if (sel) Draw.ring(kit.g, hx - 3 * d, hy - 3 * d, 44 * d, 44 * d, 12 * d, 2, Tokens.ACC);
+                kit.head(f.head, f.name, hx, hy - (hv ? 2 * d : 0), 38 * d, 0, false);
+                if (hv) kit.tooltip(f.name, hx + 19 * d, hy + 46 * d);
+            }
+            float fy = gy + 94 * d;
+            kit.field("giftamt", giftAmount, lx + 20 * d, fy, 120 * d, 42 * d, "Menge", "coin");
+            String label = giftTo == null ? "Freund wählen" : "An " + giftTo + " schenken";
+            float bw = Math.min(colW - 40 * d - 132 * d, kit.buttonWidth(label, "gift", 42 * d));
+            final int amount = parse(giftAmount.text);
+            boolean ok = giftTo != null && amount >= CoinsCore.GIFT_MIN && amount <= CoinsCore.balance() && !CoinsCore.busy();
+            kit.button("gift:go", lx + 152 * d, fy, bw, 42 * d, label, "gift", Widgets.PRIMARY, ok ? (Runnable) () -> giftConfirm = true : null);
+            kit.textMid("Heute verschenkt: " + CoinsCore.fmt(CoinsCore.giftSent) + " / " + CoinsCore.fmt(CoinsCore.giftLimit) + " · mindestens " + CoinsCore.GIFT_MIN,
+                    lx + 20 * d, fy + 62 * d, 12.5f, Tokens.MEDIUM, Tokens.SUBTLE, colW - 40 * d);
+        }
+        // Verlauf
+        float rx = lx + colW + 24 * d, rw = colW, ry = top, rh = y + h - 12 * d - ry;
+        Draw.rect(kit.g, rx, ry, rw, rh, 16 * d, Tokens.SURFACE);
+        Draw.ring(kit.g, rx, ry, rw, rh, 16 * d, 1, Tokens.LINE);
+        kit.caption("Verlauf", rx + 20 * d, ry + 18 * d);
+        kit.iconButton("txrefresh", rx + rw - 20 * d - 30 * d, ry + 10 * d, 30 * d, "refresh", false, () -> {
+            CoinsCore.infoLoaded = false;
+            CoinsCore.loadInfo();
+        });
+        List<CoinsCore.Tx> tx = CoinsCore.history;
+        float listTop = ry + 48 * d, viewH = rh - 56 * d, rowH = 44 * d;
+        if (tx.isEmpty()) {
+            kit.textMid(CoinsCore.infoLoaded ? "Noch keine Buchungen" : "Lade …", rx + 20 * d, listTop + 16 * d, 14, Tokens.MEDIUM, Tokens.MUTED, rw - 40 * d);
+            return;
+        }
+        float off = kit.scroll(txScroll, rx, listTop, rw, viewH, tx.size() * rowH);
+        kit.clip(rx, listTop, rw, viewH);
+        java.text.SimpleDateFormat df = new java.text.SimpleDateFormat("dd.MM. HH:mm", Locale.GERMANY);
+        for (int i = 0; i < tx.size(); i++) {
+            CoinsCore.Tx t = tx.get(i);
+            float ty = listTop + i * rowH - off;
+            if (ty + rowH < listTop || ty > listTop + viewH) continue;
+            if (i > 0) kit.hline(rx + 20 * d, ty, rw - 40 * d);
+            String delta = (t.delta > 0 ? "+" : "") + CoinsCore.fmt(t.delta);
+            float dw = kit.width(delta, 15, Tokens.SEMIBOLD);
+            kit.textMid(CoinsCore.describe(t), rx + 20 * d, ty + 15 * d, 14, Tokens.SEMIBOLD, Tokens.TEXT, rw - 60 * d - dw);
+            kit.textMid(df.format(new java.util.Date(t.at)) + " · Stand " + CoinsCore.fmt(t.balance), rx + 20 * d, ty + 32 * d, 12, Tokens.MEDIUM, Tokens.SUBTLE, rw - 60 * d - dw);
+            kit.textRight(delta, rx + rw - 20 * d, ty + 22 * d, 15, Tokens.SEMIBOLD, t.delta >= 0 ? Tokens.OK : Draw.mix(Tokens.BAD, Tokens.TEXT, 0.2f));
+        }
+        kit.unclip();
+        kit.scrollbar("tx", txScroll, rx + rw - 10 * d, listTop, viewH);
+    }
+
+    private static int parse(String text) {
+        try {
+            return text == null || text.isEmpty() ? 0 : Integer.parseInt(text.trim());
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    /** Rückfrage „Coins schenken?“ */
+    private void drawGiftConfirm() {
+        final String to = giftTo;
+        final int amount = parse(giftAmount.text);
+        float w = 520 * d, h = 236 * d, x = (vw - w) / 2f, y = (vh - h) / 2f;
+        kit.modal(x, y, w, h, () -> giftConfirm = false);
+        kit.text(CoinsCore.fmt(amount) + " Coins schenken?", x + 28 * d, y + 30 * d, 21, Tokens.SEMIBOLD, Tokens.TEXT);
+        kit.paragraph(to + " bekommt " + CoinsCore.fmt(amount) + " Coins von dir und sieht einen Hinweis im Spiel. Das lässt sich nicht rückgängig machen.",
+                x + 28 * d, y + 72 * d, w - 56 * d, 15, Tokens.MEDIUM, Tokens.MUTED, 22, 3);
+        float bh = 44 * d, by = y + h - 28 * d - bh;
+        float ew = kit.buttonWidth("Schenken", "gift", bh);
+        kit.button("gift:ok", x + w - 28 * d - ew, by, ew, bh, "Schenken", "gift", Widgets.PRIMARY, CoinsCore.busy() ? null : (Runnable) () -> {
+            giftConfirm = false;
+            CoinsCore.gift(to, amount, (ok, msg) -> {
+                if (ok) {
+                    Toasts.ok(msg);
+                    giftAmount.text = "";
+                } else {
+                    Toasts.error(msg);
+                }
+            });
+        });
+        float cw = kit.buttonWidth("Abbrechen", null, bh);
+        kit.button("gift:no", x + w - 28 * d - ew - 10 * d - cw, by, cw, bh, "Abbrechen", null, Widgets.GHOST, () -> giftConfirm = false);
+    }
+
     // ------------------------------------------------------------------------------------------ Eingaben
 
     @Override
@@ -872,7 +1406,7 @@ public class CosmeticsScreen extends DesignScreen {
     @Override
     protected boolean typedFree(String s) {
         // im MiniMe-Reiter einfach lostippen (die Taste aus der Übersicht kurz nach dem Öffnen nicht mitzählen)
-        if (System.currentTimeMillis() - openedAt < 250 || !isTab("MiniMe") || !CosmeticsCore.owns("minime", null)) return false;
+        if (System.currentTimeMillis() - openedAt < 250 || buying != null || giftConfirm || !isTab("MiniMe") || !CosmeticsCore.owns("minime", null)) return false;
         if (s.length() != 1 || NAME_CHARS.indexOf(s.charAt(0)) < 0) return false;
         kit.focus(mini);
         return kit.typed(s);
@@ -880,6 +1414,14 @@ public class CosmeticsScreen extends DesignScreen {
 
     @Override
     protected void back() {
+        if (buying != null) {
+            if (!buying.running) buying = null;
+            return;
+        }
+        if (giftConfirm) {
+            giftConfirm = false;
+            return;
+        }
         Compat.setScreen(inWorld() ? new HubScreen() : null);
     }
 }

@@ -44,6 +44,8 @@ val copySharedUi by tasks.registering(Sync::class) {
         include("de/myticlegacy/client/emotes/**", "de/myticlegacy/client/friends/JoinTarget.java")
         // Diagnose-Messung: Sampling-Profiler ist reines Java 8
         include("de/myticlegacy/client/diag/SamplingProfiler.java")
+        // Coins und Shop (Kontostand, Preise, Kaufen, Verschenken, Admin-Buchungen): reines Java 8, für alle Versionen gleich
+        include("de/myticlegacy/client/cosmetics/CoinsCore.java")
         filter { line -> line.replace("import net.minecraft.client.gui.GuiGraphics;", "import de.myticlegacy.client.compat.GuiGraphics;") }
     }
     into(sharedUi)

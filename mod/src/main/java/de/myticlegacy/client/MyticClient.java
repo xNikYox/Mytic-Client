@@ -277,6 +277,7 @@ public final class MyticClient implements ClientModInitializer {
         CombatTracker.register();
         ClientTickEvents.END_CLIENT_TICK.register(MyticClient::tick);
         de.myticlegacy.client.games.GameCommand.register(); // /myticgame (Mytic Games, zuerst Schach)
+        de.myticlegacy.client.cosmetics.CoinsCommand.register(); // /mytic coins [give|take <Name> <Menge> [Grund]]
         de.myticlegacy.client.diag.DiagnoseMeasure.register(); // /myticdiagnose: 60 s Render-Thread messen (Diagnose-Messung)
         net.fabricmc.fabric.api.client.item.v1.ItemTooltipCallback.EVENT.register((stack, context, flag, lines) -> shulkerPreview.trimTooltip(stack, lines));
         ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> {

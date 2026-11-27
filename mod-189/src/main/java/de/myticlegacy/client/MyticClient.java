@@ -242,6 +242,7 @@ public final class MyticClient {
         clipKey = Compat.registerKey("key.myticclient.clip", org.lwjgl.input.Keyboard.KEY_F8);
         emoteKey = Compat.registerKey("key.myticclient.emotes", org.lwjgl.input.Keyboard.KEY_G);
         de.myticlegacy.client.diag.Diagnose189.register(); // Zeiten für die Diagnose, /myticdiagnose (Diagnose-Messung)
+        de.myticlegacy.client.cosmetics.CoinsCommand189.register(); // /mytic coins [give|take <Name> <Menge> [Grund]]
         for (int i = 0; i < AutoTextModule.SLOTS; i++) autoTextKeys[i] = Compat.registerKey("key.myticclient.autotext" + (i + 1), 0);
 
         CombatTracker.register();

@@ -203,9 +203,19 @@ public final class CosmeticsCore {
     /** Darf ich das benutzen? kind: cape, wings, shield, aura, acc, minime, nametag. */
     public static boolean owns(String kind, String id) {
         java.util.Set<String> items = ownedSet();
-        if (items.contains("*")) return true;
-        if ("minime".equals(kind) || "nametag".equals(kind)) return items.contains(kind);
+        // Admins haben alles (auch nach dem Zurücksetzen des Besitzes)
+        if (items.contains("*") || admin || items.contains("admin")) return true;
+        if ("minime".equals(kind)) return items.contains(kind);
+        // Nametag: freier Text ("nametag") oder eine gekaufte Vorlage ("nametag:<id>")
+        if ("nametag".equals(kind)) return items.contains("nametag") || (id != null && items.contains("nametag:" + id));
         return items.contains(kind + ":*") || items.contains(kind + ":" + id);
+    }
+
+    /** Vorlage zu einem Nametag-Text (genau gleich) oder null */
+    public static String presetOf(String raw) {
+        if (raw == null) return null;
+        for (String[] p : nametagPresets()) if (raw.equals(p[2])) return p[0];
+        return null;
     }
 
     public static boolean isAdmin() {
@@ -219,7 +229,11 @@ public final class CosmeticsCore {
         ownedLoading = true;
         Friends.background(() -> {
             try {
-                JsonObject answer = Friends.post("api/cosmetics/owned", new JsonObject());
+                // Preise des Shops kommen gleich mit, aber nur bei neuem Preisstand (shopV)
+                JsonObject ask = new JsonObject();
+                ask.addProperty("shopV", CoinsCore.shopVersion());
+                JsonObject answer = Friends.post("api/cosmetics/owned", ask);
+                CoinsCore.fromOwned(answer);
                 applyOwned(answer);
             } catch (Exception e) {
                 // alter Stand bleibt; nächster Versuch beim nächsten Durchgang
@@ -228,6 +242,11 @@ public final class CosmeticsCore {
                 ownedLoading = false;
             }
         });
+    }
+
+    /** Nach einem Kauf: neue Freischaltungen sofort übernehmen ({items, admin}). */
+    public static void applyOwnedAnswer(JsonObject answer) {
+        applyOwned(answer);
     }
 
     /** Freischaltungen übernehmen ({items, admin}: Antwort von api/cosmetics/owned oder aus dem Lebenszeichen). */
@@ -388,6 +407,8 @@ public final class CosmeticsCore {
 
     /** Eigenes Accessoire an einem Platz (kopf, hals) oder null (Vorschau: -Dmytic.accDemo=<id>[,<id>]). */
     public static String selectedAcc(String slot) {
+        String preview = CoinsCore.previewOf("acc");
+        if (preview != null && acc(preview) != null && acc(preview).slot.equals(slot)) return preview;
         String demo = System.getProperty("mytic.accDemo");
         if (demo != null) {
             for (String id : demo.split(",")) {
@@ -468,7 +489,12 @@ public final class CosmeticsCore {
     public static String ownNametag() {
         String demo = System.getProperty("mytic.nametagDemo");
         if (demo != null) return demo.replace("_", " ");
-        return owns("nametag", null) ? MyticClient.config().nametag : null;
+        String preview = CoinsCore.previewOf("nametag");
+        if (preview != null) return preview;
+        String raw = MyticClient.config().nametag;
+        if (raw == null || owns("nametag", null)) return raw;
+        String preset = presetOf(raw);
+        return preset != null && owns("nametag", preset) ? raw : null;
     }
 
     public static void selectNametag(String raw) {
@@ -496,6 +522,8 @@ public final class CosmeticsCore {
 
     /** Eigene Aura (Vorschau: -Dmytic.auraDemo=<id> oder =all, dann alle 5 Sekunden eine andere). */
     public static String selectedAura() {
+        String preview = CoinsCore.previewOf("aura");
+        if (preview != null) return preview;
         String demo = System.getProperty("mytic.auraDemo");
         if ("all".equals(demo) && !auras().isEmpty()) return auras().get((int) ((System.currentTimeMillis() / 5000) % auras().size())).id;
         if (demo != null && aura(demo) != null) return demo;
@@ -542,6 +570,8 @@ public final class CosmeticsCore {
 
     /** Eigener Schild (Vorschau: -Dmytic.shieldDemo=<id>). */
     public static String selectedShield() {
+        String preview = CoinsCore.previewOf("shield");
+        if (preview != null) return preview;
         String demo = System.getProperty("mytic.shieldDemo");
         if (demo != null && hasShield(demo)) return demo;
         String id = MyticClient.config().shield;
@@ -581,6 +611,8 @@ public final class CosmeticsCore {
 
     /** Eigene Flügel (Vorschau: -Dmytic.wingsDemo=true wechselt alle 4 Sekunden). */
     public static String selectedWings() {
+        String preview = CoinsCore.previewOf("wings");
+        if (preview != null) return preview;
         if (Boolean.getBoolean("mytic.wingsDemo") && !wings().isEmpty()) return wings().get((int) ((System.currentTimeMillis() / 4000) % wings().size()))[0];
         String id = MyticClient.config().wings;
         return hasWings(id) && owns("wings", id) ? id : null;
@@ -599,6 +631,8 @@ public final class CosmeticsCore {
     // ------------------------------------------------------------------------------------------ Auswahl
 
     public static String selected() {
+        String preview = CoinsCore.previewOf("cape");
+        if (preview != null) return preview;
         String id = MyticClient.config().cape;
         return byId(id) != null && owns("cape", id) ? id : null;
     }
