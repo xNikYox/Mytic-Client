@@ -1,4 +1,4 @@
-// Admin-Seite des Friends-Servers (/admin): Cosmetics für einzelne Spieler freischalten.
+// Admin-Seite des Friends-Servers (/admin): Cosmetics freischalten, Coins geben/nehmen, Preise, Besitz zurücksetzen.
 // Anmeldung mit dem Admin-Passwort (ADMIN_KEY); es bleibt nur im Browser-Tab (sessionStorage).
 export const ADMIN_PAGE = `<!doctype html>
 <html lang="de">
@@ -35,12 +35,20 @@ td, th { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line
 th { color: var(--muted); font-weight: 500; }
 td.items-col { color: var(--muted); font-size: 12px; }
 a.pick { color: var(--cyan); cursor: pointer; text-decoration: underline; }
+input[type=number] { width: 110px; font: inherit; color: var(--text); background: #0b0818; border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; }
+input.price { width: 90px; padding: 5px 8px; }
+input.price.over { border-color: var(--violet); }
+.coins { font-size: 22px; font-weight: 700; } .coins small { font-size: 13px; color: var(--muted); font-weight: 400; }
+.pos { color: var(--ok); } .neg { color: var(--bad); }
+button.small { padding: 4px 10px; font-size: 12px; }
+button.danger { background: var(--bad); color: #fff; }
+.scroll { max-height: 420px; overflow: auto; }
 [hidden] { display: none !important; }
 </style>
 </head>
 <body>
 <main>
-  <h1><span>MYTIC</span> Admin · Cosmetics</h1>
+  <h1><span>MYTIC</span> Admin · Cosmetics &amp; Coins</h1>
 
   <section class="card" id="login">
     <strong>Anmelden</strong>
@@ -58,7 +66,29 @@ a.pick { color: var(--cyan); cursor: pointer; text-decoration: underline; }
       <div class="cat" id="setsBox" hidden><h3>Sets <span class="muted">(markiert alle Teile eines Sets – danach Speichern)</span></h3><div class="items" id="sets"></div></div>
       <div id="cats"></div>
       <div class="row" style="margin-top:6px"><button id="saveBtn">Speichern</button><button class="ghost" id="noneBtn">Alles entfernen</button></div>
+      <div class="cat"><h3>Coins</h3>
+        <div class="row"><span class="coins" id="balance">–</span><span class="muted" id="coinInfo"></span></div>
+        <div class="row"><input type="number" id="coinAmount" min="1" step="1" placeholder="Menge"><input type="text" id="coinReason" placeholder="Grund (sieht der Spieler)" maxlength="120"><button id="coinGive">+ Geben</button><button class="ghost" id="coinTake">− Nehmen</button></div>
+        <div class="msg" id="coinMsg"></div>
+        <div class="scroll"><table><thead><tr><th>Zeit</th><th>Art</th><th>Coins</th><th>Stand</th><th>Details</th><th></th></tr></thead><tbody id="coinTx"></tbody></table></div>
+      </div>
     </div>
+  </section>
+
+  <section class="card" id="priceCard" hidden>
+    <div class="row"><strong>Preise &amp; Sets</strong><span class="muted">Leeres Feld = Standardpreis. Event-Sets sind immer kaufbar.</span></div>
+    <div class="row"><label>Set-Rabatt <input type="number" id="discount" min="0" max="90" step="1"> %</label><span class="muted" id="discountInfo"></span><button id="priceSave">Preise speichern</button></div>
+    <div class="msg" id="priceMsg"></div>
+    <div id="setList" class="muted"></div>
+    <div class="scroll"><table><thead><tr><th>Teil</th><th>Art</th><th>Standard</th><th>Preis</th></tr></thead><tbody id="priceList"></tbody></table></div>
+  </section>
+
+  <section class="card" id="resetCard" hidden>
+    <strong>Besitz zurücksetzen</strong>
+    <div class="muted">Einmalig: sichert zuerst ALLE Freischaltungen und Auswahlen (Tabellen grants_backup/cos_backup) und nimmt dann allen Spielern ohne Admin-Recht ihre Freischaltungen – alle müssen neu kaufen. Coins bleiben. Wiederherstellen geht hier oder mit <code>scripts/restore-ownership.mjs</code>.</div>
+    <div class="row"><span id="resetState" class="muted"></span></div>
+    <div class="row"><button class="danger" id="resetBtn">Besitz zurücksetzen …</button><button class="ghost" id="restoreBtn" hidden>Besitz wiederherstellen …</button></div>
+    <div class="msg" id="resetMsg"></div>
   </section>
 
   <section class="card" id="listCard" hidden>
@@ -68,7 +98,9 @@ a.pick { color: var(--cyan); cursor: pointer; text-decoration: underline; }
 </main>
 <script>
 (function () {
-  var NAMES = { cape: "Umhänge", wings: "Flügel", shield: "Schilde", aura: "Auren", acc: "Kopf & Hals", emote: "Emotes" };
+  var NAMES = { cape: "Umhänge", wings: "Flügel", shield: "Schilde", aura: "Auren", acc: "Kopf & Hals", nametag: "Nametag-Vorlagen", emote: "Emotes" };
+  var KIND_NAMES = { cape: "Umhang", wings: "Flügel", shield: "Schild", aura: "Aura", acc: "Kopf & Hals", minime: "MiniMe", nametag: "Nametag" };
+  var TX_NAMES = { grant: "Gutschrift", take: "Abzug", purchase: "Kauf", daily: "Tagesbonus", gift_in: "Geschenk erhalten", gift_out: "Geschenk gesendet", refund: "Erstattung" };
   var GENERAL = [["*", "Alles"], ["admin", "Admin"], ["minime", "MiniMe"], ["nametag", "Nametag (freier Text + Vorlagen)"]];
   var key = "", catalog = null, current = null;
   try { key = sessionStorage.getItem("mytic-admin-key") || ""; } catch (e) {}
@@ -84,8 +116,8 @@ a.pick { color: var(--cyan); cursor: pointer; text-decoration: underline; }
     call("GET", "admin/catalog").then(function (j) {
       catalog = j.catalog;
       try { sessionStorage.setItem("mytic-admin-key", key); } catch (e) {}
-      $("login").hidden = true; $("app").hidden = false; $("listCard").hidden = false;
-      loadList();
+      $("login").hidden = true; $("app").hidden = false; $("listCard").hidden = false; $("priceCard").hidden = false; $("resetCard").hidden = false;
+      loadList(); loadPrices();
     }).catch(function (e) { say($("loginMsg"), e.message === "Keine Admin-Rechte" ? "Falsches Passwort" : e.message); });
   }
   // beim Kopieren mitgekommene Zeichen (Leerzeichen, Anführungszeichen, Backticks, Sternchen) entfernen
@@ -122,7 +154,7 @@ a.pick { color: var(--cyan); cursor: pointer; text-decoration: underline; }
       if (!catalog[kind]) return; // älterer Katalog ohne diese Art
       var box = document.createElement("div"); box.className = "cat";
       var h = document.createElement("h3"); h.textContent = NAMES[kind] + " (" + catalog[kind].length + ")";
-      h.appendChild(chip(kind + ":*", "alle " + NAMES[kind], has.has(kind + ":*"), "all"));
+      if (kind !== "nametag") h.appendChild(chip(kind + ":*", "alle " + NAMES[kind], has.has(kind + ":*"), "all"));
       var items = document.createElement("div"); items.className = "items";
       catalog[kind].forEach(function (it) { items.appendChild(chip(kind + ":" + it[0], it[1], has.has(kind + ":" + it[0]))); });
       box.appendChild(h); box.appendChild(items); c.appendChild(box);
@@ -130,8 +162,102 @@ a.pick { color: var(--cyan); cursor: pointer; text-decoration: underline; }
   }
   function load(name) {
     say($("msg"), "");
-    call("POST", "admin/user", { name: name }).then(render).catch(function (e) { say($("msg"), e.message); });
+    call("POST", "admin/user", { name: name }).then(function (u) { render(u); loadCoins(u.uuid); }).catch(function (e) { say($("msg"), e.message); });
   }
+
+  // ---------------------------------------------------------------- Coins
+  function fmt(t) { var d = new Date(t); return d.toLocaleDateString("de-DE") + " " + d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }); }
+  function renderCoins(v) {
+    $("balance").innerHTML = ""; $("balance").appendChild(document.createTextNode(v.balance + " ")); var sm = document.createElement("small"); sm.textContent = "Coins"; $("balance").appendChild(sm);
+    $("coinInfo").textContent = "Serie: " + (v.streak || 0) + " Tag(e)" + (v.dailyDay ? " · zuletzt Bonus am " + v.dailyDay : "") + " · heute verschenkt: " + v.giftedToday;
+    var tb = $("coinTx"); tb.innerHTML = "";
+    if (!v.tx.length) { tb.innerHTML = '<tr><td colspan="6" class="muted">Noch keine Buchungen.</td></tr>'; return; }
+    v.tx.forEach(function (t) {
+      var tr = document.createElement("tr");
+      var details = [t.reason, t.other, t.ref, t.admin ? "von " + t.admin : null].filter(Boolean).join(" · ");
+      [fmt(t.at), TX_NAMES[t.kind] || t.kind, (t.delta > 0 ? "+" : "") + t.delta, String(t.balance), details].forEach(function (text, i) {
+        var td = document.createElement("td"); td.textContent = text; if (i === 2) td.className = t.delta >= 0 ? "pos" : "neg"; tr.appendChild(td);
+      });
+      var td = document.createElement("td");
+      if (t.kind === "purchase") {
+        var b = document.createElement("button"); b.className = "ghost small"; b.textContent = "Erstatten";
+        b.onclick = function () {
+          if (!confirm("Kauf erstatten? " + (-t.delta) + " Coins zurück, die gekauften Teile werden wieder entfernt.")) return;
+          call("POST", "admin/refund", { tx: t.id }).then(function (nv) { renderCoins(nv); say($("coinMsg"), "Erstattet", true); load(current.uuid); }).catch(function (e) { say($("coinMsg"), e.message); });
+        };
+        td.appendChild(b);
+      }
+      tr.appendChild(td); tb.appendChild(tr);
+    });
+  }
+  function loadCoins(uuid) { call("GET", "admin/coins/" + uuid).then(renderCoins).catch(function (e) { say($("coinMsg"), e.message); }); }
+  function book(sign) {
+    if (!current) return;
+    var n = parseInt($("coinAmount").value, 10);
+    if (!(n > 0)) { say($("coinMsg"), "Menge eingeben"); return; }
+    call("POST", "admin/coins", { player: current.uuid, delta: sign * n, reason: $("coinReason").value.trim() || null }).then(function (v) {
+      renderCoins(v); say($("coinMsg"), (v.changed > 0 ? "+" : "") + v.changed + " Coins gebucht", true); $("coinAmount").value = "";
+    }).catch(function (e) { say($("coinMsg"), e.message); });
+  }
+  $("coinGive").onclick = function () { book(1); };
+  $("coinTake").onclick = function () { book(-1); };
+
+  // ---------------------------------------------------------------- Preise
+  var prices = null;
+  function loadPrices() { call("GET", "admin/prices").then(renderPrices).catch(function (e) { say($("priceMsg"), e.message); }); }
+  function renderPrices(p) {
+    prices = p;
+    $("discount").value = p.discount;
+    $("discountInfo").textContent = "Standard: " + p.defaultDiscount + " %";
+    $("setList").textContent = p.sets.map(function (s) { return s.name + ": " + s.items.length + " Teile, einzeln " + s.sum + " → Set " + s.price + " Coins"; }).join(" · ");
+    var tb = $("priceList"); tb.innerHTML = "";
+    p.items.forEach(function (it) {
+      var tr = document.createElement("tr");
+      var td1 = document.createElement("td"); td1.textContent = it.name + (it.event ? " (" + it.event + ")" : ""); tr.appendChild(td1);
+      var td2 = document.createElement("td"); td2.className = "muted"; td2.textContent = KIND_NAMES[it.kind] || it.kind; tr.appendChild(td2);
+      var td3 = document.createElement("td"); td3.className = "muted"; td3.textContent = it.base; tr.appendChild(td3);
+      var td4 = document.createElement("td"); var i = document.createElement("input"); i.type = "number"; i.min = "0"; i.step = "10"; i.className = "price" + (it.override ? " over" : "");
+      i.value = it.override ? it.price : ""; i.placeholder = String(it.base); i.dataset.item = it.item; i.dataset.was = i.value; td4.appendChild(i); tr.appendChild(td4);
+      tb.appendChild(tr);
+    });
+    renderReset(p.reset);
+  }
+  $("priceSave").onclick = function () {
+    if (!prices) return;
+    var change = {};
+    document.querySelectorAll("#priceList input.price").forEach(function (i) {
+      if (i.value === i.dataset.was) return;
+      change[i.dataset.item] = i.value === "" ? null : parseInt(i.value, 10);
+    });
+    var data = { prices: change };
+    var d = $("discount").value === "" ? null : parseInt($("discount").value, 10);
+    if (d !== prices.discount) data.discount = d;
+    call("POST", "admin/prices", data).then(function (p) { renderPrices(p); say($("priceMsg"), "Gespeichert (" + Object.keys(change).length + " Preise)", true); }).catch(function (e) { say($("priceMsg"), e.message); });
+  };
+
+  // ---------------------------------------------------------------- Besitz zurücksetzen / wiederherstellen
+  function renderReset(r) {
+    $("resetBtn").hidden = Boolean(r);
+    $("restoreBtn").hidden = !r;
+    $("resetState").textContent = r ? "Zurückgesetzt am " + fmt(r.at) + " (Sicherung " + r.batch + ": " + r.items + " Freischaltungen von " + r.users + " Spielern)" + (r.restored ? " · wiederhergestellt am " + fmt(r.restored) : "")
+      : "Noch nicht zurückgesetzt.";
+  }
+  function twoStep(path, label) {
+    call("POST", path, {}).then(function (j) {
+      if (j.done) { say($("resetMsg"), "Wurde schon durchgeführt (" + j.batch + ")", true); loadPrices(); return; }
+      var s = j.summary, text = path === "admin/reset-ownership"
+        ? "Besitz zurücksetzen?\\n\\n" + s.items + " Freischaltungen von " + s.users + " Spielern werden gesichert und entfernt, " + s.equipped + " Spieler legen ihre Cosmetics ab.\\n" + s.admins + " Admin(s) behalten alles."
+        : "Sicherung " + s.batch + " wieder einspielen?\\n\\n" + s.items + " Freischaltungen kommen zurück (Gekauftes bleibt, Coins unverändert).";
+      if (!confirm(text)) return;
+      var word = prompt("Zur zweiten Bestätigung bitte „" + j.word + "“ eingeben:");
+      if (word === null) return;
+      return call("POST", path, { token: j.token, confirm: word.trim() }).then(function (r) {
+        say($("resetMsg"), label + (r.batch ? " (Sicherung " + r.batch + ")" : ""), true); loadPrices(); loadList();
+      });
+    }).catch(function (e) { say($("resetMsg"), e.message); });
+  }
+  $("resetBtn").onclick = function () { twoStep("admin/reset-ownership", "Besitz zurückgesetzt"); };
+  $("restoreBtn").onclick = function () { twoStep("admin/restore-ownership", "Besitz wiederhergestellt"); };
   $("loadBtn").onclick = function () { var n = $("name").value.trim(); if (n) load(n); };
   $("name").onkeydown = function (e) { if (e.key === "Enter") $("loadBtn").click(); };
   $("noneBtn").onclick = function () { document.querySelectorAll("#editor input[type=checkbox]").forEach(function (i) { i.checked = false; }); };

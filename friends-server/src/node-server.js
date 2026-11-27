@@ -12,6 +12,27 @@ import { attachLive } from "./ws-node.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
+/**
+ * Mehrere Anweisungen synchron in EINER Transaktion ([sql, params, need]): need = true verlangt, dass die Anweisung
+ * mindestens eine Zeile ändert – sonst wird alles zurückgerollt und ein Fehler mit code "NEED" (index) geworfen.
+ * Ohne await dazwischen kann keine andere Anfrage etwas einschieben.
+ */
+export function runBatch(sqlite, statements) {
+  sqlite.exec("BEGIN IMMEDIATE");
+  try {
+    const out = statements.map(([sql, params = [], need], index) => {
+      const result = sqlite.prepare(sql).run(...params);
+      if (need && !Number(result.changes)) throw Object.assign(new Error("Bedingung nicht erfüllt"), { code: "NEED", index });
+      return { changes: Number(result.changes), lastId: Number(result.lastInsertRowid) };
+    });
+    sqlite.exec("COMMIT");
+    return out;
+  } catch (error) {
+    sqlite.exec("ROLLBACK");
+    throw error;
+  }
+}
+
 export function openDb(file) {
   const sqlite = new DatabaseSync(file);
   sqlite.exec("PRAGMA journal_mode = WAL");
@@ -27,6 +48,7 @@ export function openDb(file) {
     all: async (sql, params = []) => sqlite.prepare(sql).all(...params),
     get: async (sql, params = []) => sqlite.prepare(sql).get(...params) || null,
     run: async (sql, params = []) => sqlite.prepare(sql).run(...params),
+    batch: async (statements) => runBatch(sqlite, statements),
     close: () => sqlite.close(),
   };
 }

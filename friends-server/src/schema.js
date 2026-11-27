@@ -137,6 +137,76 @@ CREATE TABLE IF NOT EXISTS stat_sessions (
 CREATE INDEX IF NOT EXISTS stat_sessions_updated ON stat_sessions (updated);
 CREATE INDEX IF NOT EXISTS games_white ON games (white, status);
 CREATE INDEX IF NOT EXISTS games_black ON games (black, status);
+-- Coins: Kontostand je Konto, Tagesbonus (Tag in Ortszeit, Tage in Folge) und heute verschenkte Coins (UTC-Tag)
+CREATE TABLE IF NOT EXISTS coins (
+  uuid TEXT PRIMARY KEY,
+  balance INTEGER NOT NULL DEFAULT 0,
+  streak INTEGER NOT NULL DEFAULT 0,
+  daily_day TEXT,
+  gift_day TEXT,
+  gift_sent INTEGER NOT NULL DEFAULT 0
+);
+-- Buchungen: kind = grant | take | purchase | daily | gift_in | gift_out | refund, balance = Stand danach,
+-- ref = gekauftes Teil/Set, Gegenüber (UUID) bei Geschenken oder "tx:<id>" bei Erstattungen, items = freigeschaltete Teile
+CREATE TABLE IF NOT EXISTS coin_tx (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  uuid TEXT NOT NULL,
+  delta INTEGER NOT NULL,
+  balance INTEGER NOT NULL DEFAULT 0,
+  kind TEXT NOT NULL,
+  ref TEXT,
+  reason TEXT,
+  admin TEXT,
+  items TEXT,
+  at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS coin_tx_uuid ON coin_tx (uuid, id);
+CREATE UNIQUE INDEX IF NOT EXISTS coin_tx_refund ON coin_tx (ref) WHERE kind = 'refund';
+-- Idempotenz: je Konto und Schlüssel nur ein Kauf/Geschenk (Wiederholung liefert das gespeicherte Ergebnis)
+CREATE TABLE IF NOT EXISTS coin_idem (
+  uuid TEXT NOT NULL,
+  key TEXT NOT NULL,
+  result TEXT NOT NULL,
+  at INTEGER NOT NULL,
+  PRIMARY KEY (uuid, key)
+);
+-- Preise: Überschreibungen je Teil (sonst Standardpreis aus coins.js), "@set-discount" = Set-Rabatt in Prozent
+CREATE TABLE IF NOT EXISTS prices (
+  item TEXT PRIMARY KEY,
+  price INTEGER NOT NULL,
+  admin TEXT,
+  updated INTEGER NOT NULL
+);
+-- Einmalige Änderungen auf Knopfdruck (Besitz zurücksetzen) mit Sicherung, restored = Zeitpunkt der Wiederherstellung
+CREATE TABLE IF NOT EXISTS migrations (
+  id TEXT PRIMARY KEY,
+  batch TEXT NOT NULL,
+  at INTEGER NOT NULL,
+  admin TEXT,
+  users INTEGER NOT NULL DEFAULT 0,
+  items INTEGER NOT NULL DEFAULT 0,
+  restored INTEGER
+);
+CREATE TABLE IF NOT EXISTS grants_backup (
+  batch TEXT NOT NULL,
+  uuid TEXT NOT NULL,
+  item TEXT NOT NULL,
+  PRIMARY KEY (batch, uuid, item)
+);
+CREATE TABLE IF NOT EXISTS cos_backup (
+  batch TEXT NOT NULL,
+  uuid TEXT NOT NULL,
+  cape TEXT, wings TEXT, shield TEXT, aura TEXT, acc TEXT, nametag TEXT, minime TEXT, minime_pos TEXT, minime_set TEXT,
+  PRIMARY KEY (batch, uuid)
+);
+-- Bestätigungen in zwei Schritten (Admin: Besitz zurücksetzen/wiederherstellen)
+CREATE TABLE IF NOT EXISTS confirm_tokens (
+  token TEXT PRIMARY KEY,
+  purpose TEXT NOT NULL,
+  admin TEXT,
+  data TEXT,
+  at INTEGER NOT NULL
+);
 `;
 
 /** Spätere Erweiterungen bestehender Datenbanken (Fehler "Spalte gibt es schon" wird ignoriert). */

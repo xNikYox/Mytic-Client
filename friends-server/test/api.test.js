@@ -197,7 +197,7 @@ test("Lebenszeichen der Mod: Spielzeit, Einladungen, Freischaltungen und verstec
   await s.call("POST", "/api/friends/accept", { uuid: ALICE }, b);
   // Launcher: nur Freundesliste (mit caps), keine Extras
   let res = await s.call("POST", "/api/presence", { place: "launcher" }, a);
-  assert.deepEqual(res.data.caps, ["presence2", "sync1", "cos1", "join1", "emote1"]);
+  assert.deepEqual(res.data.caps, ["presence2", "sync1", "cos1", "join1", "emote1", "coins1"]);
   assert.equal(res.data.games, undefined);
   assert.equal(res.data.owned, undefined);
   // Mod: Spielzeit mitschicken, Einladungen und Freischaltungen zurück
@@ -350,7 +350,11 @@ test("Cosmetics gesperrt: nur Freigeschaltetes, Admin über Passwort oder Admin-
   assert.equal(look.data.nametags[ALICE], undefined);
   assert.equal(look.data.wings[ALICE], "rabe");
   // eigene Freischaltungen und Admin-Konto
-  assert.deepEqual((await s.call("POST", "/api/cosmetics/owned", {}, b)).data, { items: [], admin: false });
+  const ownedB = (await s.call("POST", "/api/cosmetics/owned", {}, b)).data;
+  assert.deepEqual([ownedB.items, ownedB.admin, ownedB.coins], [[], false, 0]);
+  // Preise kommen nur mit, wenn sich der Preisstand geändert hat
+  assert.equal(ownedB.shop.v, ownedB.pv);
+  assert.equal((await s.call("POST", "/api/cosmetics/owned", { shopV: ownedB.pv }, b)).data.shop, undefined);
   await s.grant(BOB, ["admin"]);
   assert.equal((await s.call("POST", "/api/cosmetics/owned", {}, b)).data.admin, true);
   res = await s.call("POST", "/api/admin/grants", { uuid: ALICE, items: ["aura:*"] }, b);

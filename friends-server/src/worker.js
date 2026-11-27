@@ -21,6 +21,13 @@ export class FriendsStore extends DurableObject {
       all: async (query, params = []) => sql.exec(query, ...params).toArray(),
       get: async (query, params = []) => sql.exec(query, ...params).toArray()[0] || null,
       run: async (query, params = []) => sql.exec(query, ...params),
+      // mehrere Anweisungen atomar (siehe node-server.js runBatch); need = mindestens eine Zeile geändert, sonst zurück
+      batch: async (statements) => ctx.storage.transactionSync(() => statements.map(([query, params = [], need], index) => {
+        const cursor = sql.exec(query, ...params);
+        cursor.toArray();
+        if (need && !cursor.rowsWritten) throw Object.assign(new Error("Bedingung nicht erfüllt"), { code: "NEED", index });
+        return { changes: cursor.rowsWritten, lastId: null };
+      })),
     };
     // Offline-Konten gibt es auf Cloudflare nie (nur Entwicklerversion unter Node) – ALLOW_OFFLINE wird ignoriert
     if (env.ALLOW_OFFLINE) console.warn("WARNUNG: ALLOW_OFFLINE ist gesetzt, wird auf Cloudflare aber ignoriert – Offline-Konten bleiben aus");

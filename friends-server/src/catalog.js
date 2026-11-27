@@ -1,4 +1,4 @@
-// Cosmetics-Katalog (IDs und Namen) für die Admin-Seite – wird von cosmetics/build.py geschrieben.
+// Cosmetics-Katalog (IDs und Namen) für Admin-Seite und Shop – wird von cosmetics/build.py geschrieben.
 export const CATALOG = {
  "cape": [
   [
@@ -456,6 +456,53 @@ export const CATALOG = {
   [
    "lichterschal",
    "Lichterketten-Schal"
+  ]
+ ],
+ "nametag": [
+  [
+   "frohefest",
+   "Frohes Fest",
+   "&c❄ &fFrohes &aFest &c❄"
+  ],
+  [
+   "weihnachten",
+   "Frohe Weihnachten",
+   "&4&l✦ &cFrohe &fWeihnachten &4&l✦"
+  ],
+  [
+   "wichtel",
+   "Wichtel",
+   "&a★ &2Mytic-&aWichtel &a★"
+  ],
+  [
+   "schnee",
+   "Schneeflocke",
+   "&b❄ &f&oLet it snow &b❄"
+  ],
+  [
+   "hohoho",
+   "Ho Ho Ho",
+   "&b❄ &c&lHo Ho Ho &b❄"
+  ],
+  [
+   "weihnachtself",
+   "Weihnachtself",
+   "&a✦ &2Weihnachts&celf &a✦"
+  ],
+  [
+   "rentierfluesterer",
+   "Rentierflüsterer",
+   "&6★ &eRentier&6flüsterer &6★"
+  ],
+  [
+   "plaetzchenbaecker",
+   "Plätzchenbäcker",
+   "&6♥ &ePlätzchen&6bäcker &6♥"
+  ],
+  [
+   "schneeengel",
+   "Schneeengel",
+   "&f❄ &b&oSchnee&f&oengel &f❄"
   ]
  ],
  "sets": [

@@ -116,3 +116,60 @@ Der Launcher synchronisiert die Mytic-Einstellungen (Mods, HUD, Profile, Fadenkr
 Anfragen: höchstens 1 `GET` je Spielstart (0, wenn der Stand aus einem Lebenszeichen schon bekannt ist), 1 `PUT` je
 geänderter Einstellung (frühestens 30 s nach der letzten Änderung, gesammelt) und 1 beim Beenden, falls sich etwas geändert
 hat – typisch 1–3 Anfragen je Spielsitzung, nichts im Takt.
+
+## Coins und Shop (`coins1`)
+
+Jedes Cosmetic kostet Coins. Preise kommen aus dem Katalog (`src/coins.js`, Standard je Art) und lassen sich je Teil auf
+der Admin-Seite überschreiben (Tabelle `prices`, `@set-discount` = Set-Rabatt).
+
+| Art | Standard | Winterzauber 2026 (+25 %) | Winterzauber II (+50 %, HD/animiert) |
+|---|---|---|---|
+| Nametag-Vorlage (`nametag:<id>`) | 100 | – | – |
+| Nametag (eigener Text, Farben, Formate) | 250 | – | – |
+| Aura | 300 | 380 | 450 |
+| Schild | 400 | 500 | 600 |
+| Kopf & Hals | 400 | 500 | 600 |
+| Umhang | 500 | 630 | 750 |
+| MiniMe | 600 | – | – |
+| Flügel | 800 | 1000 | 1200 |
+
+Sets (auch die Event-Sets, immer kaufbar) kosten die Summe der **noch fehlenden** Teile abzüglich 20 %. Admins (`admin`)
+und `*` besitzen alles.
+
+**Coins bekommen:** Admins geben/nehmen (Admin-Seite, im Spiel Reiter „Admin“ und `/mytic coins give|take <Name> <Menge> [Grund]`),
+Tagesbonus (10 + 5 je Tag in Folge, ab Tag 7 40; ein verpasster Tag beginnt wieder bei 10; Tag in der Ortszeit des
+Spielers – Tage müssen streng steigen, eine andere Zeitzone bringt höchstens einmal einen Tag Vorsprung), Geschenke unter
+Freunden (mindestens 10, höchstens 500 je UTC-Tag, nicht an sich selbst). Echtgeld gibt es (noch) nicht.
+
+**Endpunkte:** `GET /api/coins[?tz=&shop=1]` (Stand, Bonus, Geschenk-Limit, letzte 20 Buchungen), `GET /api/shop`,
+`POST /api/shop/buy {item|set, idemKey, price?}`, `POST /api/coins/gift {to, amount, idemKey?}`; Admin:
+`POST /api/admin/coins {player, delta, reason}`, `GET /api/admin/coins/:player`, `POST /api/admin/refund {tx}`,
+`GET|POST /api/admin/prices`, `POST /api/admin/reset-ownership`, `POST /api/admin/restore-ownership` (beide in zwei
+Schritten: erst Token, dann `{token, confirm: "ZURÜCKSETZEN" | "WIEDERHERSTELLEN"}`).
+
+**Sicherheit:** Abbuchung, Freischaltungen, Buchung (`coin_tx`) und Idempotenz-Eintrag (`coin_idem`) laufen in **einer**
+Transaktion (`db.batch`: Node `BEGIN … COMMIT`, Cloudflare `transactionSync`); die Abbuchung ist bedingt
+(`balance >= Preis`), doppelte Freischaltungen brechen ab. Gleicher `idemKey` = gleiches Ergebnis, nur einmal gebucht.
+Bremse: Topf `coins` (30/min je Adresse) für Käufe, Geschenke und Admin-Buchungen.
+
+**Anfragen:** keine zusätzlichen im Takt. Das Lebenszeichen bringt `coins: { balance, pv, tx, daily?, events? }`
+(Kontostand, Preisstand, letzte Buchung; im Spiel Tagesbonus und neue Gutschriften seit `coinTx`). Preise kommen mit
+`POST /api/cosmetics/owned` (beim Öffnen des Cosmetics-Menüs ohnehin), nur wenn sich der Preisstand (`shopV`) geändert hat.
+Dazu nur Aktionen: Kauf/Geschenk/Admin = je 1 Anfrage, Verlauf im Shop = 1 Anfrage beim Öffnen.
+
+### Besitz zurücksetzen (einmalig)
+
+Nur auf Knopfdruck auf der Admin-Seite („Besitz zurücksetzen …“, Rückfrage + Eingabe von „ZURÜCKSETZEN“), nie beim
+Deploy. Läuft höchstens einmal (`migrations.id = ownership-reset-1`) und in einer Transaktion:
+
+1. alle Freischaltungen nach `grants_backup`, alle Auswahlen (Umhang, Flügel, …, MiniMe, Nametag) nach `cos_backup` (Sicherung `reset-<Zeit>`),
+2. Freischaltungen aller Spieler ohne `admin`/`*` löschen,
+3. deren Cosmetics ablegen (`cos_at` gesetzt, andere sehen es nach ≤ 1 Lebenszeichen). Coins bleiben.
+
+**Wiederherstellen** (Gekauftes bleibt, Auswahl nur dort, wo gerade nichts gewählt ist, Coins unverändert):
+Admin-Seite „Besitz wiederherstellen …“ (Eingabe „WIEDERHERSTELLEN“), oder
+
+    node scripts/restore-ownership.mjs --db friends.db [--yes]                          # Node-Datenbank
+    MYTIC_ADMIN_KEY=… node scripts/restore-ownership.mjs --url https://<worker>/ [--yes] # Cloudflare über die Admin-API
+
+Ohne `--yes` wird nur angezeigt, was passieren würde.

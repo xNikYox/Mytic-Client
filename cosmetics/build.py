@@ -258,13 +258,15 @@ def main():
             for name in (f"{aid}.png", f"{aid}_icon.png"):
                 z.write(os.path.join(ACC_OUT, name), f"assets/myticclient/textures/acc/{name}")
     print(f"{jar} ({os.path.getsize(jar) // 1024} KB)")
-    # Katalog für die Admin-Seite des Friends-Servers (danach Server neu deployen)
+    # Katalog für Admin-Seite und Shop des Friends-Servers (danach Server neu deployen)
     server_catalog = {"cape": [[i, n] for i, n in CAPES], "wings": [[i, n] for i, n in WINGS + PIXEL_WINGS],
                       "shield": [[i, n] for i, n in SHIELDS], "aura": [[a[0], a[1]] for a in AURAS],
                       "acc": [[c["id"], c["name"]] for c in catalog["accessories"]],
+                      # Nametag-Vorlagen mit Text: einzeln kaufbar ("nametag:<id>"), der Server prüft den Text
+                      "nametag": [[i, n, t] for i, n, t in NAMETAG_PRESETS],
                       "sets": [{"name": n, "items": items} for n, items in SETS]}
     with open(os.path.join(HERE, "..", "friends-server", "src", "catalog.js"), "w", encoding="utf-8") as fh:
-        fh.write("// Cosmetics-Katalog (IDs und Namen) für die Admin-Seite – wird von cosmetics/build.py geschrieben.\n")
+        fh.write("// Cosmetics-Katalog (IDs und Namen) für Admin-Seite und Shop – wird von cosmetics/build.py geschrieben.\n")
         fh.write("export const CATALOG = " + json.dumps(server_catalog, ensure_ascii=False, indent=1) + ";\n")
 
 main()

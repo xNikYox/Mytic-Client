@@ -11,6 +11,7 @@ import { ADMIN_PAGE } from "./admin-page.js";
 import { START_FEN, parseFen, toFen, applyUci, status as chessStatus } from "./chess.js";
 import { joinable, shownServer } from "./join.js";
 import { EMOTE_CATALOG } from "./live.js";
+import * as Coins from "./coins.js";
 
 /** Ab wann ein Spieler als offline gilt (Mod und Launcher melden sich höchstens jede Minute, bei Bedarf öfter). */
 export const ONLINE_MS = 150 * 1000;
@@ -22,8 +23,10 @@ export const ONLINE_MS = 150 * 1000;
  * dann nur diese Spieler neu ab statt alle paar Minuten alle.
  * "join1" = Freunde in der Liste haben "join" (öffentliche Server-Adresse, „Beitreten“ möglich).
  * "emote1" = GET /api/live (WebSocket) für Emotes in Echtzeit gibt es.
+ * "coins1" = Coins und Shop (GET /api/coins, POST /api/shop/buy, POST /api/coins/gift); das Lebenszeichen bringt
+ * coins: { balance, pv, tx, daily?, events? } mit (Kontostand, Preisstand, Tagesbonus, Geschenke/Gutschriften).
  */
-const CAPS = ["presence2", "sync1", "cos1", "join1", "emote1"];
+const CAPS = ["presence2", "sync1", "cos1", "join1", "emote1", "coins1"];
 /** Cosmetics-Änderungen je Lebenszeichen höchstens so viele; ältere Stände als COS_WINDOW_MS gelten als Neustart. */
 const COS_CHANGES_MAX = 200;
 const COS_WINDOW_MS = 60 * 60 * 1000;
@@ -83,6 +86,7 @@ export const RATE_LIMITS = {
   auth: 20,      // Anmeldung ohne Konto (challenge, login, offline)
   upload: 10,    // Screenshot-Upload
   view: 300,     // öffentliche Screenshot-Links
+  coins: 30,     // Käufe, Geschenke und Admin-Buchungen (zusätzlich zu "all")
   games: 240,    // Partien abfragen (GET /api/games, ~40/min je Client während einer Partie) – statt "all"
 };
 
@@ -153,15 +157,28 @@ const NAME = /^[A-Za-z0-9_]{3,16}$/;
 /** Wo der MiniMe sitzt (ohne Angabe: Schulter). */
 const MINIME_POS = ["shoulder", "head", "arm", "leg"];
 const UUID = /^[0-9a-f]{32}$/;
-/** Freischaltungen: alles (*), Admin, MiniMe, Nametag oder ein Teil bzw. eine ganze Art (cape:*). */
-const GRANT = /^(\*|admin|minime|nametag|(cape|wings|shield|aura|acc):([a-z0-9_-]{1,32}|\*))$/;
+/** Freischaltungen: alles (*), Admin, MiniMe, Nametag, eine Nametag-Vorlage oder ein Teil bzw. eine ganze Art (cape:*). */
+const GRANT = /^(\*|admin|minime|nametag|nametag:[a-z0-9_-]{1,32}|(cape|wings|shield|aura|acc):([a-z0-9_-]{1,32}|\*))$/;
 const ID = /^[a-z0-9_-]{1,32}$/;
 
-/** Darf jemand mit diesen Freischaltungen das haben? kind: cape, wings, shield, aura, acc, minime, nametag. */
+/**
+ * Darf jemand mit diesen Freischaltungen das haben? kind: cape, wings, shield, aura, acc, minime, nametag (id = Vorlage
+ * oder null für den freien Nametag). Admins (und "*") haben alles – auch nach dem Zurücksetzen des Besitzes.
+ */
 function owns(items, kind, id) {
   if (items.has("*")) return true;
-  if (kind === "minime" || kind === "nametag" || kind === "admin") return items.has(kind);
+  if (kind === "admin") return items.has("admin");
+  if (items.has("admin")) return true;
+  if (kind === "minime") return items.has(kind);
+  if (kind === "nametag") return items.has("nametag") || (id ? items.has(`nametag:${id}`) : false);
   return items.has(`${kind}:*`) || items.has(`${kind}:${id}`);
+}
+
+/** Darf jemand diesen Nametag-Text zeigen? Freier Nametag oder genau eine gekaufte Vorlage. */
+function nametagOk(items, text) {
+  if (owns(items, "nametag", null)) return true;
+  const preset = Coins.presetOfText(text);
+  return Boolean(preset && owns(items, "nametag", preset));
 }
 
 /** Plätze für Accessoires („Kopf & Hals“): je Platz höchstens eins. */
@@ -358,7 +375,7 @@ export function createApi(db, options = {}) {
       if (row[column] && !owns(items, kind, row[column])) await db.run(`UPDATE users SET ${column} = NULL WHERE uuid = ?`, [uuid]);
     }
     if (!owns(items, "minime")) await db.run("UPDATE users SET minime = NULL, minime_pos = NULL, minime_set = NULL WHERE uuid = ?", [uuid]);
-    if (!owns(items, "nametag")) await db.run("UPDATE users SET nametag = NULL WHERE uuid = ?", [uuid]);
+    if (!nametagOk(items, (await db.get("SELECT nametag FROM users WHERE uuid = ?", [uuid])).nametag)) await db.run("UPDATE users SET nametag = NULL WHERE uuid = ?", [uuid]);
   }
 
   /** Admin: entweder mit dem Admin-Passwort (Kopfzeile x-admin-key) oder angemeldet mit Admin-Freischaltung. */
@@ -524,6 +541,264 @@ export function createApi(db, options = {}) {
     const row = await db.get(sql, params);
     return row ? Number(Object.values(row)[0]) : 0;
   }
+
+
+  // ------------------------------------------------------------------ Coins und Shop (coins.js)
+
+  /** Preise und Sets (Katalog + Überschreibungen), im Speicher bis zur nächsten Preisänderung. v = Preisstand (Hash). */
+  let shopCache = null;
+
+  async function shopData() {
+    if (shopCache) return shopCache;
+    const over = new Map((await db.all("SELECT item, price FROM prices")).map((r) => [r.item, r.price]));
+    const items = new Map();
+    for (const [item, e] of Coins.defaultPrices()) items.set(item, { ...e, base: e.price, price: over.has(item) ? over.get(item) : e.price, override: over.has(item) });
+    const discount = over.has("@set-discount") ? over.get("@set-discount") : Coins.SET_DISCOUNT;
+    const sets = Coins.catalogSets(items).map((set) => {
+      const sum = set.items.reduce((n, i) => n + items.get(i).price, 0);
+      return { ...set, sum, price: Coins.bundlePrice(sum, discount) };
+    });
+    const pub = { items: Object.fromEntries([...items].map(([k, e]) => [k, e.price])), discount, sets };
+    const v = (await sha256(JSON.stringify(pub))).slice(0, 12);
+    shopCache = { v, discount, items, sets, pub: { v, ...pub } };
+    return shopCache;
+  }
+
+  /** Hat jemand dieses kaufbare Teil schon? ("cape:x", "minime", "nametag", "nametag:vorlage") */
+  function ownsItem(items, item) {
+    const i = item.indexOf(":");
+    if (i < 0) return owns(items, item, null);
+    return owns(items, item.slice(0, i), item.slice(i + 1));
+  }
+
+  async function coinRow(uuid) {
+    return (await db.get("SELECT * FROM coins WHERE uuid = ?", [uuid])) || { uuid, balance: 0, streak: 0, daily_day: null, gift_day: null, gift_sent: 0 };
+  }
+
+  const coinEnsure = (uuid) => ["INSERT OR IGNORE INTO coins (uuid) VALUES (?)", [uuid]];
+  /** Buchung (balance = Stand danach, nach der Änderung in derselben Transaktion gelesen). */
+  const coinTx = (uuid, delta, kind, ref, reason, admin, items, t) => [
+    "INSERT INTO coin_tx (uuid, delta, balance, kind, ref, reason, admin, items, at) VALUES (?, ?, (SELECT balance FROM coins WHERE uuid = ?), ?, ?, ?, ?, ?, ?)",
+    [uuid, delta, uuid, kind, ref || null, reason || null, admin || null, items || null, t],
+  ];
+
+  function utcDay(t) {
+    return new Date(t).toISOString().slice(0, 10);
+  }
+
+  /** Idempotenz: gespeichertes Ergebnis zu einem Schlüssel oder null. */
+  async function idemResult(uuid, key) {
+    const row = await db.get("SELECT result FROM coin_idem WHERE uuid = ? AND key = ?", [uuid, key]);
+    return row ? JSON.parse(row.result) : null;
+  }
+
+  function idemKey(value) {
+    return typeof value === "string" && /^[A-Za-z0-9_-]{8,64}$/.test(value) ? value : null;
+  }
+
+  /**
+   * Tagesbonus (mit dem Lebenszeichen der Mod): einmal je Tag in der Ortszeit des Spielers. Tage in Folge erhöhen ihn
+   * (10, 15 … 40), ein verpasster Tag fängt wieder bei 10 an. Tage müssen streng steigen – eine andere Zeitzone bringt
+   * höchstens einmal einen Tag Vorsprung, nie zwei Boni an einem Tag. null = heute schon abgeholt.
+   */
+  async function claimDaily(uuid, tz) {
+    const t = now();
+    const day = statDay(t, statTz(tz));
+    const row = await coinRow(uuid);
+    if (row.daily_day && row.daily_day >= day) return null;
+    const streak = row.daily_day === Coins.dayBefore(day) ? row.streak + 1 : 1;
+    const amount = Coins.dailyAmount(streak);
+    try {
+      await db.batch([
+        coinEnsure(uuid),
+        ["UPDATE coins SET balance = balance + ?, streak = ?, daily_day = ? WHERE uuid = ? AND (daily_day IS NULL OR daily_day < ?)", [amount, streak, day, uuid, day], true],
+        coinTx(uuid, amount, "daily", day, `Tag ${streak}`, null, null, t),
+      ]);
+    } catch (error) {
+      if (error.code === "NEED") return null; // gleichzeitig schon abgeholt
+      throw error;
+    }
+    return { amount, streak, day };
+  }
+
+  /** Letzte Buchungen (neueste zuerst) mit Namen des Gegenübers bzw. Admins. */
+  async function coinHistory(uuid, n, forAdmin) {
+    const rows = await db.all(
+      "SELECT t.*, o.name AS other, a.name AS admin_name FROM coin_tx t LEFT JOIN users o ON o.uuid = t.ref AND t.kind IN ('gift_in', 'gift_out') LEFT JOIN users a ON a.uuid = t.admin WHERE t.uuid = ? ORDER BY t.id DESC LIMIT ?",
+      [uuid, n]);
+    return rows.map((r) => {
+      const out = { id: r.id, kind: r.kind, delta: r.delta, balance: r.balance, at: r.at, reason: r.reason || null };
+      if (r.kind === "gift_in" || r.kind === "gift_out") out.other = r.other || null;
+      if (r.kind === "purchase" || r.kind === "refund") out.ref = r.ref;
+      if (r.items) out.items = r.items.split(",");
+      if (forAdmin && r.admin) out.admin = r.admin === "key" ? "Admin-Passwort" : r.admin_name || r.admin;
+      return out;
+    });
+  }
+
+  /** Gutschriften seit der Buchung since (für Hinweise im Spiel): Geschenke, Admin-Gutschriften/-Abzüge, Erstattungen. */
+  async function coinEvents(uuid, since) {
+    const rows = await db.all(
+      "SELECT t.id, t.kind, t.delta, t.reason, o.name AS other FROM coin_tx t LEFT JOIN users o ON o.uuid = t.ref AND t.kind = 'gift_in' WHERE t.uuid = ? AND t.id > ? AND t.kind IN ('gift_in', 'grant', 'take', 'refund') ORDER BY t.id LIMIT 10",
+      [uuid, since]);
+    return rows.map((r) => ({ id: r.id, kind: r.kind, delta: r.delta, reason: r.reason || null, ...(r.kind === "gift_in" ? { from: r.other || null } : {}) }));
+  }
+
+  /** Für das Lebenszeichen: Kontostand, Preisstand, Tagesbonus (nur im Spiel) und neue Gutschriften seit coinTx. */
+  async function presenceCoins(uuid, data, inGame) {
+    const out = {};
+    if (inGame) {
+      const daily = await claimDaily(uuid, data.tz !== undefined ? data.tz : data.play && data.play.tz);
+      if (daily) out.daily = daily;
+    }
+    out.balance = (await coinRow(uuid)).balance;
+    out.pv = (await shopData()).v;
+    const last = await db.get("SELECT MAX(id) AS id FROM coin_tx WHERE uuid = ?", [uuid]);
+    out.tx = (last && last.id) || 0;
+    if (inGame && Number.isInteger(data.coinTx) && data.coinTx >= 0 && data.coinTx < out.tx) {
+      const events = await coinEvents(uuid, data.coinTx);
+      if (events.length) out.events = events;
+    }
+    return out;
+  }
+
+  /** Spieler für Admin-Aktionen: UUID oder Name (bekannte Spieler). */
+  async function adminTarget(input) {
+    const key = String(input || "").trim().replace(/-/g, "").toLowerCase();
+    let user = UUID.test(key) ? await db.get("SELECT uuid, name FROM users WHERE uuid = ?", [key]) : null;
+    if (!user) user = await findUser(String(input || ""));
+    if (!user) throw new HttpError(404, "Spieler nicht gefunden");
+    return user;
+  }
+
+  function adminId(admin) {
+    return admin && admin.uuid ? admin.uuid : "key";
+  }
+
+  async function adminCoinsView(uuid) {
+    const user = await db.get("SELECT uuid, name FROM users WHERE uuid = ?", [uuid]);
+    const row = await coinRow(uuid);
+    return {
+      uuid, name: user ? user.name : null, balance: row.balance, streak: row.streak, dailyDay: row.daily_day || null,
+      giftedToday: row.gift_day === utcDay(now()) ? row.gift_sent : 0, tx: await coinHistory(uuid, 100, true),
+    };
+  }
+
+  async function adminPricesView() {
+    const shop = await shopData();
+    const reset = await db.get("SELECT * FROM migrations WHERE id = ?", [Coins.RESET_ID]);
+    return {
+      v: shop.v, discount: shop.discount, defaultDiscount: Coins.SET_DISCOUNT,
+      items: [...shop.items.values()].map((e) => ({ item: e.item, kind: e.kind, name: e.name, base: e.base, price: e.price, override: e.override, event: e.event })),
+      sets: shop.sets,
+      reset: reset ? { batch: reset.batch, at: reset.at, users: reset.users, items: reset.items, restored: reset.restored || null } : null,
+    };
+  }
+
+  /** Bestätigung in zwei Schritten: Schritt 1 gibt ein Token (10 min gültig, einmalig) aus, Schritt 2 löst es ein. */
+  async function confirmToken(purpose, admin, data) {
+    const t = now();
+    await db.run("DELETE FROM confirm_tokens WHERE at < ?", [t - Coins.CONFIRM_MS]);
+    const token = randomHex(16);
+    await db.run("INSERT INTO confirm_tokens (token, purpose, admin, data, at) VALUES (?, ?, ?, ?, ?)", [token, purpose, adminId(admin), JSON.stringify(data || {}), t]);
+    return token;
+  }
+
+  async function redeemToken(token, purpose, admin) {
+    if (typeof token !== "string" || !/^[0-9a-f]{32}$/.test(token)) throw new HttpError(400, "Bestätigung fehlt");
+    const row = await db.get("SELECT * FROM confirm_tokens WHERE token = ?", [token]);
+    await db.run("DELETE FROM confirm_tokens WHERE token = ?", [token]);
+    if (!row || row.purpose !== purpose || row.admin !== adminId(admin) || row.at < now() - Coins.CONFIRM_MS) throw new HttpError(400, "Bestätigung abgelaufen – bitte noch einmal von vorn");
+    return JSON.parse(row.data || "{}");
+  }
+
+  /** Kauf ausführen (POST /api/shop/buy, nach der Prüfung des Schlüssels). */
+  async function buy(me, data, key) {
+    const shop = await shopData();
+    const items = await grantsOf(me.uuid);
+    let want, ref, price, name;
+    if (typeof data.set === "string") {
+      const set = shop.sets.find((x) => x.id === data.set);
+      if (!set) throw new HttpError(404, "Unbekanntes Set");
+      want = set.items.filter((i) => !ownsItem(items, i));
+      if (!want.length) throw new HttpError(409, "Du hast schon alle Teile dieses Sets");
+      price = Coins.bundlePrice(want.reduce((n, i) => n + shop.items.get(i).price, 0), shop.discount);
+      ref = `set:${set.id}`;
+      name = set.name;
+    } else {
+      const entry = shop.items.get(String(data.item || ""));
+      if (!entry) throw new HttpError(404, "Unbekanntes Teil");
+      if (ownsItem(items, entry.item)) throw new HttpError(409, "Das hast du schon");
+      want = [entry.item];
+      price = entry.price;
+      ref = entry.item;
+      name = entry.name;
+    }
+    if (Number.isInteger(data.price) && data.price !== price) throw new HttpError(409, `Der Preis hat sich geändert (jetzt ${price} Coins) – bitte noch einmal`);
+    const balance = (await coinRow(me.uuid)).balance;
+    if (balance < price) throw new HttpError(402, `Nicht genug Coins – dir fehlen ${price - balance}`);
+    const t = now();
+    const result = { ok: true, ref, name, items: want, price };
+    try {
+      await db.batch([
+        coinEnsure(me.uuid),
+        ["UPDATE coins SET balance = balance - ? WHERE uuid = ? AND balance >= ?", [price, me.uuid, price], true],
+        ...want.map((i) => ["INSERT INTO grants (uuid, item) VALUES (?, ?)", [me.uuid, i]]),
+        coinTx(me.uuid, -price, "purchase", ref, null, null, want.join(","), t),
+        ["INSERT INTO coin_idem (uuid, key, result, at) VALUES (?, ?, ?, ?)", [me.uuid, `buy:${key}`, JSON.stringify(result), t]],
+        ["UPDATE users SET cos_at = ? WHERE uuid = ?", [t, me.uuid]],
+      ]);
+    } catch (error) {
+      // derselbe Kauf gleichzeitig (gleicher Schlüssel) → dessen Ergebnis; sonst zu wenig Coins oder inzwischen gekauft
+      const again = await idemResult(me.uuid, `buy:${key}`);
+      if (again) return { ...again, balance: (await coinRow(me.uuid)).balance, repeated: true };
+      if (error.code === "NEED") throw new HttpError(402, "Nicht genug Coins");
+      if (/UNIQUE|constraint/i.test(error.message)) throw new HttpError(409, "Das hast du schon");
+      throw error;
+    }
+    return { ...result, balance: (await coinRow(me.uuid)).balance, owned: [...(await grantsOf(me.uuid))].sort() };
+  }
+
+  /** Geschenk ausführen (POST /api/coins/gift). */
+  async function gift(me, data, key) {
+    const amount = data.amount;
+    if (!Number.isInteger(amount) || amount < Coins.GIFT_MIN) throw new HttpError(400, `Mindestens ${Coins.GIFT_MIN} Coins`);
+    if (amount > Coins.GIFT_DAY_LIMIT) throw new HttpError(400, `Höchstens ${Coins.GIFT_DAY_LIMIT} Coins am Tag`);
+    const target = await findUser(data.to);
+    if (!target) throw new HttpError(404, "Spieler nicht gefunden");
+    if (target.uuid === me.uuid) throw new HttpError(400, "Du kannst dir nicht selbst etwas schenken");
+    if (!(await areFriends(me.uuid, target.uuid))) throw new HttpError(403, "Coins kannst du nur Freunden schenken");
+    const t = now();
+    const day = utcDay(t);
+    const row = await coinRow(me.uuid);
+    const sent = row.gift_day === day ? row.gift_sent : 0;
+    if (sent + amount > Coins.GIFT_DAY_LIMIT) throw new HttpError(429, `Tageslimit erreicht – heute noch ${Coins.GIFT_DAY_LIMIT - sent} Coins möglich`);
+    if (row.balance < amount) throw new HttpError(402, `Nicht genug Coins (du hast ${row.balance})`);
+    const result = { ok: true, to: target.name, amount };
+    const stmts = [
+      coinEnsure(me.uuid),
+      coinEnsure(target.uuid),
+      ["UPDATE coins SET balance = balance - ?, gift_sent = (CASE WHEN gift_day = ? THEN gift_sent ELSE 0 END) + ?, gift_day = ? WHERE uuid = ? AND balance >= ? AND (CASE WHEN gift_day = ? THEN gift_sent ELSE 0 END) + ? <= ?",
+        [amount, day, amount, day, me.uuid, amount, day, amount, Coins.GIFT_DAY_LIMIT], true],
+      ["UPDATE coins SET balance = balance + ? WHERE uuid = ?", [amount, target.uuid], true],
+      coinTx(me.uuid, -amount, "gift_out", target.uuid, null, null, null, t),
+      coinTx(target.uuid, amount, "gift_in", me.uuid, null, null, null, t),
+    ];
+    if (key) stmts.push(["INSERT INTO coin_idem (uuid, key, result, at) VALUES (?, ?, ?, ?)", [me.uuid, `gift:${key}`, JSON.stringify(result), t]]);
+    try {
+      await db.batch(stmts);
+    } catch (error) {
+      const again = key ? await idemResult(me.uuid, `gift:${key}`) : null;
+      if (again) return { ...again, balance: (await coinRow(me.uuid)).balance, repeated: true };
+      if (error.code === "NEED") throw new HttpError(409, "Nicht genug Coins oder Tageslimit erreicht");
+      throw error;
+    }
+    const after = await coinRow(me.uuid);
+    return { ...result, balance: after.balance, sentToday: after.gift_sent };
+  }
+
+  const KEEP_ADMINS = "(SELECT uuid FROM grants WHERE item IN ('admin', '*'))";
+  const COS_ANY = "(cape IS NOT NULL OR wings IS NOT NULL OR shield IS NOT NULL OR aura IS NOT NULL OR acc IS NOT NULL OR nametag IS NOT NULL OR minime IS NOT NULL OR minime_set IS NOT NULL)";
 
   // ------------------------------------------------------------------ Schach-Partien
 
@@ -1277,6 +1552,8 @@ export function createApi(db, options = {}) {
         // Wessen Cosmetics haben sich seit dem letzten Lebenszeichen geändert? (Mods ab 2.58.1 schicken cosSince)
         if ("cosSince" in data) result.cos = await cosChanges(data.cosSince);
       }
+      // Coins: Kontostand (auch für den Launcher), im Spiel dazu Tagesbonus und neue Gutschriften
+      result.coins = await presenceCoins(me.uuid, data, place === "game");
       // Stand des Einstellungs-Syncs: so merken Launcher und Mod ohne eigene Abfrage, ob ein anderer PC hochgeladen hat
       const sync = await db.get("SELECT version, hash, updated FROM sync_blobs WHERE uuid = ?", [me.uuid]);
       if (sync) result.sync = { version: sync.version, hash: sync.hash, updatedAt: sync.updated };
@@ -1305,7 +1582,7 @@ export function createApi(db, options = {}) {
         if ("minimes" in data) data.minimes = {};
         if ("minime" in data) data.minime = null;
       }
-      if (!owns(items, "nametag") && "nametag" in data) data.nametag = null;
+      if ("nametag" in data && !nametagOk(items, data.nametag)) data.nametag = null;
       // Accessoires je Platz; Unbekanntes und nicht Freigeschaltetes fällt weg (ältere Mods schicken das Feld nicht)
       let acc;
       if ("acc" in data) {
@@ -1369,8 +1646,231 @@ export function createApi(db, options = {}) {
     /** Eigene Freischaltungen (für das Cosmetics-Menü). */
     "POST /api/cosmetics/owned": async (request) => {
       const me = await auth(request);
+      const data = await body(request);
       const items = await grantsOf(me.uuid);
-      return { items: [...items].sort(), admin: owns(items, "admin") };
+      // Coins und Preise gleich mit (das Cosmetics-Menü fragt das beim Öffnen ohnehin): Preise nur bei neuem Preisstand
+      const shop = await shopData();
+      const out = { items: [...items].sort(), admin: owns(items, "admin"), coins: (await coinRow(me.uuid)).balance, pv: shop.v };
+      if (data.shopV !== shop.v) out.shop = shop.pub;
+      return out;
+    },
+
+    // ------------------------------------------------------------------ Coins und Shop
+
+    /** Kontostand, Tagesbonus (?tz=Minuten östlich von UTC), Geschenk-Limit, letzte Buchungen; ?shop=1 mit Preisen. */
+    "GET /api/coins": async (request) => {
+      const me = await auth(request);
+      const url = new URL(request.url);
+      const t = now();
+      const day = statDay(t, statTz(url.searchParams.get("tz")));
+      const row = await coinRow(me.uuid);
+      const claimed = Boolean(row.daily_day && row.daily_day >= day);
+      const going = claimed || row.daily_day === Coins.dayBefore(day);
+      const shop = await shopData();
+      const out = {
+        balance: row.balance,
+        daily: { claimed, streak: going ? row.streak : 0, amount: Coins.dailyAmount(claimed ? row.streak : going ? row.streak + 1 : 1), max: Coins.dailyAmount(Coins.DAILY_MAX_STREAK) },
+        gift: { sent: row.gift_day === utcDay(t) ? row.gift_sent : 0, limit: Coins.GIFT_DAY_LIMIT, min: Coins.GIFT_MIN },
+        tx: await coinHistory(me.uuid, Coins.TX_RECENT, false),
+        pv: shop.v,
+      };
+      if (url.searchParams.get("shop") === "1") out.shop = shop.pub;
+      return out;
+    },
+
+    /** Preise und Sets (die Mod holt sie sonst mit POST /api/cosmetics/owned, nur wenn sich der Preisstand geändert hat). */
+    "GET /api/shop": async (request) => {
+      await auth(request);
+      return (await shopData()).pub;
+    },
+
+    /**
+     * Kaufen: { item: "cape:galaxie" } oder { set: "winterzauber-ii" }, idemKey (8–64 Zeichen, je Kaufversuch neu,
+     * bei Wiederholung derselbe), optional price (erwarteter Preis – weicht er ab, 409). Abbuchung, Freischaltungen,
+     * Buchung und Idempotenz-Eintrag in einer Transaktion. Sets: nur die fehlenden Teile, mit Rabatt.
+     */
+    "POST /api/shop/buy": async (request) => {
+      const me = await auth(request);
+      const data = await body(request);
+      const key = idemKey(data.idemKey);
+      if (!key) throw new HttpError(400, "Ungültiger Kauf (idemKey fehlt)");
+      const prior = await idemResult(me.uuid, `buy:${key}`);
+      if (prior) return { ...prior, balance: (await coinRow(me.uuid)).balance, repeated: true };
+      try {
+        return await buy(me, data, key);
+      } catch (error) {
+        // derselbe Kauf lief gerade gleichzeitig (gleicher Schlüssel) → dessen Ergebnis statt „schon gekauft“
+        const again = await idemResult(me.uuid, `buy:${key}`);
+        if (again) return { ...again, balance: (await coinRow(me.uuid)).balance, repeated: true };
+        throw error;
+      }
+    },
+
+    /** Coins an einen Freund verschenken: { to: Name oder UUID, amount, idemKey? } – mindestens 10, höchstens 500 je Tag (UTC). */
+    "POST /api/coins/gift": async (request) => {
+      const me = await auth(request);
+      const data = await body(request);
+      const key = data.idemKey === undefined ? null : idemKey(data.idemKey);
+      if (data.idemKey !== undefined && !key) throw new HttpError(400, "Ungültiger Schlüssel");
+      if (key) {
+        const prior = await idemResult(me.uuid, `gift:${key}`);
+        if (prior) return { ...prior, balance: (await coinRow(me.uuid)).balance, repeated: true };
+      }
+      try {
+        return await gift(me, data, key);
+      } catch (error) {
+        const again = key ? await idemResult(me.uuid, `gift:${key}`) : null;
+        if (again) return { ...again, balance: (await coinRow(me.uuid)).balance, repeated: true };
+        throw error;
+      }
+    },
+
+    // ------------------------------------------------------------------ Admin: Coins, Preise, Besitz zurücksetzen
+
+    /** Coins geben (delta > 0) oder nehmen (delta < 0, höchstens bis 0): { player, delta, reason } */
+    "POST /api/admin/coins": async (request, ip) => {
+      const admin = await adminAuth(request, ip);
+      const data = await body(request);
+      const delta = data.delta;
+      if (!Number.isInteger(delta) || delta === 0 || Math.abs(delta) > Coins.ADMIN_DELTA_MAX) throw new HttpError(400, `Ungültige Menge (1 bis ${Coins.ADMIN_DELTA_MAX}, mit Vorzeichen)`);
+      const user = await adminTarget(data.player || data.uuid);
+      const reason = clean(data.reason, 120);
+      const row = await coinRow(user.uuid);
+      const actual = delta < 0 ? Math.max(delta, -row.balance) : Math.min(delta, Coins.BALANCE_MAX - row.balance);
+      if (actual === 0) throw new HttpError(409, delta < 0 ? `${user.name} hat keine Coins` : "Höchststand erreicht");
+      const t = now();
+      try {
+        await db.batch([
+          coinEnsure(user.uuid),
+          ["UPDATE coins SET balance = balance + ? WHERE uuid = ? AND balance + ? >= 0", [actual, user.uuid, actual], true],
+          coinTx(user.uuid, actual, actual > 0 ? "grant" : "take", null, reason, adminId(admin), null, t),
+        ]);
+      } catch (error) {
+        if (error.code === "NEED") throw new HttpError(409, "Kontostand hat sich gerade geändert – bitte noch einmal");
+        throw error;
+      }
+      log(`Coins: ${actual > 0 ? "+" : ""}${actual} für ${user.name} (${reason || "ohne Grund"})`);
+      return { ...(await adminCoinsView(user.uuid)), changed: actual };
+    },
+
+    /** Kontostand und Verlauf eines Spielers (Name oder UUID im Pfad). */
+    "GET /api/admin/coins/:player": async (request, ip, player) => {
+      await adminAuth(request, ip);
+      return adminCoinsView((await adminTarget(player)).uuid);
+    },
+
+    /** Kauf erstatten: { tx } – Coins zurück, gekaufte Teile wieder weg (je Kauf nur einmal). */
+    "POST /api/admin/refund": async (request, ip) => {
+      const admin = await adminAuth(request, ip);
+      const data = await body(request);
+      const row = Number.isInteger(data.tx) ? await db.get("SELECT * FROM coin_tx WHERE id = ? AND kind = 'purchase'", [data.tx]) : null;
+      if (!row) throw new HttpError(404, "Kauf nicht gefunden");
+      const items = row.items ? row.items.split(",") : [];
+      const t = now();
+      try {
+        await db.batch([
+          coinEnsure(row.uuid),
+          ["UPDATE coins SET balance = balance + ? WHERE uuid = ?", [-row.delta, row.uuid], true],
+          ...items.map((i) => ["DELETE FROM grants WHERE uuid = ? AND item = ?", [row.uuid, i]]),
+          coinTx(row.uuid, -row.delta, "refund", `tx:${row.id}`, clean(data.reason, 120), adminId(admin), row.items, t),
+        ]);
+      } catch (error) {
+        if (/UNIQUE|constraint/i.test(error.message)) throw new HttpError(409, "Dieser Kauf wurde schon erstattet");
+        throw error;
+      }
+      await dropUnowned(row.uuid);
+      await cosTouched(row.uuid);
+      return adminCoinsView(row.uuid);
+    },
+
+    /** Alle Preise (Standard, Überschreibung, gültig), Set-Rabatt und Stand des Zurücksetzens. */
+    "GET /api/admin/prices": async (request, ip) => {
+      await adminAuth(request, ip);
+      return adminPricesView();
+    },
+
+    /** Preise überschreiben: { prices: { item: Coins | null (= Standard) }, discount?: Prozent | null } */
+    "POST /api/admin/prices": async (request, ip) => {
+      const admin = await adminAuth(request, ip);
+      const data = await body(request);
+      const shop = await shopData();
+      const changes = [];
+      const given = data.prices && typeof data.prices === "object" && !Array.isArray(data.prices) ? data.prices : {};
+      for (const [item, price] of Object.entries(given)) {
+        if (!shop.items.has(item)) throw new HttpError(400, `Unbekanntes Teil: ${item}`);
+        if (price !== null && (!Number.isInteger(price) || price < 0 || price > Coins.PRICE_MAX)) throw new HttpError(400, `Ungültiger Preis für ${item}`);
+        changes.push([item, price]);
+      }
+      if ("discount" in data) {
+        if (data.discount !== null && (!Number.isInteger(data.discount) || data.discount < 0 || data.discount > 90)) throw new HttpError(400, "Rabatt: 0 bis 90 %");
+        changes.push(["@set-discount", data.discount]);
+      }
+      if (changes.length > 1000) throw new HttpError(400, "Zu viele Änderungen");
+      const t = now();
+      if (changes.length) {
+        await db.batch(changes.map(([item, price]) => (price === null
+          ? ["DELETE FROM prices WHERE item = ?", [item]]
+          : ["INSERT INTO prices (item, price, admin, updated) VALUES (?, ?, ?, ?) ON CONFLICT(item) DO UPDATE SET price = excluded.price, admin = excluded.admin, updated = excluded.updated", [item, price, adminId(admin), t]])));
+        shopCache = null;
+      }
+      return adminPricesView();
+    },
+
+    /**
+     * Besitz aller Spieler zurücksetzen (einmalig, nur auf Knopfdruck): Schritt 1 {} → { token, word, summary };
+     * Schritt 2 { token, confirm: "ZURÜCKSETZEN" } → sichert ALLE Freischaltungen und Auswahlen (grants_backup,
+     * cos_backup), löscht dann die Freischaltungen aller Nicht-Admins und legt deren Cosmetics ab. Läuft höchstens
+     * einmal (migrations.id = ownership-reset-1); danach { done: true, … }.
+     */
+    "POST /api/admin/reset-ownership": async (request, ip) => {
+      const admin = await adminAuth(request, ip);
+      const data = await body(request);
+      const done = await db.get("SELECT * FROM migrations WHERE id = ?", [Coins.RESET_ID]);
+      if (done) return { done: true, already: true, batch: done.batch, at: done.at, users: done.users, items: done.items, restored: done.restored || null };
+      const summary = {
+        users: await count(`SELECT COUNT(DISTINCT uuid) AS n FROM grants WHERE uuid NOT IN ${KEEP_ADMINS}`, []),
+        items: await count(`SELECT COUNT(*) AS n FROM grants WHERE uuid NOT IN ${KEEP_ADMINS}`, []),
+        admins: await count(`SELECT COUNT(DISTINCT uuid) AS n FROM grants WHERE item IN ('admin', '*')`, []),
+        equipped: await count(`SELECT COUNT(*) AS n FROM users WHERE ${COS_ANY} AND uuid NOT IN ${KEEP_ADMINS}`, []),
+      };
+      if (!data.token) return { token: await confirmToken("reset", admin, summary), word: Coins.RESET_WORD, summary };
+      await redeemToken(data.token, "reset", admin);
+      if (data.confirm !== Coins.RESET_WORD) throw new HttpError(400, `Zur Bestätigung „${Coins.RESET_WORD}“ eingeben`);
+      const t = now();
+      const batch = `reset-${t}`;
+      const cols = "cape, wings, shield, aura, acc, nametag, minime, minime_pos, minime_set";
+      try {
+        await db.batch([
+          ["INSERT INTO migrations (id, batch, at, admin, users, items) VALUES (?, ?, ?, ?, ?, ?)", [Coins.RESET_ID, batch, t, adminId(admin), summary.users, summary.items]],
+          ["INSERT INTO grants_backup (batch, uuid, item) SELECT ?, uuid, item FROM grants", [batch]],
+          [`INSERT INTO cos_backup (batch, uuid, ${cols}) SELECT ?, uuid, ${cols} FROM users WHERE ${COS_ANY}`, [batch]],
+          [`DELETE FROM grants WHERE uuid NOT IN ${KEEP_ADMINS}`, []],
+          [`UPDATE users SET cape = NULL, wings = NULL, shield = NULL, aura = NULL, acc = NULL, nametag = NULL, minime = NULL, minime_pos = NULL, minime_set = NULL, cos_at = ? WHERE ${COS_ANY} AND uuid NOT IN ${KEEP_ADMINS}`, [t]],
+        ]);
+      } catch (error) {
+        if (/UNIQUE|constraint/i.test(error.message)) {
+          const row = await db.get("SELECT * FROM migrations WHERE id = ?", [Coins.RESET_ID]);
+          return { done: true, already: true, batch: row.batch, at: row.at, users: row.users, items: row.items, restored: row.restored || null };
+        }
+        throw error;
+      }
+      log(`Besitz zurückgesetzt (Sicherung ${batch}): ${summary.items} Freischaltungen von ${summary.users} Spielern`);
+      return { done: true, batch, at: t, ...summary };
+    },
+
+    /** Sicherung wieder einspielen (zusätzlich zu inzwischen Gekauftem): Schritt 1 {} → token, Schritt 2 { token, confirm: "WIEDERHERSTELLEN" }. */
+    "POST /api/admin/restore-ownership": async (request, ip) => {
+      const admin = await adminAuth(request, ip);
+      const data = await body(request);
+      const done = await db.get("SELECT * FROM migrations WHERE id = ?", [Coins.RESET_ID]);
+      if (!done) throw new HttpError(404, "Es gibt keine Sicherung (Besitz wurde nicht zurückgesetzt)");
+      const summary = { batch: done.batch, at: done.at, items: await count("SELECT COUNT(*) AS n FROM grants_backup WHERE batch = ?", [done.batch]), restored: done.restored || null };
+      if (!data.token) return { token: await confirmToken("restore", admin, summary), word: Coins.RESTORE_WORD, summary };
+      await redeemToken(data.token, "restore", admin);
+      if (data.confirm !== Coins.RESTORE_WORD) throw new HttpError(400, `Zur Bestätigung „${Coins.RESTORE_WORD}“ eingeben`);
+      await db.batch(Coins.restoreStatements(done.batch, now()));
+      log(`Besitz aus Sicherung ${done.batch} wiederhergestellt`);
+      return { restored: true, ...summary };
     },
 
     // ------------------------------------------------------------------ Admin: Cosmetics freischalten
@@ -1475,7 +1975,7 @@ export function createApi(db, options = {}) {
             if (row.shield && !owns(items, "shield", row.shield)) row.shield = null;
             if (row.aura && !owns(items, "aura", row.aura)) row.aura = null;
             if (!owns(items, "minime")) row.minime = row.minime_set = row.minime_pos = null;
-            if (!owns(items, "nametag")) row.nametag = null;
+            if (row.nametag && !nametagOk(items, row.nametag)) row.nametag = null;
             if (row.cape) capes[row.uuid] = row.cape;
             if (row.minime) minimes[row.uuid] = row.minime;
             if (row.minime && row.minime_pos) minimePos[row.uuid] = row.minime_pos;
@@ -1872,7 +2372,9 @@ export function createApi(db, options = {}) {
   }
 
   /** Strengere Töpfe für Anmeldung ohne Konto und für Uploads. */
-  const STRICT = { "POST /api/auth/challenge": "auth", "POST /api/auth/login": "auth", "POST /api/auth/offline": "auth", "POST /api/shots": "upload", "PUT /api/sync": "upload" };
+  const STRICT = { "POST /api/auth/challenge": "auth", "POST /api/auth/login": "auth", "POST /api/auth/offline": "auth", "POST /api/shots": "upload", "PUT /api/sync": "upload",
+    "POST /api/shop/buy": "coins", "POST /api/coins/gift": "coins", "POST /api/admin/coins": "coins", "POST /api/admin/refund": "coins", "POST /api/admin/prices": "coins",
+    "POST /api/admin/reset-ownership": "coins", "POST /api/admin/restore-ownership": "coins" };
 
   async function handle(request, info) {
     try {
@@ -1927,13 +2429,16 @@ export function createApi(db, options = {}) {
     // Partie-Aktionen: /api/games/<id>/<aktion>
     const game = path.match(/^\/api\/games\/([^/]+)\/([a-z]+)$/);
     if (game) name = `${request.method} /api/games/:id/${game[2]}`;
+    // Admin: Coins eines Spielers – /api/admin/coins/<Name oder UUID>
+    const player = path.match(/^\/api\/admin\/coins\/([^/]+)$/);
+    if (player) name = `${request.method} /api/admin/coins/:player`;
     const route = routes[name];
     if (!route) return json({ error: "Nicht gefunden" }, 404);
     // Abfragen der Partien (häufig während einer Partie) haben einen eigenen Topf statt "all"
     limit(name === "GET /api/games" ? "games" : "all", ip);
     if (STRICT[name]) limit(STRICT[name], ip);
     try {
-      return json(await route(request, ip, game ? game[1] : null));
+      return json(await route(request, ip, game ? game[1] : player ? decodeURIComponent(player[1]) : null));
     } catch (error) {
       if (error instanceof HttpError) return json({ error: error.message }, error.status, error.retryAfter);
       log(`Fehler bei ${path}: ${error.stack || error.message}`);
