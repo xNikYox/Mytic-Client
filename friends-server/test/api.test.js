@@ -415,11 +415,27 @@ test("Accessoires (Kopf & Hals): je Platz eins, nur Freigeschaltetes, Lookup und
   assert.deepEqual(res.data.acc, { kopf: "rentiergeweih" });
   // Katalog für die Admin-Seite enthält die Accessoires und das Set
   const cat = (await s.call("GET", "/api/admin/catalog", null, null, ADMIN_KEY)).data.catalog;
-  assert.deepEqual(cat.acc.map((x) => x[0]), ["weihnachtsmuetze", "rentiergeweih", "rentiergeweih_nase", "schal"]);
+  assert.deepEqual(cat.acc.map((x) => x[0]), ["weihnachtsmuetze", "rentiergeweih", "rentiergeweih_nase", "schal",
+    "elfenmuetze", "strickmuetze", "ohrenschuetzer", "heiligenschein", "mistelreif", "lamettaboa", "lichterschal"]);
+  const known = new Set(["cape", "wings", "shield", "aura", "acc"].flatMap((k) => cat[k].map((x) => `${k}:${x[0]}`)));
+  assert.deepEqual(cat.sets.map((x) => x.name), ["Winterzauber 2026", "Winterzauber II"]);
   const set = cat.sets.find((x) => x.name === "Winterzauber 2026");
   assert.equal(set.items.length, 17);
-  const known = new Set(["cape", "wings", "shield", "aura", "acc"].flatMap((k) => cat[k].map((x) => `${k}:${x[0]}`)));
   for (const item of set.items) assert.ok(known.has(item), `${item} im Katalog`);
+  // zweites Set: 6 Umhänge, 3 Flügel, 3 Schilde, 5 Auren, 7 Accessoires (Nametag-Vorlagen brauchen nur "nametag")
+  const set2 = cat.sets.find((x) => x.name === "Winterzauber II");
+  assert.equal(set2.items.length, 24);
+  assert.equal(new Set(set2.items).size, 24);
+  for (const item of set2.items) assert.ok(known.has(item), `${item} im Katalog`);
+  for (const k of ["cape", "wings", "shield", "aura", "acc"]) assert.ok(set2.items.some((i) => i.startsWith(k + ":")), `${k} im Set`);
+  assert.deepEqual(set2.items.filter((i) => set.items.includes(i)), []);
+  // neue Accessoires lassen sich freischalten und tragen
+  await s.grant(ALICE, set2.items);
+  res = await s.call("POST", "/api/cosmetics", { acc: { kopf: "heiligenschein", hals: "lichterschal" }, aura: "sternschnuppen", cape: "schlittenflug" }, a);
+  assert.deepEqual(res.data.acc, { kopf: "heiligenschein", hals: "lichterschal" });
+  look = await s.call("POST", "/api/cosmetics/lookup", { uuids: [ALICE] }, b);
+  assert.deepEqual(look.data.acc[ALICE], { kopf: "heiligenschein", hals: "lichterschal" });
+  assert.equal(look.data.capes[ALICE], "schlittenflug");
   // die Admin-Seite kennt die neue Art
   const page = await (await s.api(new Request("http://x/proxy/8766/admin"))).text();
   assert.match(page, /acc: "Kopf & Hals"/);
