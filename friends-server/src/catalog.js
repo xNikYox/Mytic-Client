@@ -84,6 +84,30 @@ export const CATALOG = {
   [
    "tannenzauber",
    "Tannenzauber"
+  ],
+  [
+   "nordlichtwald",
+   "Nordlichtwald"
+  ],
+  [
+   "kaminabend",
+   "Kaminabend"
+  ],
+  [
+   "weihnachtsmarkt",
+   "Weihnachtsmarkt"
+  ],
+  [
+   "schlittenflug",
+   "Schlittenflug"
+  ],
+  [
+   "adventskranz",
+   "Adventskranz"
+  ],
+  [
+   "schneemannstrick",
+   "Schneemann-Strick"
   ]
  ],
  "wings": [
@@ -162,6 +186,18 @@ export const CATALOG = {
   [
    "schneeflocke",
    "Schneeflocke"
+  ],
+  [
+   "engelsgold",
+   "Engelsflügel Gold"
+  ],
+  [
+   "eiskristall",
+   "Eiskristall"
+  ],
+  [
+   "lametta",
+   "Lametta"
   ]
  ],
  "shield": [
@@ -240,6 +276,18 @@ export const CATALOG = {
   [
    "geschenk",
    "Geschenk"
+  ],
+  [
+   "schneekugel",
+   "Schneekugel"
+  ],
+  [
+   "lebkuchenhaus",
+   "Lebkuchenhaus"
+  ],
+  [
+   "tuerkranz",
+   "Türkranz"
   ]
  ],
  "aura": [
@@ -342,6 +390,26 @@ export const CATALOG = {
   [
    "tannenduft",
    "Tannenduft"
+  ],
+  [
+   "sternschnuppen",
+   "Sternschnuppen"
+  ],
+  [
+   "mistelzauber",
+   "Mistelzauber"
+  ],
+  [
+   "gloeckchen",
+   "Glöckchenklang"
+  ],
+  [
+   "glitzerschnee",
+   "Glitzerschnee"
+  ],
+  [
+   "polarlichtband",
+   "Polarlichtband"
   ]
  ],
  "acc": [
@@ -360,6 +428,34 @@ export const CATALOG = {
   [
    "schal",
    "Winterschal"
+  ],
+  [
+   "elfenmuetze",
+   "Elfenmütze"
+  ],
+  [
+   "strickmuetze",
+   "Strickmütze mit Bommel"
+  ],
+  [
+   "ohrenschuetzer",
+   "Ohrenschützer"
+  ],
+  [
+   "heiligenschein",
+   "Heiligenschein"
+  ],
+  [
+   "mistelreif",
+   "Mistelzweig-Haarreif"
+  ],
+  [
+   "lamettaboa",
+   "Lametta-Boa"
+  ],
+  [
+   "lichterschal",
+   "Lichterketten-Schal"
   ]
  ],
  "sets": [
@@ -383,6 +479,35 @@ export const CATALOG = {
     "acc:rentiergeweih",
     "acc:rentiergeweih_nase",
     "acc:schal"
+   ]
+  },
+  {
+   "name": "Winterzauber II",
+   "items": [
+    "cape:nordlichtwald",
+    "cape:kaminabend",
+    "cape:weihnachtsmarkt",
+    "cape:schlittenflug",
+    "cape:adventskranz",
+    "cape:schneemannstrick",
+    "wings:engelsgold",
+    "wings:eiskristall",
+    "wings:lametta",
+    "shield:schneekugel",
+    "shield:lebkuchenhaus",
+    "shield:tuerkranz",
+    "aura:sternschnuppen",
+    "aura:mistelzauber",
+    "aura:gloeckchen",
+    "aura:glitzerschnee",
+    "aura:polarlichtband",
+    "acc:elfenmuetze",
+    "acc:strickmuetze",
+    "acc:ohrenschuetzer",
+    "acc:heiligenschein",
+    "acc:mistelreif",
+    "acc:lamettaboa",
+    "acc:lichterschal"
    ]
   }
  ]

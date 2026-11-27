@@ -22,7 +22,14 @@ CAPES = [
     ("ozean", "Ozean"), ("netherportal", "Netherportal"), ("feuerwerk", "Feuerwerk"), ("regenbogen", "Regenbogen"), ("herzen", "Herzen"), ("gold", "Königsgold"),
     # Winterzauber 2026 (xmascapes.py)
     ("schneegestoeber", "Schneegestöber"), ("lebkuchen", "Lebkuchenmann"), ("zuckerstange", "Zuckerstange"), ("tannenzauber", "Tannenzauber"),
+    # Winterzauber II (xmascapes2.py)
+    ("nordlichtwald", "Nordlichtwald"), ("kaminabend", "Kaminabend"), ("weihnachtsmarkt", "Weihnachtsmarkt"),
+    ("schlittenflug", "Schlittenflug"), ("adventskranz", "Adventskranz"), ("schneemannstrick", "Schneemann-Strick"),
 ]
+# Umhänge in voller Zeichen-Auflösung (768x384): werden nicht verkleinert, im Katalog mit eigenem "scale" (die Mods lesen
+# das Feld je Umhang schon lange); dazu abweichende Bildzeit. Alle anderen: 512x256, "scale" 8 aus dem Katalog-Kopf.
+CAPE_SCALE = {c: 12 for c in ["nordlichtwald", "kaminabend", "weihnachtsmarkt", "schlittenflug", "adventskranz", "schneemannstrick"]}
+CAPE_MS = {"schlittenflug": 90}
 
 WINGS = [("engel", "Engel"), ("inferno", "Inferno"), ("eis", "Eis"), ("neon", "Mytic Neon"), ("smaragd", "Smaragd")]
 # Pixel-Flügel aus pixelwings.py (bringen ihre Menü-Bilder selbst mit)
@@ -30,17 +37,24 @@ PIXEL_WINGS = [("rabe", "Rabe"), ("taube", "Taube"), ("elster", "Elster"), ("pho
                ("amethyst", "Amethyst"), ("kirsche", "Kirschblüte"), ("sonne", "Sonnengold"), ("polarlicht", "Polarlicht"),
                ("sternennacht", "Sternennacht"),
                # Winterzauber 2026
-               ("lichterkette", "Lichterkette"), ("zuckerstange", "Zuckerstange"), ("lebkuchen", "Lebkuchen"), ("schneeflocke", "Schneeflocke")]
+               ("lichterkette", "Lichterkette"), ("zuckerstange", "Zuckerstange"), ("lebkuchen", "Lebkuchen"), ("schneeflocke", "Schneeflocke"),
+               # Winterzauber II (xmaswings2.py: doppeltes Raster 96x80 je Flügel, gleiche Dateiformate)
+               ("engelsgold", "Engelsflügel Gold"), ("eiskristall", "Eiskristall"), ("lametta", "Lametta")]
 
 # Schilde aus shields.py (24 Bilder, gezeichnet 12-fach, ausgeliefert 6-fach = 384x384 im 64x64-Format des Minecraft-Schilds)
 SHIELDS = [("void", "Void"), ("death", "Death"), ("mytic", "Mytic Neon"), ("drache", "Drachenschuppen"), ("galaxie", "Galaxie"),
            ("lava", "Lava"), ("frost", "Frost"), ("gewitter", "Gewitter"), ("kristall", "Kristall"), ("totenkopf", "Totenkopf"),
            ("code", "Code-Regen"), ("synthwave", "Synthwave"), ("ozean", "Ozean"), ("netherportal", "Netherportal"),
            ("feuerwerk", "Feuerwerk"), ("regenbogen", "Regenbogen"), ("herzen", "Herzen"), ("gold", "Königsgold"),
-           ("geschenk", "Geschenk")]  # Winterzauber 2026
+           ("geschenk", "Geschenk"),  # Winterzauber 2026
+           # Winterzauber II (xmasshields2.py, liefert schon 384x384)
+           ("schneekugel", "Schneekugel"), ("lebkuchenhaus", "Lebkuchenhaus"), ("tuerkranz", "Türkranz")]
 SHIELD_FRAMES = os.path.join(BUILD, "shields")
+SHIELDS2 = {"schneekugel", "lebkuchenhaus", "tuerkranz"}
+SHIELD2_OUT = os.path.join(BUILD, "shields-xmas2")
 
-# Auren: eigene Partikel-Sprites aus aurasprites.py. pattern: orbit, halo, feet, rise, fall, spiral, sparkle;
+# Auren: eigene Partikel-Sprites aus aurasprites.py. pattern: orbit, halo, feet, rise, fall, spiral, sparkle, shoot (ab Mods 2.60,
+# ältere zeigen dafür "sparkle");
 # rate = Partikel pro Sekunde; size = Größe in Blöcken; colors = Farben (Vorschau in 1.8.9)
 AURAS = [
     ("schwarzweiss", "Schwarz-Weiß", "orbit", 7, 0.16, ["#ffffff", "#111111"]),
@@ -69,24 +83,44 @@ AURAS = [
     ("christbaumkugeln", "Christbaumkugeln", "halo", 4, 0.17, ["#e8283a", "#ffcf3a", "#2fae4e", "#3f8bff"]),
     ("schneegestoeber", "Schneegestöber", "fall", 6, 0.2, ["#ffffff", "#bfe4ff"]),
     ("tannenduft", "Tannenduft", "rise", 3.5, 0.2, ["#2fae4e", "#ffd23f", "#ff3b4e"]),
+    # Winterzauber II (xmasauras2.py: Sprites 64x64, Menü-Bild weiter 32x32 je Sprite)
+    ("sternschnuppen", "Sternschnuppen", "shoot", 3.5, 0.55, ["#ffffff", "#ffd96a", "#bfe4ff"]),
+    ("mistelzauber", "Mistelzauber", "halo", 4, 0.2, ["#2f7d4c", "#f4f8ff", "#d92a3f"]),
+    ("gloeckchen", "Glöckchenklang", "orbit", 3, 0.2, ["#ffd96a", "#e8b23a", "#d92a3f"]),
+    ("glitzerschnee", "Glitzerschnee", "spiral", 7, 0.15, ["#f4f8ff", "#a9d8ff", "#ffd96a"]),
+    ("polarlichtband", "Polarlichtband", "orbit", 9, 0.32, ["#3dff9a", "#2cc6a0", "#9b6bff"]),
 ]
+AURAS2 = {"sternschnuppen", "mistelzauber", "gloeckchen", "glitzerschnee", "polarlichtband"}
 
 # Accessoires „Kopf & Hals“ (accessories.py: Box-Modelle + Textur acc/<id>.png + Menü-Bild acc/<id>_icon.png); slot: kopf oder hals.
 # Mods ab 2.58 – ältere Mods ignorieren den Abschnitt "accessories".
 ACCESSORIES = ["weihnachtsmuetze", "rentiergeweih", "rentiergeweih_nase", "schal"]
+# Winterzauber II (xmasacc2.py): PNG in doppelter Auflösung (Katalog-"texture" bleibt die logische Größe), bis 30 Boxen,
+# Box-Feld "blink" (Gruppe 0..2, Mods ab 2.60 – ältere lassen die Box dauerhaft leuchten)
+ACCESSORIES2 = ["elfenmuetze", "strickmuetze", "ohrenschuetzer", "heiligenschein", "mistelreif", "lamettaboa", "lichterschal"]
 ACC_OUT = os.path.join(BUILD, "acc")
 
 # Nametag-Vorlagen (Knöpfe im Cosmetics-Menü, Mods ab 2.58; brauchen die Freischaltung "nametag")
 NAMETAG_PRESETS = [("frohefest", "Frohes Fest", "&c❄ &fFrohes &aFest &c❄"),
                    ("weihnachten", "Frohe Weihnachten", "&4&l✦ &cFrohe &fWeihnachten &4&l✦"),
                    ("wichtel", "Wichtel", "&a★ &2Mytic-&aWichtel &a★"),
-                   ("schnee", "Schneeflocke", "&b❄ &f&oLet it snow &b❄")]
+                   ("schnee", "Schneeflocke", "&b❄ &f&oLet it snow &b❄"),
+                   # Winterzauber II
+                   ("hohoho", "Ho Ho Ho", "&b❄ &c&lHo Ho Ho &b❄"),
+                   ("weihnachtself", "Weihnachtself", "&a✦ &2Weihnachts&celf &a✦"),
+                   ("rentierfluesterer", "Rentierflüsterer", "&6★ &eRentier&6flüsterer &6★"),
+                   ("plaetzchenbaecker", "Plätzchenbäcker", "&6♥ &ePlätzchen&6bäcker &6♥"),
+                   ("schneeengel", "Schneeengel", "&f❄ &b&oSchnee&f&oengel &f❄")]
 
 # Sets für die Admin-Seite (ein Klick markiert alle Teile)
 SETS = [("Winterzauber 2026", ["cape:schneegestoeber", "cape:lebkuchen", "cape:zuckerstange", "cape:tannenzauber",
                                "wings:lichterkette", "wings:zuckerstange", "wings:lebkuchen", "wings:schneeflocke", "shield:geschenk",
                                "aura:plaetzchen", "aura:christbaumkugeln", "aura:schneegestoeber", "aura:tannenduft"]
-                              + ["acc:" + a for a in ["weihnachtsmuetze", "rentiergeweih", "rentiergeweih_nase", "schal"]])]
+                              + ["acc:" + a for a in ["weihnachtsmuetze", "rentiergeweih", "rentiergeweih_nase", "schal"]]),
+        ("Winterzauber II", ["cape:" + c for c in CAPE_SCALE] + ["wings:engelsgold", "wings:eiskristall", "wings:lametta"]
+                            + ["shield:" + s for s in ["schneekugel", "lebkuchenhaus", "tuerkranz"]]
+                            + ["aura:" + a for a in ["sternschnuppen", "mistelzauber", "gloeckchen", "glitzerschnee", "polarlichtband"]]
+                            + ["acc:" + a for a in ACCESSORIES2])]
 
 
 def main():
@@ -94,21 +128,37 @@ def main():
     if "--skip-render" not in sys.argv:
         subprocess.run([sys.executable, os.path.join(HERE, "capes.py"), FRAMES], check=True)
         subprocess.run([sys.executable, os.path.join(HERE, "shields.py"), SHIELD_FRAMES], check=True)
-    catalog = {"version": VERSION, "scale": 8, "capes": [{"id": i, "name": n, "frames": 24, "frameMs": 70} for i, n in CAPES],
+        subprocess.run([sys.executable, os.path.join(HERE, "xmascapes2.py"), FRAMES], check=True)
+        subprocess.run([sys.executable, os.path.join(HERE, "xmasshields2.py"), SHIELD2_OUT], check=True)
+    catalog = {"version": VERSION, "scale": 8,
+               "capes": [dict({"id": i, "name": n, "frames": 24, "frameMs": CAPE_MS.get(i, 70)},
+                              **({"scale": CAPE_SCALE[i]} if i in CAPE_SCALE else {})) for i, n in CAPES],
                "wings": [{"id": i, "name": n, "fxFrames": 16, "fxMs": 90} for i, n in WINGS]
                         + [{"id": i, "name": n, "fxFrames": 16, "fxMs": 90, "w": 24, "h": 20} for i, n in PIXEL_WINGS],
                "shields": [{"id": i, "name": n, "frames": 24, "frameMs": 70} for i, n in SHIELDS],
                "auras": [{"id": i, "name": n, "pattern": pt, "rate": r, "size": sz, "colors": cs,
-                          "sprites": len(aurasprites.AURAS[i])} for i, n, pt, r, sz, cs in AURAS],
+                          "sprites": 0 if i in AURAS2 else len(aurasprites.AURAS[i])} for i, n, pt, r, sz, cs in AURAS],
                "nametagPresets": [{"id": i, "name": n, "text": t} for i, n, t in NAMETAG_PRESETS]}
     subprocess.run([sys.executable, os.path.join(HERE, "accessories.py"), ACC_OUT], check=True)
+    subprocess.run([sys.executable, os.path.join(HERE, "xmasacc2.py"), ACC_OUT], check=True)
     acc_meta = json.load(open(os.path.join(ACC_OUT, "accessories.json"), encoding="utf-8"))
+    acc_meta.update(json.load(open(os.path.join(ACC_OUT, "accessories2.json"), encoding="utf-8")))
     catalog["accessories"] = [{"id": a, "name": acc_meta[a]["name"], "slot": acc_meta[a]["slot"], "texture": acc_meta[a]["texture"],
-                               "boxes": [{k: b[k] for k in ("from", "size", "uv", "tex", "mirror", "emissive")} for b in acc_meta[a]["boxes"]]}
-                              for a in ACCESSORIES]
+                               "boxes": [{k: b[k] for k in ("from", "size", "uv", "tex", "mirror", "emissive", "blink") if k in b}
+                                         for b in acc_meta[a]["boxes"]]}
+                              for a in ACCESSORIES + ACCESSORIES2]
     subprocess.run([sys.executable, os.path.join(HERE, "wings.py"), os.path.join(BUILD, "wings")], check=True)
     subprocess.run([sys.executable, os.path.join(HERE, "pixelwings.py"), os.path.join(BUILD, "wings")], check=True)
+    subprocess.run([sys.executable, os.path.join(HERE, "xmaswings2.py"), os.path.join(BUILD, "wings")], check=True)
     subprocess.run([sys.executable, os.path.join(HERE, "aurasprites.py"), os.path.join(BUILD, "auras")], check=True)
+    subprocess.run([sys.executable, os.path.join(HERE, "xmasauras2.py"), os.path.join(BUILD, "auras")], check=True)
+    # Werte der neuen Auren müssen zu den Sprites passen (Anzahl kommt aus meta2.json, nicht aus aurasprites.AURAS)
+    aura2_meta = {m["id"]: m for m in json.load(open(os.path.join(BUILD, "auras", "meta2.json"), encoding="utf-8"))}
+    for a in catalog["auras"]:
+        if a["id"] in AURAS2:
+            m = aura2_meta[a["id"]]
+            assert (a["pattern"], a["rate"], a["size"], a["colors"]) == (m["pattern"], m["rate"], m["size"], m["colors"]), a["id"]
+            a["sprites"] = m["sprites"]
     # kleine, weich verkleinerte Bilder für die Vorschau im Cosmetics-Menü (große Texturen flimmern dort)
     wdir = os.path.join(BUILD, "wings")
     for wid, _ in WINGS:
@@ -169,12 +219,16 @@ def main():
     small = os.path.join(BUILD, "small")
     os.makedirs(small, exist_ok=True)
     for cid, _ in CAPES:
+        if cid in CAPE_SCALE:
+            continue  # volle Auflösung, wird direkt aus FRAMES eingepackt
         for f in range(24):
             name = f"{cid}_{f}.png"
             subprocess.run(["convert", os.path.join(FRAMES, name), "-filter", "Lanczos", "-resize", "512x256!", "-depth", "8", f"PNG32:{os.path.join(small, name)}"], check=True)
     shield_small = os.path.join(BUILD, "shields-small")
     os.makedirs(shield_small, exist_ok=True)
     for sid, _ in SHIELDS:
+        if sid in SHIELDS2:
+            continue  # schon 384x384
         for f in range(24):
             name = f"{sid}_{f}.png"
             subprocess.run(["convert", os.path.join(SHIELD_FRAMES, name), "-filter", "Lanczos", "-resize", "384x384!", "-depth", "8",
@@ -186,21 +240,21 @@ def main():
         for cid, _ in CAPES:
             for f in range(24):
                 name = f"{cid}_{f}.png"
-                z.write(os.path.join(small, name), f"assets/myticclient/textures/cape/{name}")
+                z.write(os.path.join(FRAMES if cid in CAPE_SCALE else small, name), f"assets/myticclient/textures/cape/{name}")
         for aid, *_ in AURAS:
             for name in (f"{aid}.png", f"{aid}_icon.png"):
                 z.write(os.path.join(BUILD, "auras", name), f"assets/myticclient/textures/aura/{name}")
         for sid, _ in SHIELDS:
             for f in range(24):
                 name = f"{sid}_{f}.png"
-                z.write(os.path.join(shield_small, name), f"assets/myticclient/textures/shield/{name}")
+                z.write(os.path.join(SHIELD2_OUT if sid in SHIELDS2 else shield_small, name), f"assets/myticclient/textures/shield/{name}")
         for wid, _ in WINGS + PIXEL_WINGS:
             z.write(os.path.join(BUILD, "wings", f"{wid}.png"), f"assets/myticclient/textures/wings/{wid}.png")
             z.write(os.path.join(BUILD, "wings", f"{wid}_icon.png"), f"assets/myticclient/textures/wings/{wid}_icon.png")
             for f in range(16):
                 for name in (f"{wid}_fx_{f}.png", f"{wid}_icon_fx_{f}.png"):
                     z.write(os.path.join(BUILD, "wings", name), f"assets/myticclient/textures/wings/{name}")
-        for aid in ACCESSORIES:
+        for aid in ACCESSORIES + ACCESSORIES2:
             for name in (f"{aid}.png", f"{aid}_icon.png"):
                 z.write(os.path.join(ACC_OUT, name), f"assets/myticclient/textures/acc/{name}")
     print(f"{jar} ({os.path.getsize(jar) // 1024} KB)")
