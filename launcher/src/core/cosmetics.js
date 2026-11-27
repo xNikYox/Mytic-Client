@@ -81,7 +81,9 @@ class CosmeticsUpdater {
     try {
       const info = await withTimeout(this.latest(), 8000);
       if (info && (!have || compareVersions(info.version, have.version) > 0)) {
-        const file = await withTimeout(this.download(info), 60000);
+        // großes Paket (~70 MB): bis zu 3 Minuten warten; danach läuft der Download im Hintergrund weiter
+        // und das Paket ist beim nächsten Start da
+        const file = await withTimeout(this.download(info), 180000);
         this.log(`[Cosmetics] Paket ${info.version} geladen`);
         return file;
       }
