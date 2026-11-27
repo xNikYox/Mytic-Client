@@ -22,7 +22,7 @@ public final class AuraFx {
         public final int sprite;
         final float seed;
         final float scale;
-        // Kreisbahn (orbit, halo, spiral, feet)
+        // Kreisbahn (orbit, halo, spiral, feet, shoot)
         float ang, angVel, radius, radiusVel;
         boolean circling;
         /** Drehung in der Bildebene (Bogenmaß) */
@@ -174,6 +174,15 @@ public final class AuraFx {
                 p.vy = -0.45f - 0.15f * RANDOM.nextFloat();
                 p.rollVel = (RANDOM.nextFloat() - 0.5f) * 3f;
                 p.roll = a;
+                break;
+            case "shoot": // Sternschnuppen: fallen schnell von oberhalb des Kopfes, leicht seitlich, ohne Drehung
+                p = new P(0.9f, sprite, RANDOM.nextFloat(), scale, false);
+                p.circling = true;
+                p.ang = a;
+                p.angVel = 0.5f;
+                p.radius = 0.5f + 0.4f * RANDOM.nextFloat();
+                p.y = 2.4f + 0.5f * RANDOM.nextFloat();
+                p.vy = -2.6f;
                 break;
             default: // sparkle: zufällig rund um den Körper, blinkt
                 p = new P(1.1f, sprite, RANDOM.nextFloat(), scale, true);

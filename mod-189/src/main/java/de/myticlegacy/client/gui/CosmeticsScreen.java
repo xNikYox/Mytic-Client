@@ -544,6 +544,10 @@ public class CosmeticsScreen extends DesignScreen {
                 double a = t * 3.5 + i * 0.9;
                 px = Math.cos(a) * 13;
                 py = ((t * 0.9 + i * 0.15) % 2.1) * 24;
+            } else if ("shoot".equals(aura.pattern)) {
+                double q = (t * 1.1 + i / (double) n) % 1.0;
+                px = Math.sin(i * 2.4) * 13 + q * 5;
+                py = 56 - q * 54;
             } else {
                 px = Math.sin(i * 3.7) * 14;
                 py = 4 + ((i * 7.3) % 46);
@@ -711,8 +715,8 @@ public class CosmeticsScreen extends DesignScreen {
                 float k = Draw.k(kit.g);
                 float tw = font.width(shownPreset) * sc / k, bw = tw + 24 * d, bh = 36 * d;
                 if (px + bw > lx + lw && px > lx) {
-                    // zweite Zeile, mehr nicht
-                    if (row >= 1) break;
+                    // bis zu drei Zeilen (passt im Fenster noch über die Knöpfe)
+                    if (row >= 2) break;
                     row++;
                     px = lx;
                     py += bh + 8 * d;
