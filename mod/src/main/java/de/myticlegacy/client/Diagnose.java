@@ -10,6 +10,7 @@ import net.minecraft.client.gui.screens.LoadingOverlay;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.multiplayer.PlayerInfo;
+import net.minecraft.server.packs.resources.ReloadInstance;
 
 import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
@@ -56,6 +57,9 @@ public final class Diagnose {
     private static long reloadStart;
     private static int reloadPacks;
     private static boolean reloadInitial = true;
+    private static long fullSince;
+    private static Map<String, Object> stuckHint;
+    private static final List<Map<String, Object>> hints = new ArrayList<>();
     private static final List<Map<String, Object>> joins = new ArrayList<>(), reloads = new ArrayList<>();
 
     private Diagnose() {
@@ -148,7 +152,16 @@ public final class Diagnose {
         if (loadingOverlay && reloadStart == 0) {
             reloadStart = now;
             reloadPacks = packCount(mc);
+            fullSince = 0;
+            stuckHint = null;
+            de.myticlegacy.client.diag.SamplingProfiler.reloadPhase(true);
+        } else if (loadingOverlay) {
+            stuckCheck(mc, now);
         } else if (!loadingOverlay && reloadStart != 0) {
+            de.myticlegacy.client.diag.SamplingProfiler.reloadPhase(false);
+            if (stuckHint != null) finishStuck(now);
+            stuckHint = null;
+            fullSince = 0;
             Map<String, Object> r = new LinkedHashMap<>();
             r.put("at", now);
             r.put("ms", now - reloadStart);
@@ -202,6 +215,68 @@ public final class Diagnose {
         if (mc.level == null && joinTracking && joinWorldAt != 0) { // direkt wieder raus
             joinTracking = false;
             joinStart = 0;
+        }
+    }
+
+    /** Ladebalken steht bei 100 %, der Ladebildschirm geht aber nicht weg – mit rrls ein bekanntes Problem */
+    private static void stuckCheck(Minecraft mc, long now) {
+        if (stuckHint != null || !FabricLoader.getInstance().isModLoaded("rrls")) return;
+        float p = reloadProgress(mc);
+        if (p < 0.999f) {
+            fullSince = 0;
+            return;
+        }
+        if (fullSince == 0) fullSince = now;
+        else if (now - fullSince > 10_000) {
+            Map<String, Object> h = new LinkedHashMap<>();
+            h.put("id", "rrls-stuck");
+            h.put("level", "warn");
+            h.put("at", now);
+            h.put("seconds", (now - fullSince) / 1000);
+            h.put("title", "Ladebalken hing bei 100 % (rrls)");
+            h.put("detail", stuckDetail("über 10 s"));
+            stuckHint = h;
+            keep(hints, h);
+        }
+    }
+
+    /** Tatsächliche Dauer bei 100 % nachtragen */
+    private static void finishStuck(long now) {
+        long s = (now - fullSince) / 1000;
+        synchronized (Diagnose.class) {
+            stuckHint.put("seconds", s);
+            stuckHint.put("detail", stuckDetail(s + " s"));
+        }
+        write();
+    }
+
+    private static String stuckDetail(String time) {
+        return "Beim Neuladen der Ressourcen stand der Ladebalken " + time + " auf 100 %. rrls (Remove Reloading Screen) ist installiert und kann den "
+                + "Ladebalken hängen lassen bzw. Ladezeiten verlängern – zum Testen deaktivieren. Messen: /myticdiagnose reload";
+    }
+
+    private static java.lang.reflect.Field reloadField;
+    private static boolean reloadFieldSearched;
+
+    /** Fortschritt des laufenden Neuladens (0…1, -1 = unbekannt) – Feld vom Typ ReloadInstance im LoadingOverlay */
+    private static float reloadProgress(Minecraft mc) {
+        try {
+            if (!reloadFieldSearched) {
+                reloadFieldSearched = true;
+                for (java.lang.reflect.Field f : LoadingOverlay.class.getDeclaredFields()) {
+                    if (ReloadInstance.class.isAssignableFrom(f.getType())) {
+                        f.setAccessible(true);
+                        reloadField = f;
+                        break;
+                    }
+                }
+            }
+            if (reloadField == null) return -1;
+            Object r = reloadField.get(mc.getOverlay());
+            return r instanceof ReloadInstance ? ((ReloadInstance) r).getActualProgress() : -1;
+        } catch (Throwable t) {
+            reloadField = null;
+            return -1;
         }
     }
 
@@ -292,6 +367,9 @@ public final class Diagnose {
         t.put("joins", new ArrayList<>(joins));
         t.put("reloads", new ArrayList<>(reloads));
         o.put("timings", t);
+        List<Map<String, Object>> hs = new ArrayList<>();
+        for (Map<String, Object> h : hints) hs.add(new LinkedHashMap<>(h));
+        o.put("hints", hs);
         Map<String, Object> sys = new LinkedHashMap<>();
         sys.put("minecraft", de.myticlegacy.client.compat.Compat.versionName());
         sys.put("java", System.getProperty("java.version"));

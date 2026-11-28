@@ -51,7 +51,9 @@ import java.util.List;
 public final class MyticClient implements ClientModInitializer {
     public static final String ID = "myticclient";
     public static final String NAME = "Mytic Client";
-    public static final String VERSION = "2.16";
+    /** Echte Mod-Version aus fabric.mod.json (beim Bauen eingesetzt), ohne Minecraft-Anhang („2.62.0+1.21.10“ → „2.62.0“) */
+    public static final String VERSION = net.fabricmc.loader.api.FabricLoader.getInstance().getModContainer(ID)
+            .map(c -> c.getMetadata().getVersion().getFriendlyString()).map(v -> v.contains("+") ? v.substring(0, v.indexOf('+')) : v).orElse("?");
     public static final Logger LOG = LoggerFactory.getLogger(NAME);
 
     public static final List<Module> MODULES = new ArrayList<>();

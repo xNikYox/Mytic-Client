@@ -2,7 +2,7 @@ plugins {
     id("fabric-loom") version "1.14.10"
 }
 
-version = "2.61.0"
+version = "2.62.0"
 group = "de.myticlegacy"
 
 base { archivesName.set("mytic-client") }
@@ -28,7 +28,12 @@ val clipsTest by tasks.registering(JavaExec::class) {
     mainClass.set("de.myticlegacy.client.clips.ClipsSelfTest")
     jvmArgs("-Djava.awt.headless=true")
 }
-tasks.check { dependsOn(clipsTest) }
+// Selbsttest der Diagnose-Messung (Thread-Familien, Leerlauf-Erkennung, Bericht) – ebenfalls reines Java
+val diagTest by tasks.registering(JavaExec::class) {
+    classpath = sourceSets.test.get().output + sourceSets.main.get().output
+    mainClass.set("de.myticlegacy.client.diag.DiagSelfTest")
+}
+tasks.check { dependsOn(clipsTest, diagTest) }
 // keine JUnit-Tests – die übliche test-Aufgabe würde nur Laufzeit-Bibliotheken von Loom laden (offline nicht im Cache)
 tasks.test { enabled = false }
 

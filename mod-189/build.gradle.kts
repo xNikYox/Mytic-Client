@@ -50,9 +50,21 @@ val copySharedUi by tasks.registering(Sync::class) {
     }
     into(sharedUi)
 }
-sourceSets.main { java.srcDir(sharedUi) }
-tasks.compileJava { dependsOn(copySharedUi) }
-tasks.matching { it.name == "sourcesJar" }.configureEach { dependsOn(copySharedUi) }
+// Echte Versionsnummer als Konstante (für @Mod und Diagnose), damit sie nie veraltet
+val buildInfo = layout.buildDirectory.dir("generated/buildinfo")
+val modVersion = version.toString().substringBefore("+")
+val generateBuildInfo by tasks.registering {
+    inputs.property("version", modVersion)
+    outputs.dir(buildInfo)
+    doLast {
+        val f = buildInfo.get().file("de/myticlegacy/client/BuildInfo.java").asFile
+        f.parentFile.mkdirs()
+        f.writeText("package de.myticlegacy.client;\n\n/** Beim Bauen erzeugt (build.gradle.kts) */\npublic final class BuildInfo {\n    public static final String VERSION = \"$modVersion\";\n\n    private BuildInfo() {\n    }\n}\n")
+    }
+}
+sourceSets.main { java.srcDir(sharedUi); java.srcDir(buildInfo) }
+tasks.compileJava { dependsOn(copySharedUi, generateBuildInfo) }
+tasks.matching { it.name == "sourcesJar" }.configureEach { dependsOn(copySharedUi, generateBuildInfo) }
 
 tasks.processResources {
     inputs.property("version", project.version)

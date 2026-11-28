@@ -14,7 +14,8 @@ import java.io.File;
 
 /**
  * „Diagnose-Messung“ starten: Befehl /myticdiagnose [sekunden|stop] oder eigene Taste (Standard: nicht belegt).
- * Misst 60 s den Render-Thread (SamplingProfiler) und schreibt den Bericht in den Diagnose-Ordner des Launchers.
+ * Misst 60 s alle Threads (SamplingProfiler, Render-Thread zuerst) und schreibt den Bericht in den Diagnose-Ordner des
+ * Launchers. /myticdiagnose reload startet die Messung und lädt gleich die Ressourcen neu (wie F3+T).
  */
 public final class DiagnoseMeasure {
     public static final int DEFAULT_SECONDS = 60;
@@ -29,6 +30,7 @@ public final class DiagnoseMeasure {
                 ClientCommandManager.literal("myticdiagnose")
                         .executes(ctx -> toggle(DEFAULT_SECONDS))
                         .then(ClientCommandManager.literal("stop").executes(ctx -> SamplingProfiler.stopRunning() ? 1 : 0))
+                        .then(ClientCommandManager.literal("reload").executes(ctx -> reload(DEFAULT_SECONDS)))
                         .then(ClientCommandManager.argument("sekunden", IntegerArgumentType.integer(5, 600))
                                 .executes(ctx -> toggle(IntegerArgumentType.getInteger(ctx, "sekunden"))))));
     }
@@ -46,6 +48,25 @@ public final class DiagnoseMeasure {
         return FabricLoader.getInstance().getGameDir().resolve("mytic").resolve("diagnose").toFile();
     }
 
+    /** Messung starten (falls nicht schon aktiv) und Ressourcen neu laden – für hängende/lange Ladebalken */
+    private static int reload(int seconds) {
+        Minecraft mc = Minecraft.getInstance();
+        if (!SamplingProfiler.isRunning()) start(mc, seconds, true);
+        else mc.execute(() -> {
+            Compat.chat(mc, "§8[§dMytic§8] §7Ressourcen werden neu geladen (Messung läuft schon) …");
+            reloadNow(mc);
+        });
+        return 1;
+    }
+
+    /** Neuladen starten und als Neuladen-Fenster markieren (auch falls rrls den Ladebildschirm ganz ausblendet) */
+    private static void reloadNow(Minecraft mc) {
+        SamplingProfiler.reloadPhase(true);
+        mc.reloadResourcePacks().whenComplete((v, t) -> mc.execute(() -> {
+            if (!(mc.getOverlay() instanceof net.minecraft.client.gui.screens.LoadingOverlay)) SamplingProfiler.reloadPhase(false);
+        }));
+    }
+
     private static int toggle(int seconds) {
         Minecraft mc = Minecraft.getInstance();
         if (SamplingProfiler.isRunning()) {
@@ -53,7 +74,12 @@ public final class DiagnoseMeasure {
             Compat.chat(mc, "§8[§dMytic§8] §7Diagnose-Messung wird beendet …");
             return 1;
         }
-        // Befehle und Tasten laufen im Render-Thread – genau der wird gemessen
+        start(mc, seconds, false);
+        return 1;
+    }
+
+    private static void start(Minecraft mc, int seconds, boolean reload) {
+        // Befehle und Tasten laufen im Render-Thread – der wird zuerst ausgewertet, dazu alle anderen Threads
         mc.execute(() -> {
             Thread render = Thread.currentThread();
             String server = mc.getCurrentServer() != null ? mc.getCurrentServer().ip : mc.hasSingleplayerServer() ? "Einzelspieler" : "Menü";
@@ -64,8 +90,11 @@ public final class DiagnoseMeasure {
                 if (file != null) Compat.chat(mc, "§8[§dMytic§8] §aDiagnose-Messung fertig: §f" + file.getName() + " §7(Launcher → Einstellungen → Diagnose)");
                 else Compat.chat(mc, "§8[§dMytic§8] §cDiagnose-Messung fehlgeschlagen: " + error);
             }));
-            if (started) Compat.chat(mc, "§8[§dMytic§8] §7Diagnose-Messung läuft " + seconds + " s – spiel normal weiter. Abbrechen: §f/myticdiagnose stop");
+            if (!started) return;
+            if (reload) {
+                Compat.chat(mc, "§8[§dMytic§8] §7Diagnose-Messung läuft " + seconds + " s, Ressourcen werden jetzt neu geladen … Abbrechen: §f/myticdiagnose stop");
+                reloadNow(mc);
+            } else Compat.chat(mc, "§8[§dMytic§8] §7Diagnose-Messung läuft " + seconds + " s – spiel normal weiter. Abbrechen: §f/myticdiagnose stop");
         });
-        return 1;
     }
 }

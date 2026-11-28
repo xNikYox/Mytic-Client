@@ -35,8 +35,9 @@ import java.util.Map;
 
 /**
  * Diagnose für 1.8.9 (Forge): Zeiten (Spielstart bis Hauptmenü, Verbindung bis Welt geladen, längstes Bild beim Join)
- * in logs/mytic-diagnose.json und die „Diagnose-Messung“ (/myticdiagnose, eigene Taste). Ressourcen-Neuladen läuft in
- * 1.8.9 blockierend im Render-Thread und wird hier nicht einzeln gemessen. Pro Tick nur ein paar Vergleiche.
+ * in logs/mytic-diagnose.json und die „Diagnose-Messung“ (/myticdiagnose, eigene Taste; misst alle Threads). Ressourcen-
+ * Neuladen läuft in 1.8.9 blockierend im Render-Thread; gemessen wird es nur über /myticdiagnose reload. Pro Tick nur ein
+ * paar Vergleiche.
  */
 public final class Diagnose189 {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -48,7 +49,8 @@ public final class Diagnose189 {
     private static boolean joinTracking;
     private static long joinMaxFrameNs, afterJoinMaxFrameNs;
     private static String joinKind, joinServer;
-    private static final List<Map<String, Object>> joins = new ArrayList<Map<String, Object>>();
+    private static final List<Map<String, Object>> joins = new ArrayList<Map<String, Object>>(), reloads = new ArrayList<Map<String, Object>>();
+    private static boolean pendingReload;
 
     private Diagnose189() {
     }
@@ -63,13 +65,22 @@ public final class Diagnose189 {
 
             @Override
             public String getCommandUsage(ICommandSender sender) {
-                return "/myticdiagnose [sekunden|stop]";
+                return "/myticdiagnose [sekunden|stop|reload]";
             }
 
             @Override
             public void processCommand(ICommandSender sender, String[] args) {
                 if (args.length > 0 && args[0].equalsIgnoreCase("stop")) {
                     SamplingProfiler.stopRunning();
+                    return;
+                }
+                if (args.length > 0 && args[0].equalsIgnoreCase("reload")) {
+                    // Messung starten, im nächsten Tick neu laden (wie F3+T) – das Neuladen wird im Bericht markiert
+                    if (!SamplingProfiler.isRunning()) start(DEFAULT_SECONDS);
+                    if (SamplingProfiler.isRunning()) {
+                        chat("§7Ressourcen werden neu geladen …");
+                        pendingReload = true;
+                    }
                     return;
                 }
                 int seconds = DEFAULT_SECONDS;
@@ -116,6 +127,10 @@ public final class Diagnose189 {
     public static void tick(Minecraft mc) {
         long now = System.currentTimeMillis();
         while (key != null && key.isPressed()) toggle(DEFAULT_SECONDS);
+        if (pendingReload) {
+            pendingReload = false;
+            reload(mc);
+        }
         GuiScreen screen = mc.currentScreen;
         if (titleAtMs < 0 && screen != null) {
             titleAtMs = now - ManagementFactory.getRuntimeMXBean().getStartTime();
@@ -163,13 +178,38 @@ public final class Diagnose189 {
         }
     }
 
+    /** 1.8.9 lädt blockierend im Render-Thread neu – Fenster markieren und Dauer für die Diagnose merken */
+    private static void reload(Minecraft mc) {
+        long t0 = System.currentTimeMillis();
+        SamplingProfiler.reloadPhase(true);
+        try {
+            mc.refreshResources();
+        } finally {
+            SamplingProfiler.reloadPhase(false);
+        }
+        Map<String, Object> r = new LinkedHashMap<String, Object>();
+        r.put("at", t0);
+        r.put("ms", System.currentTimeMillis() - t0);
+        r.put("packs", mc.getResourcePackRepository().getRepositoryEntries().size());
+        r.put("initial", false);
+        synchronized (joins) {
+            reloads.add(r);
+            while (reloads.size() > KEEP) reloads.remove(0);
+        }
+        write();
+    }
+
     private static void toggle(final int seconds) {
-        final Minecraft mc = Minecraft.getMinecraft();
         if (SamplingProfiler.isRunning()) {
             SamplingProfiler.stopRunning();
             chat("§7Diagnose-Messung wird beendet …");
             return;
         }
+        start(seconds);
+    }
+
+    private static void start(final int seconds) {
+        final Minecraft mc = Minecraft.getMinecraft();
         String server = mc.getCurrentServerData() != null ? mc.getCurrentServerData().serverIP : mc.isSingleplayer() ? "Einzelspieler" : "Menü";
         String header = "Mytic " + MyticClient.VERSION + " · Minecraft 1.8.9 (Forge) · Java " + System.getProperty("java.version")
                 + "\nOrt: " + server + " · FPS beim Start: " + Minecraft.getDebugFPS() + " · Mods: " + Loader.instance().getActiveModList().size()
@@ -224,7 +264,9 @@ public final class Diagnose189 {
             synchronized (joins) {
                 t.put("joins", new ArrayList<Map<String, Object>>(joins));
             }
-            t.put("reloads", new ArrayList<Object>());
+            synchronized (joins) {
+                t.put("reloads", new ArrayList<Map<String, Object>>(reloads));
+            }
             o.put("timings", t);
             Map<String, Object> sys = new LinkedHashMap<String, Object>();
             sys.put("minecraft", "1.8.9");
