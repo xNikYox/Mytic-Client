@@ -256,6 +256,7 @@ const HEAVY = [
   { all: ["distanthorizons", "iris"], level: "warn", title: "Distant Horizons + Shader", detail: "Die Kombination ist sehr anspruchsvoll für Grafikkarte und Arbeitsspeicher (mind. 6–8 GB zuweisen)." },
   { all: ["physicsmod"], level: "info", title: "Physics Mod", detail: "Physik-Effekte kosten viel CPU, besonders bei vielen Spielern und Explosionen." },
   { all: ["entity_model_features", "entity_texture_features"], any: ["iris"], level: "info", title: "EMF/ETF + Shader", detail: "Eigene Entity-Modelle und Texturen zusammen mit Shadern kosten spürbar FPS bei vielen Mobs." },
+  { all: ["rrls"], level: "warn", title: "rrls installiert", detail: "rrls (Remove Reloading Screen) kann den Ladebalken hängen lassen bzw. Ladezeiten verlängern – zum Testen deaktivieren." },
   { all: ["c2me"], level: "info", title: "C2ME auf dem Client", detail: "C2ME hilft nur beim Erzeugen neuer Welten im Einzelspieler und braucht dafür viele Threads." },
 ];
 
@@ -334,7 +335,13 @@ function detectProblems(input) {
     const spikes = joins.filter((j) => Math.max(j.maxFrameMs || 0, j.afterJoinMaxFrameMs || 0) > 2000);
     if (spikes.length) add({ id: "join-spike", level: "warn", title: `Hänger beim Join (längstes Bild ${ms(Math.max(...spikes.map((j) => Math.max(j.maxFrameMs || 0, j.afterJoinMaxFrameMs || 0))))})`, detail: "Das Spiel stand beim Betreten der Welt sekundenlang. Mit /myticdiagnose während eines Joins messen, um die Mod zu finden." });
     const reloads = (Array.isArray(t.reloads) ? t.reloads : []).filter((r) => !r.initial && r.ms > 30000);
-    if (reloads.length) add({ id: "slow-reload", level: "info", title: `Ressourcen neu laden dauert lange (${ms(Math.max(...reloads.map((r) => r.ms)))})`, detail: `Mit ${reloads[reloads.length - 1].packs} Paketen. Große Texturpakete (512x und mehr) verlangsamen das.` });
+    if (reloads.length) add({ id: "slow-reload", level: "info", title: `Ressourcen neu laden dauert lange (${ms(Math.max(...reloads.map((r) => r.ms)))})`, detail: `Mit ${reloads[reloads.length - 1].packs} Paketen. Große Texturpakete (512x und mehr) verlangsamen das. Ursache finden: im Spiel /myticdiagnose reload.` });
+  }
+  // Hinweise, die die Mod selbst erkannt hat (z. B. Ladebalken hängt bei 100 % mit rrls)
+  const hints = live && Array.isArray(live.hints) ? live.hints : [];
+  for (const h of hints) {
+    if (!h || !h.id || !h.title || out.some((p) => p.id === `live-${h.id}`)) continue;
+    add({ id: `live-${h.id}`, level: ["error", "warn", "info"].includes(h.level) ? h.level : "warn", title: String(h.title), detail: String(h.detail || "") });
   }
   const order = { error: 0, warn: 1, info: 2 };
   return out.sort((a, b) => order[a.level] - order[b.level]);

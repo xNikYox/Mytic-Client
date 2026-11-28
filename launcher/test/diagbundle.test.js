@@ -107,6 +107,19 @@ test("ZIP-Eintrag lesen (gespeichert und komprimiert) und Mod-Infos aus Fabric/F
 const mod = (o) => ({ file: `${o.id}.jar`, enabled: true, source: "eigene", name: o.id, version: "1.0", provides: [], ...o });
 const ids = (list) => list.map((p) => p.id);
 
+test("Probleme: rrls installiert (Warnung) und Hinweise der Mod aus mytic-diagnose.json", () => {
+  const hint = { id: "rrls-stuck", level: "warn", title: "Ladebalken hing bei 100 % (rrls)", detail: "14 s" };
+  const problems = d.detectProblems({ mods: [mod({ id: "rrls" })], memoryMb: 4096, totalMb: 16384, live: { hints: [hint, hint, { id: "x" }] } });
+  const rrls = problems.find((p) => p.id === "heavy-rrls");
+  assert.ok(rrls, `fehlt: heavy-rrls in ${ids(problems).join(", ")}`);
+  assert.equal(rrls.level, "warn");
+  assert.equal(rrls.title, "rrls installiert");
+  assert.match(rrls.detail, /Remove Reloading Screen.*Ladebalken hängen.*zum Testen deaktivieren/);
+  assert.deepEqual(ids(problems).filter((id) => id.startsWith("live-")), ["live-rrls-stuck"], "Hinweis einmal, unvollständige ignoriert");
+  // ausgeschaltet → kein Hinweis
+  assert.ok(!ids(d.detectProblems({ mods: [mod({ id: "rrls", enabled: false })], memoryMb: 4096, totalMb: 16384 })).includes("heavy-rrls"));
+});
+
 test("Probleme: doppelte Mods, InvSee neben Mytic, OptiFine+Sodium, RAM, Pakete, veraltet, Zeiten, Abstürze", () => {
   const problems = d.detectProblems({
     mods: [
